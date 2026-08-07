@@ -21,6 +21,9 @@ class AskResult:
     steps: list[dict[str, Any]] = field(default_factory=list)
     ambiguous_terms: list[str] | None = None
     diagnostics: str | None = None
+    chart_offer: bool = False
+    chart_spec: dict[str, Any] | None = None
+    chart: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -28,6 +31,12 @@ class AskResult:
             data.pop("ambiguous_terms", None)
         if data.get("diagnostics") is None:
             data.pop("diagnostics", None)
+        if not data.get("chart_offer"):
+            data.pop("chart_offer", None)
+        if data.get("chart_spec") is None:
+            data.pop("chart_spec", None)
+        if data.get("chart") is None:
+            data.pop("chart", None)
         return data
 
     @classmethod
@@ -44,6 +53,9 @@ class AskResult:
             "steps",
             "ambiguous_terms",
             "diagnostics",
+            "chart_offer",
+            "chart_spec",
+            "chart",
         }
         kwargs = {k: data[k] for k in known if k in data}
         kwargs.setdefault("ok", True)

@@ -19,6 +19,8 @@ class SessionContext:
     place: str | None = None
     usage: str | None = None
     table: str | None = None
+    pending_chart: dict[str, Any] | None = None
+    last_chart: dict[str, Any] | None = None
 
     def update_from_result(
         self,
@@ -40,8 +42,28 @@ class SessionContext:
         self.last_answer = result.get("answer")
         rows = list(result.get("rows") or [])
         self.last_rows = rows
-        # 순위/단일 건물 결과만 focus로 유지 (카탈로그·설명 제외)
         route = str(result.get("route") or "")
+        chart_payload = result.get("chart") or result.get("chart_spec")
+        if result.get("chart_offer") and result.get("chart_spec"):
+            self.pending_chart = dict(result["chart_spec"])
+            self.last_chart = dict(result["chart_spec"])
+        elif route == "chart_render" and chart_payload:
+            # 표시 후에도 종류 변경(막대/도넛 등)이 가능하도록 유지
+            self.pending_chart = None
+            self.last_chart = dict(chart_payload)
+        elif route == "chart_help":
+            # 가능 종류 안내 후에도 직전 차트 맥락 유지
+            pass
+        elif route == "chart_decline":
+            self.pending_chart = None
+            self.last_chart = None
+        elif route and not route.startswith("clarify_"):
+            if not result.get("chart_offer"):
+                self.pending_chart = None
+                # 차트 후속이 아닌 새 질의면 last_chart도 해제
+                if route not in {"chart_render", "chart_help"}:
+                    self.last_chart = None
+        # 순위/단일 건물 결과만 focus로 유지 (카탈로그·설명 제외)
         keep_focus = bool(rows) and (
             route.startswith("building_rank_")
             or route in {"building_profile"}

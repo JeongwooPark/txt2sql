@@ -60,6 +60,9 @@ Domain mapping (critical):
     NEVER use "A35"(데이터기준일자) for building age.
   - 부산 전체 건축년수 → UNION/SUM of 동래+금정 D198 only (other gus lack dates).
     Say in the answer that coverage is 동래·금정(사용승인일 보유 구).
+  - "주요용도명" 종류/건수 for 동래/금정 → ALWAYS D198 "A25" (never AL_D010 "A9").
+  - Other gus (연제/사하/해운대 등) building/usage counts → ALWAYS "AL_D010_26_20250704"
+    with "A9" (never AL_D198; those tables only cover 동래/금정).
 - 공공시설/공공시설물 → AL_D010 "A9"='공공용시설' or AL_D198 "A29"='공공용'
 - 행정동(구서1동 등) → join "BND_ADM_DONG_PG" on ST_Intersects; 법정동은 구서동
 - 기초구역 → "TL_KODIS_BAS_26_202507" ("SIG_KOR_NM", "BAS_AR", "BAS_ID")

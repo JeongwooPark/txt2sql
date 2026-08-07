@@ -142,6 +142,28 @@ def try_route(
     if listed is not None:
         return listed
 
+    # 구 주요용도명/용도 종류 (동래→D198_26260, 금정→D198_26410)
+    # place/usage COUNT보다 먼저 매칭해야 "건물의 주요용도명 종류"가 건물건수로 오탐되지 않음
+    if ("용도" in q) and ("종류" in q or "몇 가지" in q or "몇가지" in q):
+        if "동래" in q:
+            return RoutedQuery(
+                "usage_kinds_dongrae",
+                (
+                    'SELECT COUNT(DISTINCT "A25") AS cnt\n'
+                    'FROM "AL_D198_26260_20250115"\n'
+                    "WHERE \"A4\" LIKE '%동래구%' AND \"A25\" IS NOT NULL;"
+                ),
+            )
+        if "금정" in q:
+            return RoutedQuery(
+                "usage_kinds_geumjeong",
+                (
+                    'SELECT COUNT(DISTINCT "A25") AS cnt\n'
+                    'FROM "AL_D198_26410_20250115"\n'
+                    "WHERE \"A4\" LIKE '%금정구%' AND \"A25\" IS NOT NULL;"
+                ),
+            )
+
     # 장소(동 우선) + 용도 COUNT / 행정동 공간 COUNT
     usage_count = _route_place_usage_count(q, conn=conn)
     if usage_count is not None:
@@ -218,25 +240,6 @@ def try_route(
                     'SELECT COUNT(*) AS cnt\n'
                     'FROM "AL_D060_00_20250804"\n'
                     'WHERE "A4" LIKE \'26%\';'
-                ),
-            )
-
-    # 구 주요용도명/용도 종류 (동래→D198_26260, 금정→D198_26410, 그 외 D010 A9)
-    if "종류" in q and ("용도" in q):
-        if "동래" in q:
-            return RoutedQuery(
-                "usage_kinds_dongrae",
-                (
-                    'SELECT COUNT(DISTINCT "A25") AS cnt\n'
-                    'FROM "AL_D198_26260_20250115";'
-                ),
-            )
-        if "금정" in q:
-            return RoutedQuery(
-                "usage_kinds_geumjeong",
-                (
-                    'SELECT COUNT(DISTINCT "A25") AS cnt\n'
-                    'FROM "AL_D198_26410_20250115";'
                 ),
             )
 
@@ -710,9 +713,44 @@ def fix_common_sql_mistakes(sql: str, question: str | None = None) -> str:
         out = out.replace("AL_D198_26410_20250115", "AL_D010_26_20250704")
 
     q = (question or "").strip()
-    if q:
-        forced = _route_building_rank(q)
-        if forced is not None:
-            # 순위 질의는 규칙 SQL로 고정 (잘못된 ORDER BY/컬럼 별칭 방지)
-            return forced.sql
+    if not q:
+        return out
+
+    # 동래/금정 주요용도명 종류 → D198 A25 고정
+    if ("용도" in q) and ("종류" in q or "몇 가지" in q or "몇가지" in q):
+        if "동래" in q:
+            return (
+                'SELECT COUNT(DISTINCT "A25") AS cnt\n'
+                'FROM "AL_D198_26260_20250115"\n'
+                "WHERE \"A4\" LIKE '%동래구%' AND \"A25\" IS NOT NULL;"
+            )
+        if "금정" in q:
+            return (
+                'SELECT COUNT(DISTINCT "A25") AS cnt\n'
+                'FROM "AL_D198_26410_20250115"\n'
+                "WHERE \"A4\" LIKE '%금정구%' AND \"A25\" IS NOT NULL;"
+            )
+
+    # 동래·금정이 아닌 구/용도 COUNT인데 D198을 쓰면 AL_D010으로 교정
+    gu = extract_gu(q)
+    age_q = looks_like_age_question(q)
+    if (
+        gu
+        and gu not in ("동래구", "금정구")
+        and not age_q
+        and "AL_D198_" in out
+        and "주요용도" not in q
+    ):
+        out = out.replace("AL_D198_26260_20250115", "AL_D010_26_20250704")
+        out = out.replace("AL_D198_26410_20250115", "AL_D010_26_20250704")
+        # D198 컬럼 → D010 대응 컬럼
+        out = re.sub(r'"A25"', '"A9"', out)
+        out = re.sub(r'"A19"', '"A14"', out)
+        out = re.sub(r'"A30"', '"A16"', out)
+        out = re.sub(r'"A31"', '"A26"', out)
+
+    forced = _route_building_rank(q)
+    if forced is not None:
+        # 순위 질의는 규칙 SQL로 고정 (잘못된 ORDER BY/컬럼 별칭 방지)
+        return forced.sql
     return out

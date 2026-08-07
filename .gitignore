@@ -19,3 +19,7 @@ demo_case_*
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# baseline eval outputs
+benchmark_baseline_results.json
+

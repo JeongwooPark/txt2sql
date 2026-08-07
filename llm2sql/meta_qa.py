@@ -41,6 +41,18 @@ _META_HINTS = (
     "어떤 정보",
     "담겨",
     "포함",
+    "사용가능",
+    "사용 가능",
+    "데이터셋",
+    "데이터 이름",
+    "데이터이름",
+    "자료 이름",
+    "테이블 이름",
+    "테이블명",
+    "들어있는",
+    "담긴 내용",
+    "내용은",
+    "내용이",
 )
 
 _DATA_QUERY_HINTS = (
@@ -109,6 +121,63 @@ _META_COUNT_HINTS = (
 )
 
 
+def _is_place_usage_overview(q: str) -> bool:
+    """지역 건물의 용도 구성·주요 용도 설명인지 (컬럼/스키마 설명이 아님)."""
+    if "용도" not in q:
+        return False
+    if any(k in q for k in ("컬럼", "칼럼", "속성", "필드", "스키마", "테이블명")):
+        return False
+    explainish = any(
+        k in q
+        for k in (
+            "설명",
+            "주요",
+            "어떤",
+            "알려",
+            "보여",
+            "구성",
+            "분포",
+            "종류",
+            "무엇",
+            "뭐야",
+            "뭐가",
+        )
+    )
+    if not explainish:
+        return False
+    has_place = bool(
+        re.search(r"[가-힣0-9]{1,12}동", q) or re.search(r"[가-힣]{1,6}구", q)
+    )
+    has_building = any(k in q for k in ("건물", "건축물", "주택", "아파트"))
+    return has_place or has_building
+
+
+def _named_dataset_question(q: str) -> bool:
+    """질문에 특정 데이터셋/테이블 표시명·물리명이 명시됐는지."""
+    if any(
+        k in q
+        for k in (
+            "GIS건물",
+            "건물통합",
+            "용도별건물",
+            "산업단지",
+            "기초구역",
+            "행정구역 동",
+            "AL_D",
+            "BND_",
+            "TL_KODIS",
+        )
+    ):
+        return True
+    return "_" in q and any(k in q for k in ("정보", "건물", "단지", "구역"))
+
+
+def _asks_dataset_summary(q: str) -> bool:
+    return any(k in q for k in ("요약", "개요", "한눈에", "정리해")) and (
+        "데이터" in q or "자료" in q or _named_dataset_question(q)
+    )
+
+
 def is_metadata_question(question: str) -> bool:
     """데이터 설명/속성 질의인지 판별 (집계·공간 조회와 구분)."""
     q = question.strip()
@@ -140,7 +209,16 @@ def is_metadata_question(question: str) -> bool:
         )
     ):
         return False
+    # 지역 건물 용도 분포/설명은 스키마 메타가 아님 ("동래구 건물의 주요 용도들을 설명하라")
+    if _is_place_usage_overview(q):
+        return False
+    # 특정 데이터셋명 + 요약/내용 → 메타 (프로필 집계가 아님)
+    if _named_dataset_question(q) and any(
+        k in q for k in ("요약", "개요", "설명", "내용", "들어있는", "담긴", "소개")
+    ):
+        return True
     # 동·구 + 특징/비교 설명은 건물 프로필 (스키마 설명이 아님)
+    # 단, 데이터셋 표시명이 명시된 요약은 위에서 메타로 처리
     profile_like = any(
         k in q
         for k in (
@@ -154,17 +232,21 @@ def is_metadata_question(question: str) -> bool:
             "평균",
         )
     )
-    if profile_like and (
-        re.search(r"[가-힣0-9]{1,12}동", q)
-        or re.search(r"[가-힣]{1,6}구", q)
-        or any(
-            k in q
-            for k in (
-                "아파트",
-                "공동주택",
-                "단독주택",
-                "건물",
-                "건축물",
+    if (
+        profile_like
+        and not _named_dataset_question(q)
+        and (
+            re.search(r"[가-힣0-9]{1,12}동", q)
+            or re.search(r"[가-힣]{1,6}구", q)
+            or any(
+                k in q
+                for k in (
+                    "아파트",
+                    "공동주택",
+                    "단독주택",
+                    "건물",
+                    "건축물",
+                )
             )
         )
     ):
@@ -197,7 +279,36 @@ def is_metadata_question(question: str) -> bool:
         k in q for k in ("뭐", "무엇", "의미", "뜻", "설명", "컬럼", "속성", "필드")
     ):
         return True
-    if any(k in q for k in ("테이블 목록", "데이터 목록", "보유 데이터", "어떤 자료")):
+    if any(
+        k in q
+        for k in (
+            "테이블 목록",
+            "데이터 목록",
+            "보유 데이터",
+            "어떤 자료",
+            "사용가능",
+            "사용 가능",
+            "데이터 이름",
+            "데이터이름",
+            "데이터셋 이름",
+            "데이터셋명",
+            "자료 이름",
+            "테이블 이름",
+            "테이블명",
+        )
+    ):
+        return True
+    # 특정 데이터셋명 + 내용/설명
+    if _asks_table_desc(q) and (
+        "GIS" in q
+        or "AL_" in q
+        or "건물통합" in q
+        or "용도별건물" in q
+        or "산업단지" in q
+        or "기초구역" in q
+        or "행정구역" in q
+        or "_" in q
+    ):
         return True
     return False
 
@@ -234,8 +345,10 @@ def _asks_catalog_count(q: str) -> bool:
 def answer_metadata_question(
     conn: psycopg.Connection,
     question: str,
+    *,
+    force: bool = False,
 ) -> MetaAnswer | None:
-    if not is_metadata_question(question):
+    if not force and not is_metadata_question(question):
         return None
 
     q = question.strip()
@@ -248,8 +361,16 @@ def answer_metadata_question(
     col_names = _extract_column_tokens(q)
     display_cols = _match_display_columns(conn, q, tables)
 
-    # 1) 전체 데이터/테이블 목록
-    if _asks_catalog(q) and not col_names and not display_cols:
+    # 0.5) 특정 데이터셋 요약 (컬럼 나열이 아닌 내용 요약)
+    if _asks_dataset_summary(q):
+        if not tables:
+            tables = _default_tables(conn, q)
+        if tables:
+            return _answer_dataset_summary(conn, q, tables[:1])
+
+    # 1) 전체 데이터/테이블 목록 (이름 질의 포함)
+    if _asks_catalog(q) and not col_names:
+        # '데이터 이름'이 표시명 컬럼 매칭에 걸려도 카탈로그가 우선
         return _answer_catalog(conn)
 
     # 2) 특정 컬럼(물리명) 의미
@@ -292,6 +413,16 @@ def _asks_catalog(q: str) -> bool:
             "어떤 정보",
             "사용가능",
             "사용 가능",
+            "데이터 이름",
+            "데이터이름",
+            "데이터셋 이름",
+            "데이터셋명",
+            "데이터셋 목록",
+            "자료 이름",
+            "테이블 이름",
+            "테이블명",
+            "무슨 자료",
+            "어떤 자료",
         )
     )
 
@@ -339,6 +470,12 @@ def _asks_table_desc(q: str) -> bool:
             "필드",
             "뭐야",
             "무엇",
+            "들어있는",
+            "담긴",
+            "내용",
+            "포함",
+            "요약",
+            "개요",
         )
     )
 
@@ -399,7 +536,14 @@ def _resolve_tables(conn: psycopg.Connection, q: str) -> list[str]:
                 break
 
     # 일반 '건물' 질의 → 건물 카테고리 전체
-    if ("건물" in q or "용도별건물" in q) and "동래" not in q and "금정" not in q:
+    # 단, 특정 데이터셋명(표시명/물리명)이 이미 매칭되면 확장하지 않음
+    specific_hit = bool(hit)
+    if (
+        not specific_hit
+        and ("건물" in q or "용도별건물" in q)
+        and "동래" not in q
+        and "금정" not in q
+    ):
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -514,6 +658,113 @@ def _answer_catalog(conn: psycopg.Connection) -> MetaAnswer:
         answer="\n".join(lines),
         tables=[r["table_name"] for r in rows],
         rows=rows,
+    )
+
+
+def _answer_dataset_summary(
+    conn: psycopg.Connection,
+    question: str,
+    tables: list[str],
+) -> MetaAnswer:
+    """특정 데이터셋의 짧은 내용 요약(건수·주요 용도 등)."""
+    table = tables[0]
+    meta = _load_table(conn, table)
+    if not meta:
+        return MetaAnswer(
+            intent="meta_summary",
+            answer="요청하신 데이터셋 메타데이터를 찾지 못했습니다.",
+            tables=[],
+            rows=[],
+        )
+
+    disp = meta["display_name"] or table
+    cat = meta.get("category") or "미분류"
+    desc = _short(meta.get("description"), 160) or "상세 설명은 메타데이터에 없습니다."
+    cols = _load_columns(conn, table)
+    col_names = {str(c.get("column_name") or "").upper() for c in cols}
+
+    rows_out: list[dict[str, Any]] = []
+    parts: list[str] = [
+        f"「{disp}」(`{table}`) 요약입니다.",
+        f"분류: {cat}. {desc}",
+    ]
+
+    # 전체 건수
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(f'SELECT COUNT(*) AS cnt FROM "{table}"')
+            cnt_row = cur.fetchone() or {}
+            cnt = int(cnt_row.get("cnt") or 0)
+            rows_out.append({"metric": "count", "value": cnt})
+            parts.append(f"현재 레코드(도형) 수는 약 {cnt:,}건입니다.")
+    except Exception:
+        cnt = None
+
+    # 용도 상위 (건물 통합 A9, 용도별 A25)
+    usage_col = None
+    if "A9" in col_names and table.startswith("AL_D010"):
+        usage_col = "A9"
+        usage_label = "건축물용도명"
+    elif "A25" in col_names and table.startswith("AL_D198"):
+        usage_col = "A25"
+        usage_label = "주요용도명"
+    if usage_col:
+        try:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    f"""
+                    SELECT COALESCE("{usage_col}", '(미상)') AS usage, COUNT(*) AS n
+                    FROM "{table}"
+                    WHERE "{usage_col}" IS NOT NULL
+                    GROUP BY 1
+                    ORDER BY 2 DESC
+                    LIMIT 5
+                    """
+                )
+                usages = list(cur.fetchall())
+            if usages:
+                rows_out.extend(usages)
+                txt = ", ".join(
+                    f"{u['usage']} {int(u['n']):,}건" for u in usages
+                )
+                parts.append(f"상위 {usage_label} 구성: {txt} 순입니다.")
+        except Exception:
+            pass
+
+    # 핵심 속성만 짧게
+    prefer = (
+        "A4",
+        "A5",
+        "A9",
+        "A11",
+        "A12",
+        "A14",
+        "A16",
+        "A24",
+        "A25",
+        "A26",
+    )
+    key_cols = []
+    by_name = {
+        str(c.get("column_name") or "").upper(): c for c in cols
+    }
+    for name in prefer:
+        if name in by_name:
+            key_cols.append(by_name[name])
+    if key_cols:
+        names = ", ".join(
+            (c.get("display_name") or c.get("column_name") or "?") for c in key_cols[:8]
+        )
+        parts.append(f"자주 쓰는 속성은 {names} 등입니다.")
+        parts.append(
+            "전체 컬럼·코드표가 필요하면 「컬럼 설명해줘」처럼 속성 설명을 요청해 주세요."
+        )
+
+    return MetaAnswer(
+        intent="meta_summary",
+        answer=" ".join(parts),
+        tables=[table],
+        rows=rows_out,
     )
 
 

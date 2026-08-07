@@ -14,11 +14,16 @@ from llm2sql.domain import (
     DONG_RE,
     GU_RE,
     USAGE_ALIASES,
+    d198_table_for_gu,
+    extract_gu,
     extract_place,
     extract_places,
     extract_usage,
     extract_usages,
+    fix_dual_particles,
+    is_busan_wide,
     place_a4_predicate,
+    with_topic,
 )
 from llm2sql.progress import TokenCallback
 
@@ -50,9 +55,217 @@ class ProfileAnswer:
     rows: list[dict[str, Any]]
 
 
+def is_usage_overview_question(question: str) -> bool:
+    """지역 건물의 주요/상위 용도 구성 설명 질의."""
+    q = question.strip()
+    if not q or "용도" not in q:
+        return False
+    if any(k in q for k in ("컬럼", "칼럼", "속성", "필드", "스키마", "테이블명")):
+        return False
+    # 종류/건수 카운트는 intent_router 경로
+    if any(
+        k in q
+        for k in ("몇 가지", "몇가지", "몇개", "몇 개", "건수", "개수", "채수")
+    ):
+        if not any(k in q for k in ("설명", "구성", "분포", "어떤")):
+            return False
+    if "몇" in q and not any(k in q for k in ("설명", "구성", "분포", "주요", "어떤")):
+        return False
+    # 특정 용도 건수·목록은 라우터/다른 경로
+    if extract_usage(q) and any(
+        k in q for k in ("몇", "건수", "개수", "채수", "목록", "어디", "위치")
+    ):
+        return False
+    explainish = any(
+        k in q
+        for k in (
+            "설명",
+            "주요",
+            "어떤",
+            "알려",
+            "보여",
+            "구성",
+            "분포",
+            "종류",
+            "무엇",
+            "뭐야",
+            "뭐가",
+        )
+    )
+    if not explainish:
+        return False
+    if DONG_RE.search(q) or GU_RE.search(q):
+        return True
+    return any(k in q for k in ("건물", "건축물", "주택", "아파트"))
+
+
+def answer_usage_overview_question(
+    conn: psycopg.Connection,
+    question: str,
+    *,
+    model: str | None = None,
+    host: str | None = None,
+    client: Any | None = None,
+    on_token: TokenCallback | None = None,
+    force: bool = False,
+) -> ProfileAnswer | None:
+    if not force and not is_usage_overview_question(question):
+        return None
+
+    q = question.strip()
+    place = extract_place(q) or extract_gu(q)
+    if not place:
+        return None
+
+    gu = extract_gu(q)
+    # 동래/금정 + 주요 용도 → D198 A25, 그 외 → D010 A9
+    use_major = any(k in q for k in ("주요용도", "주요 용도", "주요용도명"))
+    d198 = d198_table_for_gu(gu) if use_major else None
+
+    if d198:
+        table = d198
+        usage_col = "A25"
+        field_label = "주요용도명"
+        where_sql = place_a4_predicate(place)
+    else:
+        table = "AL_D010_26_20250704"
+        usage_col = "A9"
+        field_label = "건축물용도명"
+        where_sql = place_a4_predicate(place)
+
+    sql = f"""
+SELECT COALESCE("{usage_col}", '(미상)') AS usage, COUNT(*) AS n
+FROM "{table}"
+WHERE {where_sql} AND "{usage_col}" IS NOT NULL
+GROUP BY 1
+ORDER BY 2 DESC
+LIMIT 10
+""".strip()
+    count_sql = f"""
+SELECT COUNT(*) AS cnt, COUNT(DISTINCT "{usage_col}") AS kinds
+FROM "{table}"
+WHERE {where_sql} AND "{usage_col}" IS NOT NULL
+""".strip()
+
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(count_sql)
+        totals = cur.fetchone() or {}
+        cur.execute(sql)
+        usages_rows = list(cur.fetchall())
+
+    total = int(totals.get("cnt") or 0)
+    kinds = int(totals.get("kinds") or 0)
+    label = place
+    if total == 0 or not usages_rows:
+        answer = (
+            f"{label}에서 {field_label} 기준 건물 용도 자료를 찾지 못했습니다. "
+            "지역명이나 데이터 범위를 확인해 주세요."
+        )
+        emit_text_chunks(answer, on_token)
+        return ProfileAnswer(
+            intent="usage_overview",
+            answer=answer,
+            sql=f"{count_sql};\n{sql}",
+            tables=[table],
+            rows=[],
+        )
+
+    top = [
+        {
+            "name": u.get("usage") or "미상",
+            "count": int(u.get("n") or 0),
+            "share_pct": round(100.0 * int(u.get("n") or 0) / total, 1),
+        }
+        for u in usages_rows
+    ]
+    payload = {
+        "scope": label,
+        "focus": "usage_overview",
+        "usage_field": field_label,
+        "building_count": total,
+        "distinct_usage_count": kinds,
+        "top_usages": top,
+    }
+    fallback = _prose_usage_overview(label, field_label, total, kinds, top)
+    answer = _finalize_profile_answer(
+        q,
+        payload=payload,
+        fallback=fallback,
+        model=model,
+        host=host,
+        client=client,
+        on_token=on_token,
+    )
+    return ProfileAnswer(
+        intent="usage_overview",
+        answer=answer,
+        sql=f"{count_sql};\n{sql}",
+        tables=[table],
+        rows=[{"cnt": total, "kinds": kinds}, *usages_rows],
+    )
+
+
+def _prose_usage_overview(
+    label: str,
+    field_label: str,
+    total: int,
+    kinds: int,
+    top: list[dict[str, Any]],
+) -> str:
+    parts = [
+        f"{label} 건물을 {field_label} 기준으로 보면 "
+        f"약 {total:,}동·{kinds}가지 용도가 확인됩니다."
+    ]
+    if top:
+        lead = top[0]
+        parts.append(
+            f"가장 많은 용도는 {lead['name']}로 "
+            f"{lead['count']:,}동(약 {lead['share_pct']}%)입니다."
+        )
+        if len(top) > 1:
+            rest = ", ".join(
+                f"{u['name']} {u['count']:,}동({u['share_pct']}%)" for u in top[1:5]
+            )
+            parts.append(f"이어서 {rest} 순으로 나타납니다.")
+    parts.append(
+        "위 비율은 해당 지역 건물 도형 건수를 기준으로 한 상위 용도 구성입니다."
+    )
+    return " ".join(parts)
+
+
+def _wants_citywide_compare(question: str) -> bool:
+    """부산시 전역(시 전체)과 특정 지역을 대비하는지."""
+    q = question.strip()
+    has_city = is_busan_wide(q) or any(
+        k in q
+        for k in (
+            "전역",
+            "시 전체",
+            "시전체",
+            "시 평균",
+            "시평균",
+            "부산 평균",
+            "전체 평균",
+        )
+    )
+    has_vs = any(k in q for k in ("대비", "비교", "차이", "보다", "비해"))
+    return has_city and has_vs
+
+
 def is_profile_question(question: str) -> bool:
     q = question.strip()
     if not q:
+        return False
+    # 용도 구성 설명은 전용 경로
+    if is_usage_overview_question(q):
+        return False
+    # 특정 데이터셋 요약/설명은 프로필이 아님
+    from llm2sql.meta_qa import _asks_dataset_summary, _named_dataset_question
+
+    if _named_dataset_question(q) and (
+        _asks_dataset_summary(q)
+        or any(k in q for k in ("들어있는", "내용", "설명", "컬럼", "속성"))
+    ):
         return False
     # 최고 높이/면적 건물 비교는 프로필 집계가 아님
     from llm2sql.rank_compare_qa import is_rank_compare_question
@@ -79,12 +292,13 @@ def is_profile_question(question: str) -> bool:
     has_compare = any(k in q for k in compare_hints) or ("와" in q) or ("과" in q)
     if not has_summary and not has_compare:
         return False
-    # '비교'만 있고 요약 의도가 없으면, 복수 장소/용도일 때만 프로필 비교
+    places = extract_places(q)
+    usages = extract_usages(q)
+    # '비교'만 있고 요약 의도가 없으면, 복수 장소/용도 또는 시 전역 대비일 때만
     if has_compare and not has_summary:
-        places = extract_places(q)
-        usages = extract_usages(q)
         if len(places) < 2 and len(usages) < 2:
-            return False
+            if not (_wants_citywide_compare(q) and places):
+                return False
     if DONG_RE.search(q) or GU_RE.search(q):
         return True
     if any(k in q for k in USAGE_ALIASES):
@@ -102,8 +316,9 @@ def answer_profile_question(
     host: str | None = None,
     client: Any | None = None,
     on_token: TokenCallback | None = None,
+    force: bool = False,
 ) -> ProfileAnswer | None:
-    if not is_profile_question(question):
+    if not force and not is_profile_question(question):
         return None
 
     q = question.strip()
@@ -115,6 +330,33 @@ def answer_profile_question(
 
     if not places and not usages:
         return None
+
+    # 부산시 전역 대비 단일 지역 (예: 부산시 전역 대비 구서동 특성)
+    if _wants_citywide_compare(q) and places:
+        place = places[0]
+        usage = usages[0] if usages else None
+        return _answer_compare_groups(
+            conn,
+            q,
+            groups_spec=[
+                {
+                    "place": place,
+                    "usage": usage,
+                    "label": _label(place, usage, q),
+                },
+                {
+                    "place": None,
+                    "usage": usage,
+                    "label": "부산시 전역",
+                },
+            ],
+            scope=f"{_label(place, usage, q)} · 부산시 전역",
+            compare_kind="place",
+            model=model,
+            host=host,
+            client=client,
+            on_token=on_token,
+        )
 
     # 지역 간 비교 (구서동 vs 연산동)
     if len(places) >= 2:
@@ -396,7 +638,7 @@ def _finalize_profile_answer(
 ) -> str:
     if model and (client is not None or host):
         try:
-            return narrate_building_profile(
+            answer = narrate_building_profile(
                 question,
                 payload=payload,
                 model=model,
@@ -404,10 +646,12 @@ def _finalize_profile_answer(
                 client=client,
                 on_token=on_token,
             )
+            return fix_dual_particles(answer)
         except Exception:
             pass
-    emit_text_chunks(fallback, on_token)
-    return fallback
+    fixed = fix_dual_particles(fallback)
+    emit_text_chunks(fixed, on_token)
+    return fixed
 
 
 def _prose_single(
@@ -419,7 +663,7 @@ def _prose_single(
 ) -> str:
     cnt = int(stats.get("cnt") or 0)
     parts = [
-        f"{label}는 부산 건물자료 기준으로 {cnt:,}동입니다.",
+        f"{with_topic(label)} 부산 건물자료 기준으로 {cnt:,}동입니다.",
         (
             f"연면적은 평균 {_fmt(stats.get('avg_area'))}㎡, "
             f"중앙값 {_fmt(stats.get('med_area'))}㎡ 정도이며 "
@@ -458,7 +702,10 @@ def _prose_compare(
     *,
     compare_kind: str = "usage",
 ) -> str:
-    if compare_kind == "place":
+    citywide = any(str(g.get("label") or "") == "부산시 전역" for g in groups)
+    if citywide:
+        parts = [f"{scope} 건물 특징을 비교하면 다음과 같습니다."]
+    elif compare_kind == "place":
         parts = [f"{scope}의 건물 특징을 비교하면 다음과 같습니다."]
     else:
         parts = [f"{scope}에서 용도별 건물 특징을 비교하면 다음과 같습니다."]
@@ -466,10 +713,10 @@ def _prose_compare(
         cnt = int(g.get("building_count") or 0)
         label = g.get("label") or "해당 조건"
         if cnt == 0:
-            parts.append(f"{label}은(는) 해당 건물을 찾지 못했습니다.")
+            parts.append(f"{with_topic(str(label))} 해당 건물을 찾지 못했습니다.")
             continue
         parts.append(
-            f"{label}은(는) {cnt:,}동으로, "
+            f"{with_topic(str(label))} {cnt:,}동으로, "
             f"평균 연면적 {_fmt(g.get('avg_floor_area_m2'))}㎡, "
             f"평균 높이 {_fmt(g.get('avg_height_m'))}m, "
             f"평균 지상 {_fmt(g.get('avg_floors'))}층입니다."
@@ -503,6 +750,15 @@ def _prose_compare(
                 f"({a_name} {int(a['building_count']):,}동, "
                 f"{b_name} {int(b['building_count']):,}동)."
             )
+            if citywide and a_name != "부산시 전역":
+                share = (
+                    100.0
+                    * int(a["building_count"])
+                    / max(int(b["building_count"]), 1)
+                )
+                parts.append(
+                    f"{a_name} 건물 수는 부산시 전역의 약 {share:.1f}% 수준입니다."
+                )
     if "아파트" in q:
         parts.append("아파트는 공동주택 용도로 집계했습니다.")
     return " ".join(parts)

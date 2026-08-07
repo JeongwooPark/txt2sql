@@ -477,6 +477,19 @@ def check_ambiguity(
 
     # 4) 도메인에서 해석되지 않는 단어
     unknown = _unknown_terms(q, place=place, gu=gu_name)
+    # 차트 종류 변경/안내 질문은 미지 용어 clarify 대상이 아님
+    from llm2sql.chart_qa import (
+        is_chart_capability_question,
+        is_chart_type_change_question,
+    )
+    from llm2sql.guide_qa import _is_coverage_question
+
+    if (
+        is_chart_type_change_question(q)
+        or is_chart_capability_question(q)
+        or _is_coverage_question(q)
+    ):
+        unknown = []
     # 부산 전역·순위/집계처럼 의도가 분명하면 미지 단어 clarify를 생략
     if unknown and is_busan_wide(q):
         unknown = [u for u in unknown if not str(u).startswith("부산")]

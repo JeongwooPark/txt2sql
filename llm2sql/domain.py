@@ -232,6 +232,57 @@ def is_busan_wide(question: str) -> bool:
     ) or question.strip().startswith("부산")
 
 
+def has_batchim(text: str) -> bool:
+    """마지막 글자에 받침이 있으면 True."""
+    s = (text or "").strip()
+    if not s:
+        return False
+    ch = s[-1]
+    if "가" <= ch <= "힣":
+        return (ord(ch) - 0xAC00) % 28 != 0
+    if ch.isdigit():
+        return ch in "013678"  # 대략적: 받침 느낌의 숫자 발음
+    return False
+
+
+def with_topic(text: str) -> str:
+    """주제 조사 은/는."""
+    s = (text or "").strip() or "해당 조건"
+    return f"{s}{'은' if has_batchim(s) else '는'}"
+
+
+def with_subject(text: str) -> str:
+    """주격 조사 이/가."""
+    s = (text or "").strip() or "해당 조건"
+    return f"{s}{'이' if has_batchim(s) else '가'}"
+
+
+def with_object(text: str) -> str:
+    """목적격 조사 을/를."""
+    s = (text or "").strip() or "해당 조건"
+    return f"{s}{'을' if has_batchim(s) else '를'}"
+
+
+def fix_dual_particles(text: str) -> str:
+    """템플릿/모델이 남긴 '은(는)' 형태를 실제 조사로 교정."""
+    if not text:
+        return text
+
+    def _repl_topic(m: re.Match[str]) -> str:
+        return with_topic(m.group(1))
+
+    def _repl_subj(m: re.Match[str]) -> str:
+        return with_subject(m.group(1))
+
+    def _repl_obj(m: re.Match[str]) -> str:
+        return with_object(m.group(1))
+
+    out = re.sub(r"([가-힣A-Za-z0-9]+)\s*은\(는\)", _repl_topic, text)
+    out = re.sub(r"([가-힣A-Za-z0-9]+)\s*이\(가\)", _repl_subj, out)
+    out = re.sub(r"([가-힣A-Za-z0-9]+)\s*을\(를\)", _repl_obj, out)
+    return out
+
+
 def sane_height_sql(
     height_col: str = "A16",
     floors_col: str = "A26",

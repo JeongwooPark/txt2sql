@@ -69,6 +69,7 @@
           <span class="status-text">질문 분석 중…</span>
         </div>
         <div class="answer" hidden></div>
+        <div class="chart-wrap" hidden><canvas></canvas></div>
         <div class="meta" hidden></div>
         <pre class="sql-block" hidden></pre>
       </div>
@@ -81,6 +82,8 @@
       status: row.querySelector(".status"),
       statusText: row.querySelector(".status-text"),
       answer: row.querySelector(".answer"),
+      chartWrap: row.querySelector(".chart-wrap"),
+      chartCanvas: row.querySelector(".chart-wrap canvas"),
       meta: row.querySelector(".meta"),
       sql: row.querySelector(".sql-block"),
     };
@@ -301,6 +304,31 @@
         shell.bubble.appendChild(choices);
       }
 
+      const chartSpec = result.chart || result.chart_spec;
+      if (chartSpec && (result.route === "chart_render" || result.chart)) {
+        ensureChartShell(shell);
+        renderChart(shell, chartSpec);
+      } else if (result.chart_offer && result.chart_spec) {
+        const choices = document.createElement("div");
+        choices.className = "choices chart-choices";
+        choices.dataset.chartSpec = JSON.stringify(result.chart_spec);
+        const yes = document.createElement("button");
+        yes.type = "button";
+        yes.className = "choice-btn chart-accept";
+        yes.dataset.q = "차트로 보여줘";
+        yes.innerHTML =
+          '<span class="choice-num">네</span><span class="choice-label">차트로 보기</span>';
+        const no = document.createElement("button");
+        no.type = "button";
+        no.className = "choice-btn chart-decline";
+        no.dataset.q = "괜찮아요";
+        no.innerHTML =
+          '<span class="choice-num">아니요</span><span class="choice-label">텍스트만 볼게요</span>';
+        choices.appendChild(yes);
+        choices.appendChild(no);
+        shell.bubble.appendChild(choices);
+      }
+
       scrollToBottom(true);
       return;
     }
@@ -318,6 +346,176 @@
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
+  }
+
+  const CHART_COLORS = [
+    "#2ec4b6",
+    "#f4a261",
+    "#5b8def",
+    "#e76f51",
+    "#9b5de5",
+    "#00bbf9",
+    "#fee440",
+    "#8ac926",
+    "#ff85a1",
+    "#90e0ef",
+  ];
+
+  function ensureChartShell(shell) {
+    if (!shell) return;
+    if (!shell.chartWrap || !shell.chartCanvas) {
+      const wrap = document.createElement("div");
+      wrap.className = "chart-wrap";
+      wrap.hidden = true;
+      const canvas = document.createElement("canvas");
+      wrap.appendChild(canvas);
+      const anchor = shell.answer?.nextSibling;
+      if (shell.bubble) {
+        shell.bubble.insertBefore(wrap, anchor || shell.meta || null);
+      }
+      shell.chartWrap = wrap;
+      shell.chartCanvas = canvas;
+    }
+  }
+
+  function renderChart(shell, spec) {
+    ensureChartShell(shell);
+    if (!shell?.chartWrap || !spec) return;
+    const labels = Array.isArray(spec.labels) ? spec.labels : [];
+    const datasetsIn = Array.isArray(spec.datasets) ? spec.datasets : [];
+    if (!labels.length || !datasetsIn.length) return;
+
+    shell.chartWrap.hidden = false;
+    shell.chartWrap.removeAttribute("hidden");
+
+    if (typeof Chart === "undefined") {
+      shell.chartWrap.textContent =
+        "차트를 표시할 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.";
+      return;
+    }
+
+    // 기존 canvas가 파괴됐을 수 있어 항상 새로 준비
+    shell.chartWrap.innerHTML = "";
+    const canvas = document.createElement("canvas");
+    shell.chartWrap.appendChild(canvas);
+    shell.chartCanvas = canvas;
+
+    if (shell._chart) {
+      try {
+        shell._chart.destroy();
+      } catch {
+        /* ignore */
+      }
+      shell._chart = null;
+    }
+
+    const type =
+      spec.type === "pie" ||
+      spec.type === "doughnut" ||
+      spec.type === "line"
+        ? spec.type
+        : "bar";
+    const datasets = datasetsIn.map((ds, i) => {
+      const data = Array.isArray(ds.data) ? ds.data : [];
+      const base = {
+        label: ds.label || "값",
+        data,
+        borderWidth: 1,
+      };
+      if (type === "pie" || type === "doughnut") {
+        return {
+          ...base,
+          backgroundColor: labels.map(
+            (_, j) => CHART_COLORS[j % CHART_COLORS.length]
+          ),
+          borderColor: "rgba(11, 28, 36, 0.85)",
+        };
+      }
+      if (type === "line") {
+        return {
+          ...base,
+          borderColor: CHART_COLORS[i % CHART_COLORS.length],
+          backgroundColor: "transparent",
+          tension: 0.25,
+          pointRadius: 4,
+        };
+      }
+      return {
+        ...base,
+        backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+        borderColor: CHART_COLORS[i % CHART_COLORS.length],
+        borderRadius: 6,
+        maxBarThickness: 42,
+      };
+    });
+
+    const options = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: Boolean(spec.title),
+          text: spec.title || "",
+          color: "#e8f2f6",
+          font: { size: 14, weight: "600", family: "IBM Plex Sans KR" },
+          padding: { bottom: 10 },
+        },
+        legend: {
+          position: type === "bar" ? "top" : "right",
+          labels: {
+            color: "#8eacba",
+            boxWidth: 12,
+            font: { family: "IBM Plex Sans KR", size: 11 },
+          },
+        },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              let v = ctx.parsed;
+              if (v && typeof v === "object") {
+                v = v.y ?? v.r ?? Object.values(v)[0];
+              }
+              const num =
+                typeof v === "number"
+                  ? v.toLocaleString("ko-KR")
+                  : String(v ?? "");
+              const unit = spec.unit ? ` ${spec.unit}` : "";
+              const name = ctx.dataset.label ? `${ctx.dataset.label}: ` : "";
+              return `${name}${num}${unit}`;
+            },
+          },
+        },
+      },
+    };
+    if (type === "bar" || type === "line") {
+      options.scales = {
+        x: {
+          ticks: { color: "#8eacba", maxRotation: 45, minRotation: 0 },
+          grid: { color: "rgba(142, 172, 186, 0.12)" },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: "#8eacba" },
+          grid: { color: "rgba(142, 172, 186, 0.12)" },
+        },
+      };
+    }
+
+    const paint = () => {
+      try {
+        shell._chart = new Chart(canvas, {
+          type,
+          data: { labels, datasets },
+          options,
+        });
+      } catch (err) {
+        shell.chartWrap.textContent = `차트 렌더링 오류: ${
+          err instanceof Error ? err.message : String(err)
+        }`;
+      }
+      scrollToBottom(true);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(paint));
   }
 
   function autoResize() {
@@ -348,8 +546,86 @@
   messagesEl.addEventListener("click", (e) => {
     const btn = e.target.closest("button.choice-btn[data-q]");
     if (!btn || busy) return;
+
+    // 차트 수락: 같은 답변 카드에만 그리고, 중복 메시지/차트는 만들지 않음
+    if (btn.classList.contains("chart-accept")) {
+      const box = btn.closest(".chart-choices");
+      let spec = null;
+      try {
+        spec = box?.dataset?.chartSpec
+          ? JSON.parse(box.dataset.chartSpec)
+          : null;
+      } catch {
+        spec = null;
+      }
+      const bubble = btn.closest(".bubble");
+      box?.remove();
+      if (spec && bubble) {
+        const shell = {
+          bubble,
+          answer: bubble.querySelector(".answer"),
+          chartWrap: bubble.querySelector(".chart-wrap"),
+          chartCanvas: bubble.querySelector(".chart-wrap canvas"),
+          meta: bubble.querySelector(".meta"),
+        };
+        ensureChartShell(shell);
+        renderChart(shell, spec);
+      }
+      // 세션만 동기화 (화면에 두 번째 차트/메시지를 추가하지 않음)
+      syncSessionQuestion(btn.getAttribute("data-q") || "차트로 보여줘");
+      return;
+    }
+
+    // 차트 거절: 버튼만 닫고 세션 동기화
+    if (btn.classList.contains("chart-decline")) {
+      btn.closest(".chart-choices")?.remove();
+      syncSessionQuestion(btn.getAttribute("data-q") || "괜찮아요");
+      return;
+    }
+
     sendQuestion(btn.getAttribute("data-q") || "");
   });
+
+  async function syncSessionQuestion(question) {
+    const q = String(question || "").trim();
+    if (!q) return;
+    try {
+      await ensureSession();
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q, session_id: sessionId }),
+      });
+      if (!res.ok || !res.body) return;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (value) buffer += decoder.decode(value, { stream: true });
+        if (done) {
+          buffer += decoder.decode();
+          break;
+        }
+      }
+      // SSE done 이벤트에서 session_id만 갱신
+      for (const part of buffer.split("\n\n")) {
+        const line = part.split("\n").find((l) => l.startsWith("data: "));
+        if (!line) continue;
+        try {
+          const evt = JSON.parse(line.slice(6));
+          if (evt.session_id) {
+            sessionId = evt.session_id;
+            localStorage.setItem(SESSION_KEY, sessionId);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* ignore sync errors */
+    }
+  }
 
   newChatBtn.addEventListener("click", async () => {
     localStorage.removeItem(SESSION_KEY);

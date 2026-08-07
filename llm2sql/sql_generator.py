@@ -5,6 +5,7 @@ from typing import Any
 
 import ollama
 
+from llm2sql.example_store import format_retrieved_examples
 from llm2sql.prompt_examples import DOMAIN_HINTS, FEW_SHOT_EXAMPLES
 
 
@@ -62,12 +63,16 @@ def generate_sql(
     client: Any | None = None,
     error_feedback: str | None = None,
     include_few_shot: bool = True,
+    few_shot: str | None = None,
 ) -> str:
     if client is None:
         if not host:
             raise ValueError("host 또는 client가 필요합니다.")
         client = ollama.Client(host=host)
-    few = FEW_SHOT_EXAMPLES if include_few_shot else ""
+    if few_shot is not None:
+        few = few_shot if include_few_shot else ""
+    else:
+        few = FEW_SHOT_EXAMPLES if include_few_shot else ""
     if error_feedback:
         user_content = (
             f"Schema:\n{schema_text}\n\n"
@@ -99,3 +104,29 @@ def generate_sql(
         response = client.chat(**kwargs)
     content = response["message"]["content"]
     return _extract_sql(content)
+
+
+def build_few_shot_for_question(
+    question: str,
+    *,
+    top_k: int = 3,
+    embed_model: str | None = None,
+    host: str | None = None,
+    client: Any | None = None,
+) -> str:
+    """동적 example retrieval. 실패 시 정적 few-shot으로 폴백."""
+    if top_k <= 0:
+        return FEW_SHOT_EXAMPLES
+    try:
+        dynamic = format_retrieved_examples(
+            question,
+            top_k=top_k,
+            embed_model=embed_model,
+            host=host,
+            client=client,
+        )
+        if dynamic.strip():
+            return dynamic
+    except Exception:
+        pass
+    return FEW_SHOT_EXAMPLES

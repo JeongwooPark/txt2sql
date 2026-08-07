@@ -9,6 +9,7 @@ dependencies = [
     "ollama>=0.6.2",
     "psycopg[binary]>=3.3.4",
     "python-dotenv>=1.2.2",
+    "sqlglot>=26.0.0",
     "uvicorn[standard]>=0.32.0",
 ]
 

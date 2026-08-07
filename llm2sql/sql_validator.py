@@ -1,8 +1,13 @@
-"""생성된 SQL의 고빈도 논리 오류를 검사한다."""
+"""SQL 구문·도메인 진단 + PostgreSQL EXPLAIN 검증."""
 
 from __future__ import annotations
 
 import re
+from typing import Any
+
+import psycopg
+
+from llm2sql.db import assert_readonly_sql, ensure_limit
 
 
 def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> str | None:
@@ -95,12 +100,114 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
     if "산업단지" in q and "AL_D060" not in upper and "건물" not in q:
         reasons.append('Industrial-park questions must use "AL_D060_00_20250804".')
 
+    # 동래/금정 주요용도명 → D198 A25
+    if "주요용도" in q or (("용도" in q) and ("종류" in q or "몇 가지" in q)):
+        if "동래" in q and (
+            "AL_D010" in upper or '"A9"' in s or re.search(r"\bA9\b", s)
+        ):
+            reasons.append(
+                '동래구 "주요용도명" kinds/count must use '
+                '"AL_D198_26260_20250115"."A25" with A25 IS NOT NULL, not AL_D010 "A9".'
+            )
+        if "금정" in q and (
+            "AL_D010" in upper or '"A9"' in s or re.search(r"\bA9\b", s)
+        ):
+            reasons.append(
+                '금정구 "주요용도명" kinds/count must use '
+                '"AL_D198_26410_20250115"."A25" with A25 IS NOT NULL, not AL_D010 "A9".'
+            )
+
+    # 동래·금정 외 구 용도/건물 COUNT에 D198 사용
+    gu_m = re.search(r"([가-힣]{1,6}구)", q)
+    if gu_m:
+        gu_name = gu_m.group(1)
+        if (
+            gu_name not in ("동래구", "금정구")
+            and uses_d198
+            and not uses_d010
+            and not any(k in q for k in ("건축년", "준공", "사용승인", "지어진"))
+        ):
+            reasons.append(
+                f'For {gu_name} building/usage counts use "AL_D010_26_20250704" '
+                'with "A9" for 용도 (not district-only AL_D198).'
+            )
+
     # 실행은 됐지만 의심스러운 빈 결과 (구+건물 속성)
     if row_count == 0 and gu_in_q and "건물" in q and uses_d198 and not uses_d010:
         reasons.append(
             "Query returned 0 rows with AL_D198 only; retry with AL_D010 and A4 LIKE gu filter."
         )
+    if row_count == 0 and gu_m and gu_m.group(1) not in ("동래구", "금정구") and uses_d198:
+        reasons.append(
+            "Query returned 0 rows on AL_D198 for a non-동래/금정 gu; "
+            'rewrite with "AL_D010_26_20250704" and "A9" for usage filters.'
+        )
 
     if not reasons:
         return None
     return "\n".join(f"- {r}" for r in reasons)
+
+
+def check_sql_syntax(sql: str) -> str | None:
+    """SQLGlot로 PostgreSQL 구문 검사. 문제 있으면 피드백, 없으면 None."""
+    try:
+        import sqlglot
+        from sqlglot.errors import ParseError
+    except ImportError:
+        return None
+
+    try:
+        sqlglot.parse_one(sql, read="postgres")
+    except ParseError as exc:
+        return f"SQL parse error (sqlglot/postgres): {exc}"
+    except Exception as exc:
+        return f"SQL parse error: {type(exc).__name__}: {exc}"
+    return None
+
+
+def explain_sql(
+    conn: psycopg.Connection,
+    sql: str,
+    *,
+    default_limit: int = 100,
+) -> str | None:
+    """EXPLAIN으로 실행 가능성 검사. 문제 있으면 피드백, 없으면 None."""
+    try:
+        assert_readonly_sql(sql)
+        limited = ensure_limit(sql, default_limit=default_limit)
+        body = limited.rstrip().rstrip(";")
+        with conn.cursor() as cur:
+            cur.execute(f"EXPLAIN {body}")
+            _ = cur.fetchall()
+        return None
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return f"EXPLAIN failed: {type(exc).__name__}: {exc}"
+
+
+def validate_sql_preexec(
+    question: str,
+    sql: str,
+    *,
+    conn: psycopg.Connection | None = None,
+    default_limit: int = 100,
+    use_explain: bool = True,
+) -> str | None:
+    """사전 검증 통합: 도메인 진단 → SQLGlot → EXPLAIN."""
+    parts: list[str] = []
+    domain = diagnose_sql(question, sql)
+    if domain:
+        parts.append(domain)
+    syntax = check_sql_syntax(sql)
+    if syntax:
+        parts.append(f"- {syntax}")
+    if use_explain and conn is not None:
+        expl = explain_sql(conn, sql, default_limit=default_limit)
+        if expl:
+            parts.append(f"- {expl}")
+    if not parts:
+        return None
+    return "\n".join(parts)

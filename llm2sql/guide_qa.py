@@ -53,6 +53,43 @@ _LIMIT_HINTS = (
     "불가",
 )
 
+_COVERAGE_GEO = (
+    "전국",
+    "전국자료",
+    "전국 자료",
+    "전국데이터",
+    "전국 데이터",
+    "대한민국",
+    "한국 전역",
+    "전국 단위",
+    "타 시도",
+    "다른 시도",
+    "타시도",
+    "서울시 데이터",
+    "타 지역 데이터",
+    "다른 시군",
+)
+
+_COVERAGE_ASK = (
+    "있",
+    "없",
+    "보유",
+    "가능",
+    "포함",
+    "지원",
+    "되나",
+    "인가",
+    "인가요",
+    "있어",
+    "있나",
+    "있을까",
+    "있는지",
+    "되나",
+    "됩니까",
+    "자료",
+    "데이터",
+)
+
 _OUT_OF_SCOPE = (
     "날씨",
     "기온",
@@ -183,6 +220,10 @@ def try_guide(question: str) -> GuideAnswer | None:
             ),
         )
 
+    # 전국/타 시도 자료 유무 (범위 안내)
+    if _is_coverage_question(q):
+        return GuideAnswer(intent="guide_coverage", answer=_coverage_text())
+
     # 제한/못 하는 것
     if any(k in q for k in _LIMIT_HINTS) and (
         any(k in q for k in _HELP_HINTS)
@@ -220,6 +261,37 @@ def try_guide(question: str) -> GuideAnswer | None:
         return GuideAnswer(intent="guide_unscoped", answer=_unscoped_text(q))
 
     return None
+
+
+def _is_coverage_question(q: str) -> bool:
+    """전국·타 시도 등 자료 범위/존재 여부 질문."""
+    if not any(k in q for k in _COVERAGE_GEO):
+        return False
+    if any(k in q for k in _COVERAGE_ASK):
+        return True
+    # 「전국자료?」처럼 짧게 묻는 경우
+    compact = re.sub(r"[\s?？!！.。]+", "", q)
+    return compact in {
+        "전국",
+        "전국자료",
+        "전국데이터",
+        "전국데이터셋",
+    }
+
+
+def _coverage_text() -> str:
+    return "\n".join(
+        [
+            "아니요. 이 시스템에는 전국(대한민국 전체) 자료가 없습니다.",
+            "현재 조회 가능한 범위는 등록된 부산 GIS 데이터입니다.",
+            "- 예: 부산 건물(GIS건물통합정보), 동래·금정 용도별건물, "
+            "행정동 경계, 기초구역, 산업단지 등",
+            "서울·타 시도·전국 단위 통계나 지도는 포함되어 있지 않습니다.",
+            "",
+            "보유 목록 확인: 「어떤 데이터가 있어?」 / 「사용가능한 데이터는 몇개야?」",
+            "부산 질의 예: 「해운대구 건물 몇 채야?」, 「구서동 아파트 특징은?」",
+        ]
+    )
 
 
 def _is_greeting_only(q: str) -> bool:
@@ -334,7 +406,7 @@ def _limits_text() -> str:
         [
             "이 시스템의 주요 제한입니다.",
             "1) 범위: 등록된 부산 GIS 메타·공간 데이터만 다룹니다. "
-            "일반 상식·날씨·뉴스·코딩·상담 등은 지원하지 않습니다.",
+            "전국·타 시도 자료와 일반 상식·날씨·뉴스·코딩·상담 등은 지원하지 않습니다.",
             "2) 주관 판단: ‘제일 좋은/추천’ 등은 직접 평가하지 않고, "
             "연면적·건물면적·높이·층수 등 측정 가능 기준으로 안내합니다.",
             "3) 모호한 지명: 동이 여러 구에 있으면 확인 후 진행합니다.",

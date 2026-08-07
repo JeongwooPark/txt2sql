@@ -7,6 +7,13 @@ from typing import Any
 import ollama
 import psycopg
 
+from llm2sql.semantic_meta import (
+    SAMPLE_COLUMNS,
+    column_synonyms,
+    format_synonyms,
+    table_synonyms,
+)
+
 
 # 행정구역/구·동 관련 질문에 강제 포함할 테이블
 _ADMIN_HINT_TABLES = (
@@ -152,12 +159,98 @@ def apply_admin_boost(question: str, tables: list[str]) -> list[str]:
     return out
 
 
+def _fetch_pk_columns(conn: psycopg.Connection, table_name: str) -> list[str]:
+    rows = conn.execute(
+        """
+        SELECT kcu.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+         AND tc.table_schema = kcu.table_schema
+        WHERE tc.table_schema = 'public'
+          AND tc.table_name = %s
+          AND tc.constraint_type = 'PRIMARY KEY'
+        ORDER BY kcu.ordinal_position
+        """,
+        (table_name,),
+    ).fetchall()
+    return [r["column_name"] for r in rows]
+
+
+def _fetch_fk_lines(conn: psycopg.Connection, table_name: str) -> list[str]:
+    rows = conn.execute(
+        """
+        SELECT
+            kcu.column_name,
+            ccu.table_name AS foreign_table,
+            ccu.column_name AS foreign_column
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+         AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = tc.constraint_name
+         AND ccu.table_schema = tc.table_schema
+        WHERE tc.table_schema = 'public'
+          AND tc.table_name = %s
+          AND tc.constraint_type = 'FOREIGN KEY'
+        ORDER BY kcu.ordinal_position
+        """,
+        (table_name,),
+    ).fetchall()
+    lines: list[str] = []
+    for r in rows:
+        lines.append(
+            f'  FK "{r["column_name"]}" -> '
+            f'"{r["foreign_table"]}"."{r["foreign_column"]}"'
+        )
+    return lines
+
+
+def _fetch_sample_values(
+    conn: psycopg.Connection,
+    table_name: str,
+    column_name: str,
+    *,
+    limit: int = 4,
+) -> list[str]:
+    """대표 텍스트 컬럼의 DISTINCT 샘플 (실패 시 빈 목록)."""
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT "{column_name}" AS v
+            FROM "{table_name}"
+            WHERE "{column_name}" IS NOT NULL
+              AND btrim("{column_name}"::text) <> ''
+            LIMIT %s
+            """,
+            (limit,),
+        ).fetchall()
+        out: list[str] = []
+        for r in rows:
+            val = r.get("v")
+            if val is None:
+                continue
+            text = str(val).strip()
+            if text and text not in out:
+                out.append(text[:40])
+        return out
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return []
+
+
 def build_compact_schema(
     conn: psycopg.Connection,
     table_names: list[str],
     *,
     question: str = "",
+    include_sample_values: bool = True,
 ) -> str:
+    """M-Schema 스타일 compact schema (설명·동의어·PK/FK·샘플값)."""
     if not table_names:
         return "(관련 테이블을 찾지 못했습니다)"
 
@@ -200,40 +293,69 @@ def build_compact_schema(
             (table_name,),
         ).fetchall()
 
-        header = f'TABLE "{table_name}"'
+        pk_cols = set(_fetch_pk_columns(conn, table_name))
+        fk_lines = _fetch_fk_lines(conn, table_name)
+        sample_cols = set(SAMPLE_COLUMNS.get(table_name, ()))
+        samples: dict[str, list[str]] = {}
+        if include_sample_values:
+            for col_name in SAMPLE_COLUMNS.get(table_name, ()):
+                samples[col_name] = _fetch_sample_values(conn, table_name, col_name)
+
+        header = f'# Table: "{table_name}"'
         if meta:
             header += (
-                f"  (display_name_only={meta['display_name']}; "
-                "DO NOT use display_name as SQL table id)"
+                f"\n  [display_name={meta['display_name']}; "
+                "DO NOT use display_name as SQL table id]"
             )
             if meta.get("category"):
-                header += f" [{meta['category']}]"
+                header += f"\n  [category={meta['category']}]"
             if meta.get("description"):
-                header += f"\n  # {_short_desc(meta['description'], 100)}"
+                header += f"\n  [desc] {_short_desc(meta['description'], 100)}"
+        syn_t = format_synonyms(table_synonyms(table_name))
+        if syn_t:
+            header += f"\n  [synonyms] {syn_t}"
+        if pk_cols:
+            header += "\n  [primary_key] " + ", ".join(f'"{c}"' for c in pk_cols)
         if geom:
             header += (
-                f'\n  "{geom["f_geometry_column"]}" '
-                f"geometry({geom['type']},{geom['srid']}) indexed"
+                f'\n  [geometry] "{geom["f_geometry_column"]}" '
+                f"{geom['type']}, SRID={geom['srid']}"
             )
 
         col_lines: list[str] = []
         for col in cols:
             if col["udt_name"] in ("geometry", "geography"):
                 continue
-            line = f'  "{col["column_name"]}" {col["udt_name"]}'
+            cname = col["column_name"]
+            flags: list[str] = []
+            if cname in pk_cols:
+                flags.append("PK")
+            line = f'  - "{cname}" ({col["udt_name"]}'
+            if flags:
+                line += ", " + ",".join(flags)
+            line += ")"
             if col.get("display_name"):
-                line += f" -- {col['display_name']}"
+                line += f" | {col['display_name']}"
             extras: list[str] = []
             short = _short_desc(col.get("description"))
             if short:
                 extras.append(short)
             if col.get("unit"):
                 extras.append(f"unit={col['unit']}")
+            syn_c = format_synonyms(column_synonyms(table_name, cname))
+            if syn_c:
+                extras.append(f"synonyms={syn_c}")
+            if cname in sample_cols and samples.get(cname):
+                shown = ", ".join(samples[cname][:4])
+                extras.append(f"samples=[{shown}]")
             if extras:
-                line += f" ({'; '.join(extras)})"
+                line += " | " + "; ".join(extras)
             col_lines.append(line)
 
-        parts.append(header + "\n" + "\n".join(col_lines))
+        block = header + "\n  [columns]\n" + "\n".join(col_lines)
+        if fk_lines:
+            block += "\n" + "\n".join(fk_lines)
+        parts.append(block)
 
     tips = (
         "\n\nRules for columns:\n"
@@ -241,6 +363,7 @@ def build_compact_schema(
         "- Quote all identifiers. Do not SELECT geometry unless asked. Never SELECT *.\n"
         "- Always include LIMIT.\n"
         "- District/dong name filters: use LIKE '%이름%'.\n"
+        "- Use synonyms above for schema linking (e.g. 인구/구/동 → matching columns).\n"
     )
     spatial_intent = any(
         k in question
@@ -262,6 +385,7 @@ def retrieve_schema(
     host: str | None = None,
     client: Any | None = None,
     top_k: int = 5,
+    include_sample_values: bool = True,
 ) -> dict[str, Any]:
     tables = search_catalog_tables(
         conn,
@@ -273,16 +397,37 @@ def retrieve_schema(
     )
     tables = apply_admin_boost(question, tables)
 
-    # 공간 질의에서 건물 테이블이 빠지면 기본 포함
-    building_hints = ("건물", "건축", "연면적", "용도", "공동주택", "아파트")
+    # 건물 속성 질의: 기본은 AL_D010. D198은 동래/금정·건축년수·주요용도명만.
+    building_hints = ("건물", "건축", "연면적", "용도", "공동주택", "아파트", "주택")
+    needs_d198 = (
+        "동래" in question
+        or "금정" in question
+        or "주요용도" in question
+        or any(
+            k in question
+            for k in (
+                "건축년",
+                "준공",
+                "사용승인",
+                "허가일",
+                "지어진",
+                "경과년",
+            )
+        )
+    )
     if any(h in question for h in building_hints):
-        for t in (
-            "AL_D010_26_20250704",
-            "AL_D198_26260_20250115",
-            "AL_D198_26410_20250115",
-        ):
-            if t not in tables:
-                tables.append(t)
+        if "AL_D010_26_20250704" not in tables:
+            tables.append("AL_D010_26_20250704")
+        if needs_d198:
+            for t in (
+                "AL_D198_26260_20250115",
+                "AL_D198_26410_20250115",
+            ):
+                if t not in tables:
+                    tables.append(t)
+        else:
+            # 연제·사하 등 타 구 질의에서 D198로 빠지지 않게 제거
+            tables = [t for t in tables if not t.startswith("AL_D198_")]
 
     if "산업단지" in question:
         if "AL_D060_00_20250804" not in tables:
@@ -312,10 +457,33 @@ def retrieve_schema(
             '\n- For 금정구 use table "AL_D198_26410_20250115" '
             '(연면적 column "A19") or "AL_D010_26_20250704" ("A14").\n'
         )
-    if "동래" in question and "AL_D198_26260_20250115" not in tables:
-        tables.insert(0, "AL_D198_26260_20250115")
+        if "주요용도" in question:
+            extra_tips += (
+                '\n- "주요용도명" for 금정구 MUST use '
+                '"AL_D198_26410_20250115"."A25" (not AL_D010 "A9").\n'
+            )
+            # 주요용도명 전용: D010 제외해 A9 혼동 방지
+            tables = [t for t in tables if not t.startswith("AL_D010")]
+    if "동래" in question:
+        if "AL_D198_26260_20250115" not in tables:
+            tables.insert(0, "AL_D198_26260_20250115")
+        if "주요용도" in question:
+            extra_tips += (
+                '\n- "주요용도명" for 동래구 MUST use '
+                '"AL_D198_26260_20250115"."A25" (not AL_D010 "A9").\n'
+            )
+            tables = [t for t in tables if not t.startswith("AL_D010")]
+            tables = [t for t in tables if t != "AL_D198_26410_20250115"]
 
-    schema_text = build_compact_schema(conn, tables, question=question) + extra_tips
+    schema_text = (
+        build_compact_schema(
+            conn,
+            tables,
+            question=question,
+            include_sample_values=include_sample_values,
+        )
+        + extra_tips
+    )
     return {"tables": tables, "schema_text": schema_text}
 
 
