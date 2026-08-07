@@ -6,6 +6,13 @@ from dataclasses import dataclass, replace
 from dotenv import load_dotenv
 
 
+def _route_mode(raw: object) -> str:
+    mode = str(raw or "optimized").strip().lower()
+    if mode not in {"baseline", "optimized"}:
+        return "optimized"
+    return mode
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -21,6 +28,8 @@ class Settings:
     # rules | hybrid | llm — 의도 라우팅 방식 (개발·정확도 우선 기본: hybrid)
     intent_mode: str = "hybrid"
     intent_confidence_threshold: float = 0.55
+    # baseline | optimized — 규칙 SQL early 디스패치 (벤치 후 optimized 기본)
+    route_dispatch_mode: str = "optimized"
 
     def with_overrides(self, **kwargs: object) -> Settings:
         return replace(self, **kwargs)
@@ -84,6 +93,11 @@ class Settings:
                 or data.get("INTENT_CONFIDENCE_THRESHOLD")
                 or 0.55
             ),
+            route_dispatch_mode=_route_mode(
+                data.get("route_dispatch_mode")
+                or data.get("ROUTE_DISPATCH_MODE")
+                or "optimized"
+            ),
         )
 
 
@@ -124,4 +138,5 @@ def load_settings(*, dotenv: bool = True) -> Settings:
         intent_confidence_threshold=float(
             os.getenv("INTENT_CONFIDENCE_THRESHOLD", "0.55")
         ),
+        route_dispatch_mode=_route_mode(os.getenv("ROUTE_DISPATCH_MODE", "optimized")),
     )

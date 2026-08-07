@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import psycopg
@@ -9,9 +10,11 @@ from llm2sql.chart_qa import (
     attach_chart_offer,
     chart_capability_answer,
     chart_type_label,
+    filter_chart_series,
     is_chart_accept_question,
     is_chart_capability_question,
     is_chart_decline_question,
+    is_chart_series_filter_question,
     parse_chart_type_request,
     with_chart_type,
 )
@@ -20,7 +23,9 @@ from llm2sql.config import Settings
 from llm2sql.db import connect, execute_query
 from llm2sql.domain import (
     extract_age_years,
+    has_anaphora,
     looks_like_age_question,
+    looks_like_building_name_lookup,
     looks_like_standalone_question,
 )
 from llm2sql.followup_qa import answer_followup, is_followup_question
@@ -40,6 +45,7 @@ from llm2sql.profile_qa import (
 )
 from llm2sql.progress import ProgressCallback, ProgressTracker, TokenCallback
 from llm2sql.rank_compare_qa import answer_rank_compare, is_rank_compare_question
+from llm2sql.route_dispatch import DispatchMode, match_route, tables_for_intent
 from llm2sql.schema_retriever import retrieve_schema
 from llm2sql.session import SessionContext
 from llm2sql.spatial_templates import (
@@ -207,6 +213,48 @@ def run_ask(
             progress.emit("route", f"모호 지역 선택 → {rewritten}")
             question = rewritten
 
+    # 직전 '미지 용어' 확인에 「건물명」으로 답한 경우 → 건물명 조회로 재해석
+    if (
+        session is not None
+        and session.last_route == "clarify_unknown_term"
+        and any(
+            k in question.strip()
+            for k in (
+                "건물이름",
+                "건물명",
+                "건물 이름",
+                "아파트명",
+                "단지명",
+                "이름",
+                "명칭",
+            )
+        )
+    ):
+        base = session.last_full_question or session.last_question
+        # 「건물이름」처럼 짧은 보정만 온 경우 (새 장소 질의가 아닐 때)
+        if base and not looks_like_standalone_question(question):
+            rewritten = f"{base} 건물명"
+            progress.emit("route", f"미지용어→건물명 조회: {rewritten}")
+            question = rewritten
+
+    # 직전 산업단지 건수/목록에 대한 「그 산업단지 이름」후속
+    if (
+        session is not None
+        and session.last_route in {"industrial_count", "industrial_names"}
+        and any(k in question for k in ("이름", "명칭", "목록", "리스트", "어떤"))
+        and (
+            has_anaphora(question)
+            or "산업단지" in question
+            or len(question.strip()) <= 18
+        )
+        and not looks_like_standalone_question(question)
+    ):
+        base = session.last_full_question or session.last_question
+        if base and "산업단지" in base:
+            rewritten = f"{base} 이름"
+            progress.emit("route", f"산업단지 후속→이름: {rewritten}")
+            question = rewritten
+
     # 직전 답변의 차트 제안 수락/거절·종류 변경·가능 종류 안내
     if session is not None and (session.pending_chart or session.last_chart):
         base_chart = session.pending_chart or session.last_chart
@@ -248,6 +296,26 @@ def run_ask(
                 "chart_spec": chart,
                 "steps": progress.steps,
             }
+            session.update_from_result(question, result)
+            return result
+        if is_chart_series_filter_question(question):
+            progress.emit("route", "차트 지표 필터")
+            chart, answer = filter_chart_series(base_chart, question)
+            emit_text_chunks(answer, on_token)
+            result = {
+                "ok": True,
+                "answer": answer,
+                "sql": None,
+                "tables": [],
+                "rows": [],
+                "row_count": 0,
+                "route": "chart_render" if chart else "chart_help",
+                "error": None,
+                "steps": progress.steps,
+            }
+            if chart:
+                result["chart"] = chart
+                result["chart_spec"] = chart
             session.update_from_result(question, result)
             return result
         if session.pending_chart and is_chart_accept_question(question):
@@ -292,6 +360,25 @@ def run_ask(
     if is_chart_capability_question(question):
         progress.emit("route", "차트 가능 종류 안내")
         answer = chart_capability_answer(None)
+        emit_text_chunks(answer, on_token)
+        return {
+            "ok": True,
+            "answer": answer,
+            "sql": None,
+            "tables": [],
+            "rows": [],
+            "row_count": 0,
+            "route": "chart_help",
+            "error": None,
+            "steps": progress.steps,
+        }
+    if is_chart_series_filter_question(question):
+        progress.emit("route", "차트 지표 필터(맥락 없음)")
+        answer = (
+            "직전 차트가 없어 지표만 골라 다시 그릴 수 없습니다. "
+            "먼저 비교·집계 답변에서 차트를 보신 뒤 "
+            "「높이만으로 차트를 그려라」처럼 요청해 주세요."
+        )
         emit_text_chunks(answer, on_token)
         return {
             "ok": True,
@@ -561,6 +648,14 @@ def _try_preferred_intent(
         }
 
     if intent == "meta":
+        if looks_like_building_name_lookup(question):
+            return None
+        if re.fullmatch(
+            r"(지번|주소|이름|건물명|높이|용도|연면적|건물면적|층수|몇\s*층)"
+            r"(은|는|이|가)?\s*\??",
+            question.strip(),
+        ):
+            return None
         progress.emit("route", "선호 의도: 메타데이터")
         meta = answer_metadata_question(conn, question, force=True)
         if meta is None:
@@ -598,6 +693,63 @@ def _try_preferred_intent(
     return None
 
 
+def _finish_routed_query(
+    question: str,
+    settings: Settings,
+    progress: ProgressTracker,
+    *,
+    conn: psycopg.Connection,
+    ollama_client: Any | None,
+    on_token: TokenCallback | None,
+    routed: Any,
+    route_label: str,
+) -> dict[str, Any]:
+    """규칙 라우터 SQL을 실행하고 한국어 답변까지 만든다."""
+    tables = tables_for_intent(routed.intent)
+    progress.emit("route", route_label)
+    progress.emit("sql", "라우터 SQL 확정", sql=routed.sql)
+    progress.emit("execute", "DB 조회 실행")
+    try:
+        rows = execute_query(conn, routed.sql, default_limit=settings.default_limit)
+    except Exception as exc:
+        progress.emit("error", f"실행 실패: {type(exc).__name__}")
+        answer = format_failure(question, error=exc, sql=routed.sql)
+        emit_text_chunks(answer, on_token)
+        return {
+            "ok": False,
+            "answer": answer,
+            "sql": routed.sql,
+            "tables": tables,
+            "rows": [],
+            "row_count": 0,
+            "route": routed.intent,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    progress.emit("result", f"조회 완료 ({len(rows)}행)", row_count=len(rows))
+    progress.emit("answer", "한국어 답변 생성")
+    answer = format_success(
+        question,
+        sql=routed.sql,
+        rows=rows,
+        row_count=len(rows),
+        route=routed.intent,
+        model=settings.ollama_model,
+        host=settings.ollama_host if ollama_client is None else None,
+        client=ollama_client,
+        on_token=on_token,
+    )
+    return {
+        "ok": True,
+        "answer": answer,
+        "sql": routed.sql,
+        "tables": tables,
+        "rows": rows,
+        "row_count": len(rows),
+        "route": routed.intent,
+        "error": None,
+    }
+
+
 def _ask_inner(
     question: str,
     settings: Settings,
@@ -624,6 +776,33 @@ def _ask_inner(
             "route": follow.intent,
             "error": None,
         }
+
+    # 건물명·산업단지·순위 등: try_route early (baseline 다중호출 / optimized 1회)
+    mode: DispatchMode = (
+        "baseline"
+        if settings.route_dispatch_mode == "baseline"
+        else "optimized"
+    )
+    route_match = match_route(question, mode=mode, conn=conn)
+    deferred_route = route_match.deferred
+    if route_match.early is not None:
+        early = route_match.early
+        if early.intent == "building_name_lookup":
+            label = "건물명 조회 라우트"
+        elif early.intent.startswith("building_rank_"):
+            label = f"건물 순위 라우트 ({early.intent})"
+        else:
+            label = f"산업단지 라우트 ({early.intent})"
+        return _finish_routed_query(
+            question,
+            settings,
+            progress,
+            conn=conn,
+            ollama_client=ollama_client,
+            on_token=on_token,
+            routed=early,
+            route_label=label,
+        )
 
     # LLM/하이브리드 의도 우선 디스패치 (실패 시 기존 규칙 체인으로 폴백)
     if preferred_intent is not None and settings.intent_mode in {"hybrid", "llm"}:
@@ -772,7 +951,11 @@ def _ask_inner(
         }
 
     progress.emit("route", "규칙 라우터 매칭 시도")
-    routed = try_route(question, conn=conn)
+    if deferred_route is not None:
+        routed = deferred_route
+        progress.emit("route", "조기 매칭 결과 재사용")
+    else:
+        routed = try_route(question, conn=conn)
     if routed is not None:
         progress.emit(
             "route",
@@ -784,54 +967,16 @@ def _ask_inner(
                 "clarify",
                 "건축년수는 동래·금정만 지원 → 해당 범위로 조회",
             )
-        progress.emit("sql", "라우터 SQL 확정", sql=routed.sql)
-        progress.emit("execute", "DB 조회 실행")
-        try:
-            rows = execute_query(
-                conn, routed.sql, default_limit=settings.default_limit
-            )
-        except Exception as exc:
-            progress.emit("error", f"실행 실패: {type(exc).__name__}")
-            answer = format_failure(question, error=exc, sql=routed.sql)
-            emit_text_chunks(answer, on_token)
-            return {
-                "ok": False,
-                "answer": answer,
-                "sql": routed.sql,
-                "tables": [],
-                "rows": [],
-                "row_count": 0,
-                "route": routed.intent,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
-        progress.emit(
-            "result",
-            f"조회 완료 ({len(rows)}행)",
-            row_count=len(rows),
-        )
-        progress.emit("answer", "LLM 한국어 답변 생성")
-        answer = format_success(
+        return _finish_routed_query(
             question,
-            sql=routed.sql,
-            rows=rows,
-            row_count=len(rows),
-            route=routed.intent,
-            model=settings.ollama_model,
-            host=settings.ollama_host if ollama_client is None else None,
-            client=ollama_client,
+            settings,
+            progress,
+            conn=conn,
+            ollama_client=ollama_client,
             on_token=on_token,
+            routed=routed,
+            route_label=f"라우트 적중: {routed.intent}",
         )
-        progress.emit("answer", "한국어 답변 생성 완료")
-        return {
-            "ok": True,
-            "answer": answer,
-            "sql": routed.sql,
-            "tables": [],
-            "rows": rows,
-            "row_count": len(rows),
-            "route": routed.intent,
-            "error": None,
-        }
 
     progress.emit("route", "라우트 미매칭 → RAG+LLM 경로")
     progress.emit("schema", "스키마 검색(임베딩 RAG)")

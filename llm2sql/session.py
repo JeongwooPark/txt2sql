@@ -64,20 +64,32 @@ class SessionContext:
                 if route not in {"chart_render", "chart_help"}:
                     self.last_chart = None
         # 순위/단일 건물 결과만 focus로 유지 (카탈로그·설명 제외)
-        keep_focus = bool(rows) and (
+        from llm2sql.followup_qa import _normalize_building_row
+
+        norm_rows = [_normalize_building_row(r) for r in rows] if rows else []
+        keep_focus = bool(norm_rows) and (
             route.startswith("building_rank_")
-            or route in {"building_profile"}
+            or route in {"building_name_lookup"}
             or (
                 result.get("ok")
                 and result.get("sql")
-                and len(rows) >= 1
-                and any(k in rows[0] for k in ("A0", "A14", "A12", "A4", "A24"))
+                and len(norm_rows) == 1
+                and any(
+                    k in norm_rows[0] and norm_rows[0].get(k) is not None
+                    for k in ("A0", "A1", "A14", "A12", "A4", "A24", "A5")
+                )
+                and "AL_D010" in str(result.get("sql") or "")
             )
         )
         if keep_focus and route != "building_profile":
-            self.focus_row = dict(rows[0])
+            self.focus_row = dict(norm_rows[0])
             self.focus_index = 0
-            self.table = (result.get("tables") or ["AL_D010_26_20250704"])[0]
+            tables = result.get("tables") or []
+            d010 = next(
+                (t for t in tables if str(t).startswith("AL_D010")),
+                "AL_D010_26_20250704",
+            )
+            self.table = d010
         elif keep_focus and route == "building_profile":
             # 프로필은 집계라 focus 건물 없음
             self.focus_row = None
@@ -85,13 +97,22 @@ class SessionContext:
         elif not keep_focus and route and route.startswith("clarify_"):
             # 모호 확인 중에는 기존 focus 유지
             pass
+        elif not keep_focus and route and route.startswith(("meta_", "guide_", "chart_")):
+            # 메타/안내/차트는 focus 유지 (지번? 같은 후속 대비)
+            pass
         else:
-            if rows and any(k in rows[0] for k in ("A0", "A24", "A14", "A4")):
-                self.focus_row = dict(rows[0])
+            if norm_rows and len(norm_rows) == 1 and any(
+                k in norm_rows[0] for k in ("A0", "A24", "A14", "A4", "A5")
+            ):
+                self.focus_row = dict(norm_rows[0])
                 self.focus_index = 0
-                self.table = (result.get("tables") or [None])[0]
+                self.table = (result.get("tables") or ["AL_D010_26_20250704"])[0]
             elif not rows:
                 self.focus_row = None
+            elif route and not route.startswith(("followup_", "clarify_")):
+                # 다건·비건물 결과면 focus 해제
+                if len(norm_rows) != 1:
+                    self.focus_row = None
 
         if place:
             self.place = place

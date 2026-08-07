@@ -15,15 +15,18 @@ from llm2sql.domain import (
     USAGE_ALIASES,
     USAGE_PATTERN,
     age_date_predicate,
+    busan_gu_code,
     d198_table_for_gu,
     extract_age_compare,
     extract_age_years,
+    extract_building_name_candidate,
     extract_gu,
     extract_place,
     extract_usage,
     is_busan_wide,
     legal_dong_guess,
     looks_like_age_question,
+    looks_like_building_name_lookup,
     place_a4_predicate,
     sane_floor_area_sql,
     sane_footprint_sql,
@@ -74,6 +77,22 @@ def try_route(
     conn: psycopg.Connection | None = None,
 ) -> RoutedQuery | None:
     q = question.strip()
+
+    # 산업단지 관련 규칙 라우트 (건물명보다 우선)
+    industrial = _route_buildings_in_industrial(q)
+    if industrial is not None:
+        return industrial
+    industrial = _route_industrial_names(q)
+    if industrial is not None:
+        return industrial
+    industrial = _route_industrial_count(q)
+    if industrial is not None:
+        return industrial
+
+    # 특정 건물명(고유명사) 조회 — clarify/LLM보다 우선
+    name_hit = _route_building_name_lookup(q)
+    if name_hit is not None:
+        return name_hit
 
     # 좌표 버퍼 (LLM이 D198로 빠지는 경우 방지)
     m = re.search(
@@ -644,30 +663,262 @@ _RANK_SUPERLATIVE = (
 )
 
 
+def _explicit_count_intent(q: str) -> bool:
+    """이름/자료 질의와 구분되는 명시적 건수 의도."""
+    if any(
+        k in q
+        for k in (
+            "자료",
+            "데이터",
+            "데이터셋",
+            "테이블",
+            "컬럼",
+            "속성",
+            "이름",
+            "명칭",
+            "뭐야",
+            "무엇",
+            "설명",
+        )
+    ):
+        # 「산업단지 수는?」은 허용, 「자료의 이름은?」은 제외
+        if not any(k in q for k in ("몇", "개수", "건수", "수는", "수가", "개야", "몇 개", "몇개")):
+            return False
+    if any(
+        k in q
+        for k in ("몇", "개수", "건수", "채수", "개야", "몇 개", "몇개", "수는", "수가", "얼마")
+    ):
+        return True
+    # 「산업단지 수?」「산업단지수는」
+    if re.search(r"수\s*\??\s*$", q) or re.search(r"단지\s*수", q):
+        return True
+    return False
+
+
+def _industrial_scope_sql(q: str) -> str:
+    """산업단지 조회 범위 SQL (시군구코드/부산 전역)."""
+    gu = extract_gu(q)
+    code = busan_gu_code(gu)
+    if code:
+        return f"\"A4\" = '{code}'"
+    if (
+        is_busan_wide(q)
+        or "부산" in q
+        or re.search(r"\b26\b|26으로", q)
+        or gu is None
+    ):
+        return "\"A4\" LIKE '26%'"
+    return f"(\"A8\" ILIKE '%{gu}%' OR \"A9\" ILIKE '%{gu}%')"
+
+
+def _industrial_names_sql(scope: str) -> str:
+    return (
+        "SELECT DISTINCT name FROM (\n"
+        '  SELECT TRIM("A8") AS name FROM "AL_D060_00_20250804"\n'
+        f"  WHERE {scope} AND \"A8\" ILIKE '%산업단지%'\n"
+        "  UNION\n"
+        '  SELECT TRIM("A9") AS name FROM "AL_D060_00_20250804"\n'
+        f"  WHERE {scope} AND \"A9\" ILIKE '%산업단지%'\n"
+        ") t\n"
+        "WHERE name IS NOT NULL AND BTRIM(name) <> ''\n"
+        "  AND name <> '일반산업단지'\n"
+        "ORDER BY name;"
+    )
+
+
+def _route_buildings_in_industrial(q: str) -> RoutedQuery | None:
+    """구·동 건물 중 산업단지와 교차(단지 내)하는 건물 수."""
+    if "산업단지" not in q:
+        return None
+    if "건물" not in q and "건축물" not in q:
+        return None
+    if not any(k in q for k in ("내", "안", "속한", "포함", "교차", "위치한", "있는")):
+        return None
+    if not _explicit_count_intent(q) and not _wants_count(q):
+        return None
+    # 자료명 질의 제외
+    if any(k in q for k in ("자료", "데이터셋", "테이블", "이름", "명칭")):
+        return None
+
+    gu = extract_gu(q)
+    place = extract_place(q)
+    where_b: list[str] = [
+        "EXISTS ("
+        'SELECT 1 FROM "AL_D060_00_20250804" i '
+        "WHERE ST_Intersects(b.geometry, i.geometry)"
+        ")"
+    ]
+    if place and place.endswith("동"):
+        where_b.append(
+            f'(b."A4" LIKE \'% {place}\' OR b."A4" = \'{place}\')'
+        )
+        if gu:
+            where_b.append(f'b."A4" LIKE \'%{gu}%\'')
+    elif gu:
+        where_b.append(f'b."A4" LIKE \'%{gu}%\'')
+
+    where_sql = " AND ".join(where_b)
+    return RoutedQuery(
+        "buildings_in_industrial",
+        (
+            'SELECT COUNT(*) AS cnt\n'
+            'FROM "AL_D010_26_20250704" b\n'
+            f"WHERE {where_sql};"
+        ),
+    )
+
+
+def _route_industrial_count(q: str) -> RoutedQuery | None:
+    """산업단지 개수(단지명 유니크). 도형 COUNT(*)가 아님."""
+    if "산업단지" not in q:
+        return None
+    if any(k in q for k in ("교차", "기초구역")):
+        return None
+    # 건물∩산업단지는 별도 라우트
+    if ("건물" in q or "건축물" in q) and any(
+        k in q for k in ("내", "안", "속한", "포함", "교차")
+    ):
+        return None
+    # 이름/목록 질의는 건수가 아님
+    if any(k in q for k in ("이름", "명칭", "목록", "리스트", "어떤")) and not any(
+        k in q for k in ("몇", "개수", "건수", "수는", "수가", "개야")
+    ):
+        return None
+    if not _explicit_count_intent(q):
+        return None
+
+    scope = _industrial_scope_sql(q)
+    return RoutedQuery(
+        "industrial_count",
+        (
+            "SELECT COUNT(*) AS cnt FROM (\n"
+            "  SELECT DISTINCT name FROM (\n"
+            '    SELECT TRIM("A8") AS name FROM "AL_D060_00_20250804"\n'
+            f"    WHERE {scope} AND \"A8\" ILIKE '%산업단지%'\n"
+            "    UNION\n"
+            '    SELECT TRIM("A9") AS name FROM "AL_D060_00_20250804"\n'
+            f"    WHERE {scope} AND \"A9\" ILIKE '%산업단지%'\n"
+            "  ) t\n"
+            "  WHERE name IS NOT NULL AND BTRIM(name) <> ''\n"
+            "    AND name <> '일반산업단지'\n"
+            ") u;"
+        ),
+    )
+
+
+def _route_industrial_names(q: str) -> RoutedQuery | None:
+    """산업단지 명칭 목록."""
+    if "산업단지" not in q:
+        return None
+    if any(k in q for k in ("교차", "기초구역")):
+        return None
+    if ("건물" in q or "건축물" in q) and any(
+        k in q for k in ("내", "안", "속한", "포함")
+    ):
+        return None
+    if not any(k in q for k in ("이름", "명칭", "목록", "리스트", "어떤", "무엇")):
+        return None
+    # 순수 건수 질의 제외
+    if _explicit_count_intent(q) and not any(
+        k in q for k in ("이름", "명칭", "목록", "리스트")
+    ):
+        return None
+
+    scope = _industrial_scope_sql(q)
+    return RoutedQuery("industrial_names", _industrial_names_sql(scope))
+
+
+def _route_building_name_lookup(q: str) -> RoutedQuery | None:
+    """건물명(A24) 부분일치로 특정 단지·건물 정보 조회."""
+    if not looks_like_building_name_lookup(q):
+        return None
+    name = extract_building_name_candidate(q)
+    if not name:
+        return None
+
+    where: list[str] = []
+    place = extract_place(q)
+    gu = extract_gu(q)
+    if place and place.endswith("동"):
+        where.append(place_a4_predicate(place))
+        if gu:
+            where.append(f'"A4" LIKE \'%{gu}%\'')
+    elif gu:
+        where.append(f'"A4" LIKE \'%{gu}%\'')
+
+    # 토큰 AND — 「구서역 포르투나」처럼 일부만 말해도 매칭
+    for token in name.split():
+        safe = token.replace("'", "''")
+        where.append(f'"A24" ILIKE \'%{safe}%\'')
+
+    where_sql = " AND ".join(where) if where else "TRUE"
+    return RoutedQuery(
+        "building_name_lookup",
+        (
+            'SELECT "A0", "A4", "A5", "A9", "A11", "A12", "A14", "A16", '
+            '"A19", "A24", "A25", "A26"\n'
+            'FROM "AL_D010_26_20250704"\n'
+            f"WHERE {where_sql}\n"
+            'ORDER BY "A24" NULLS LAST, "A14" DESC NULLS LAST\n'
+            "LIMIT 20;"
+        ),
+    )
+
+
 def _route_building_rank(q: str) -> RoutedQuery | None:
     metric_col = None
     metric_name = None
     has_super = any(k in q for k in _RANK_SUPERLATIVE)
-    if any(k in q for k in ("건물면적", "건축물면적", "건축면적")) and has_super:
-        metric_col, metric_name = "A12", "건물면적"
-    elif "연면적" in q and has_super:
-        metric_col, metric_name = "A14", "연면적"
-    elif "대지면적" in q and has_super:
-        metric_col, metric_name = "A15", "대지면적"
-    elif any(k in q for k in ("가장 높", "제일 높")) or (
-        "높이" in q and any(k in q for k in ("가장", "제일", "최대", "1등", "최고"))
+    top_n = _extract_top_n(q, default=1)
+    if any(k in q for k in ("건물면적", "건축물면적", "건축면적")) and (
+        has_super or top_n > 1
     ):
+        metric_col, metric_name = "A12", "건물면적"
+    elif "연면적" in q and (has_super or top_n > 1):
+        metric_col, metric_name = "A14", "연면적"
+    elif "대지면적" in q and (has_super or top_n > 1):
+        metric_col, metric_name = "A15", "대지면적"
+    elif any(k in q for k in ("가장 높", "제일 높", "가장높은", "제일높은")) or (
+        "높" in q
+        and any(k in q for k in ("가장", "제일", "최대", "1등", "최고", "상위"))
+    ) or ("높은" in q and top_n > 1):
         metric_col, metric_name = "A16", "높이"
     elif ("지상층" in q or "층수" in q or "지상 층" in q) and any(
-        k in q for k in ("가장 많", "제일 많", "가장 높", "최대", "1등", "제일 높")
+        k in q for k in ("가장 많", "제일 많", "가장 높", "최대", "1등", "제일 높", "상위")
     ):
         metric_col, metric_name = "A26", "지상층"
+    elif any(
+        k in q
+        for k in (
+            "가장 큰",
+            "제일 큰",
+            "가장큰",
+            "제일큰",
+            "가장 넓은",
+            "제일 넓은",
+            "가장넓은",
+            "제일넓은",
+        )
+    ) or (
+        top_n > 1
+        and any(k in q for k in ("큰", "넓은"))
+        and any(k in q for k in ("건물", "아파트", "주택", "건축물", "것물"))
+    ):
+        # 지표 미지정 시 연면적(규모)으로 해석
+        metric_col, metric_name = "A14", "연면적"
     else:
         return None
 
     place = extract_place(q)
+    gu = extract_gu(q)
     where: list[str] = []
-    if place:
+    if place and place.endswith("동"):
+        where.append(place_a4_predicate(place))
+        if gu:
+            where.append(f'"A4" LIKE \'%{gu}%\'')
+    elif gu:
+        where.append(f'"A4" LIKE \'%{gu}%\'')
+    elif place:
         where.append(place_a4_predicate(place))
     # 장소 없음·부산시 전체 → AL_D010 전역 (부산 DB)
 
@@ -688,6 +939,7 @@ def _route_building_rank(q: str) -> RoutedQuery | None:
         where.append('"A15" > 0 AND "A15" <= 2000000')
 
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    limit_n = max(1, min(top_n, 20))
 
     return RoutedQuery(
         f"building_rank_{metric_name}",
@@ -696,9 +948,31 @@ def _route_building_rank(q: str) -> RoutedQuery | None:
             'FROM "AL_D010_26_20250704"'
             f"{where_sql}\n"
             f'ORDER BY "{metric_col}" DESC NULLS LAST\n'
-            "LIMIT 1;"
+            f"LIMIT {limit_n};"
         ),
     )
+
+
+def _extract_top_n(question: str, *, default: int = 1, max_n: int = 20) -> int:
+    """『상위 3』『3개』『탑5』 등에서 N 추출."""
+    q = question.strip()
+    patterns = (
+        r"상위\s*(\d+)\s*개?",
+        r"탑\s*(\d+)",
+        r"top\s*(\d+)",
+        r"(\d+)\s*개",
+        r"(\d+)\s*곳",
+        r"(\d+)\s*채",
+        r"(\d+)\s*건(?!물)",  # '3건물'이 아닌 '3건'
+    )
+    for pat in patterns:
+        m = re.search(pat, q, flags=re.IGNORECASE)
+        if not m:
+            continue
+        n = int(m.group(1))
+        if 1 <= n <= max_n:
+            return n
+    return default
 
 
 def fix_common_sql_mistakes(sql: str, question: str | None = None) -> str:

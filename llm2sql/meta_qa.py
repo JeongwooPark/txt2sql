@@ -212,6 +212,18 @@ def is_metadata_question(question: str) -> bool:
     # 지역 건물 용도 분포/설명은 스키마 메타가 아님 ("동래구 건물의 주요 용도들을 설명하라")
     if _is_place_usage_overview(q):
         return False
+    # 특정 건물명 조회는 메타가 아님
+    from llm2sql.domain import looks_like_building_name_lookup
+
+    if looks_like_building_name_lookup(q):
+        return False
+    # 「지번은?」「주소는?」처럼 짧은 속성 질문은 스키마 메타가 아님
+    if re.fullmatch(
+        r"(지번|주소|이름|건물명|높이|용도|연면적|건물면적|층수|몇\s*층)"
+        r"(은|는|이|가)?\s*\??",
+        q,
+    ):
+        return False
     # 특정 데이터셋명 + 요약/내용 → 메타 (프로필 집계가 아님)
     if _named_dataset_question(q) and any(
         k in q for k in ("요약", "개요", "설명", "내용", "들어있는", "담긴", "소개")
@@ -370,6 +382,9 @@ def answer_metadata_question(
 
     # 1) 전체 데이터/테이블 목록 (이름 질의 포함)
     if _asks_catalog(q) and not col_names:
+        # 특정 주제(예: 산업단지) 자료 이름만 물은 경우
+        if tables and any(k in q for k in ("이름", "명칭", "뭐야", "무엇")):
+            return _answer_dataset_names(conn, tables)
         # '데이터 이름'이 표시명 컬럼 매칭에 걸려도 카탈로그가 우선
         return _answer_catalog(conn)
 
@@ -419,6 +434,8 @@ def _asks_catalog(q: str) -> bool:
             "데이터셋명",
             "데이터셋 목록",
             "자료 이름",
+            "자료의 이름",
+            "자료이름",
             "테이블 이름",
             "테이블명",
             "무슨 자료",
@@ -656,6 +673,55 @@ def _answer_catalog(conn: psycopg.Connection) -> MetaAnswer:
     return MetaAnswer(
         intent="meta_catalog",
         answer="\n".join(lines),
+        tables=[r["table_name"] for r in rows],
+        rows=rows,
+    )
+
+
+def _answer_dataset_names(
+    conn: psycopg.Connection, tables: list[str]
+) -> MetaAnswer:
+    """특정 주제와 관련된 데이터셋 표시명·물리명만 짧게 안내."""
+    rows: list[dict[str, Any]] = []
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT table_name, display_name, category, description
+            FROM table_metadata
+            WHERE schema_name = 'public' AND table_name = ANY(%s)
+            ORDER BY table_name
+            """,
+            (tables,),
+        )
+        rows = list(cur.fetchall())
+    if not rows:
+        return MetaAnswer(
+            intent="meta_catalog",
+            answer="관련 데이터셋 이름을 메타데이터에서 찾지 못했습니다.",
+            tables=[],
+            rows=[],
+        )
+    if len(rows) == 1:
+        r = rows[0]
+        disp = r["display_name"] or r["table_name"]
+        answer = (
+            f"산업단지 관련 자료의 이름은 「{disp}」이며, "
+            f"물리 테이블명은 `{r['table_name']}` 입니다."
+            if "산업단지" in (r.get("display_name") or "")
+            or r["table_name"].startswith("AL_D060")
+            else (
+                f"관련 자료의 이름은 「{disp}」(`{r['table_name']}`)입니다."
+            )
+        )
+    else:
+        lines = ["관련 데이터셋 이름은 다음과 같습니다."]
+        for r in rows:
+            disp = r["display_name"] or r["table_name"]
+            lines.append(f"- 「{disp}」(`{r['table_name']}`)")
+        answer = "\n".join(lines)
+    return MetaAnswer(
+        intent="meta_catalog",
+        answer=answer,
         tables=[r["table_name"] for r in rows],
         rows=rows,
     )

@@ -118,7 +118,9 @@ def _scalar_from_rows(rows: list[dict[str, Any]]) -> Any | None:
 def _looks_like_count_question(question: str) -> bool:
     return any(
         k in question
-        for k in ("몇", "개수", "건수", "채수", "종류", "얼마", "세어", "총")
+        for k in ("몇", "개수", "건수", "채수", "종류", "얼마", "세어", "총", "수는", "수가", "개야", "개?")
+    ) or bool(re.search(r"\d*\s*개\b", question)) or (
+        "수" in question and any(k in question for k in ("산업단지", "건물", "기초구역", "아파트", "주택"))
     )
 
 
@@ -256,6 +258,21 @@ def _infer_rank_route(question: str) -> str | None:
         k in question for k in ("가장", "제일", "최대")
     ):
         return "building_rank_지상층"
+    # 「가장 큰/넓은 건물」은 연면적(규모)으로 해석
+    if any(
+        k in question
+        for k in (
+            "가장 큰",
+            "제일 큰",
+            "가장큰",
+            "제일큰",
+            "가장 넓은",
+            "제일 넓은",
+            "가장넓은",
+            "제일넓은",
+        )
+    ):
+        return "building_rank_연면적"
     return None
 
 
@@ -307,12 +324,205 @@ def _natural_rank(question: str, route: str, row: dict[str, Any]) -> str:
     return f"{lead} {detail}"
 
 
+def _natural_rank_list(
+    question: str, route: str, rows: list[dict[str, Any]]
+) -> str:
+    metric = str(route).replace("building_rank_", "")
+    place = _place_label(question)
+    usage = extract_usage(question)
+    if "아파트" in question and usage == "공동주택":
+        target = "아파트"
+    elif usage:
+        target = usage
+    else:
+        target = "건물"
+    where = f"{place} " if place else ""
+
+    if metric == "높이":
+        head = f"{where}{target} 중 높이가 높은 상위 {len(rows)}곳은 다음과 같습니다."
+    elif metric == "지상층":
+        head = f"{where}{target} 중 지상층이 많은 상위 {len(rows)}곳은 다음과 같습니다."
+    else:
+        head = f"{where}{target} 중 {metric} 상위 {len(rows)}곳은 다음과 같습니다."
+
+    lines = [head]
+    for i, row in enumerate(rows, start=1):
+        name = row.get("A24")
+        name_s = (
+            str(name)
+            if name not in (None, "") and str(name).lower() != "nan"
+            else None
+        )
+        who = (
+            f"「{name_s}」"
+            if name_s
+            else f"지번 {row.get('A5') or '—'} 건물"
+        )
+        if metric == "높이":
+            metric_txt = f"높이 {_fmt_number(_row_height(row))}m"
+        elif metric == "지상층":
+            metric_txt = f"지상 {_fmt_number(_row_floors(row))}층"
+        elif metric == "건물면적":
+            metric_txt = f"건물면적 {_fmt_number(row.get('A12'))}㎡"
+        elif metric == "대지면적":
+            metric_txt = f"대지면적 {_fmt_number(row.get('A15'))}㎡"
+        else:
+            metric_txt = f"연면적 {_fmt_number(row.get('A14'))}㎡"
+        lines.append(
+            f"{i}) {who} — {row.get('A4') or '—'}, "
+            f"{_row_usage(row) or '—'}, {metric_txt}, "
+            f"지상 {_fmt_number(_row_floors(row))}층"
+        )
+    return "\n".join(lines)
+
+
+def _natural_building_name_lookup(
+    question: str, rows: list[dict[str, Any]]
+) -> str:
+    """특정 건물명 조회·설명 답변."""
+    if not rows:
+        return (
+            f"{_subject_phrase(question)}에 해당하는 건물을 찾지 못했습니다. "
+            "건물명·동명을 확인해 다시 질문해 주세요."
+        )
+
+    # 속성만 물은 경우 (주소/지번 등)
+    attr_only = None
+    if any(k in question for k in ("주소", "어디", "위치")):
+        attr_only = "주소"
+    elif "지번" in question:
+        attr_only = "지번"
+    elif any(k in question for k in ("높이",)):
+        attr_only = "높이"
+    elif "연면적" in question:
+        attr_only = "연면적"
+    elif any(k in question for k in ("건물면적", "건축면적")):
+        attr_only = "건물면적"
+    elif any(k in question for k in ("층수", "몇 층", "몇층", "지상층")):
+        attr_only = "지상층"
+    elif "용도" in question:
+        attr_only = "용도"
+
+    if len(rows) == 1 and attr_only:
+        row = rows[0]
+        name = row.get("A24")
+        name_s = (
+            str(name)
+            if name not in (None, "") and str(name).lower() != "nan"
+            else "해당 건물"
+        )
+        if attr_only == "주소":
+            loc = " ".join(
+                str(x).strip()
+                for x in (row.get("A4"), row.get("A5"))
+                if x not in (None, "") and str(x).lower() != "nan"
+            )
+            return f"「{name_s}」의 주소는 {loc or '—'}입니다."
+        if attr_only == "지번":
+            return f"「{name_s}」의 지번은 {row.get('A5') or '—'}입니다."
+        if attr_only == "높이":
+            return f"「{name_s}」의 높이는 {_fmt_number(_row_height(row))}m입니다."
+        if attr_only == "연면적":
+            return f"「{name_s}」의 연면적은 {_fmt_number(row.get('A14'))}㎡입니다."
+        if attr_only == "건물면적":
+            return f"「{name_s}」의 건물면적은 {_fmt_number(row.get('A12'))}㎡입니다."
+        if attr_only == "지상층":
+            return f"「{name_s}」의 지상층수는 {_fmt_number(_row_floors(row))}층입니다."
+        if attr_only == "용도":
+            return f"「{name_s}」의 용도는 {_row_usage(row) or '—'}입니다."
+
+    if len(rows) == 1:
+        row = rows[0]
+        name = row.get("A24")
+        name_s = (
+            str(name)
+            if name not in (None, "") and str(name).lower() != "nan"
+            else None
+        )
+        title = (
+            f"「{name_s}」에 대한 정보입니다."
+            if name_s
+            else "요청하신 건물 정보입니다."
+        )
+        loc = " ".join(
+            str(x).strip()
+            for x in (row.get("A4"), row.get("A5"))
+            if x not in (None, "") and str(x).lower() != "nan"
+        )
+        return (
+            f"{title}\n"
+            f"- 위치: {loc or '—'}\n"
+            f"- 용도: {_row_usage(row) or '—'}\n"
+            f"- 구조: {row.get('A11') or '—'}\n"
+            f"- 건물면적: {_fmt_number(row.get('A12'))}㎡\n"
+            f"- 연면적: {_fmt_number(row.get('A14'))}㎡\n"
+            f"- 높이: {_fmt_number(_row_height(row))}m\n"
+            f"- 지상층: {_fmt_number(_row_floors(row))}층"
+        )
+    lines = [
+        f"조건에 맞는 건물이 {len(rows)}건 있습니다. 주요 결과는 다음과 같습니다."
+    ]
+    for i, row in enumerate(rows[:10], start=1):
+        name = row.get("A24")
+        name_s = (
+            str(name)
+            if name not in (None, "") and str(name).lower() != "nan"
+            else f"지번 {row.get('A5') or '—'}"
+        )
+        if attr_only == "주소":
+            loc = " ".join(
+                str(x).strip()
+                for x in (row.get("A4"), row.get("A5"))
+                if x not in (None, "") and str(x).lower() != "nan"
+            )
+            lines.append(f"{i}) 「{name_s}」 — {loc or '—'}")
+        else:
+            lines.append(
+                f"{i}) 「{name_s}」 — {row.get('A4') or '—'}, "
+                f"{_row_usage(row) or '—'}, "
+                f"높이 {_fmt_number(_row_height(row))}m, "
+                f"지상 {_fmt_number(_row_floors(row))}층"
+            )
+    if len(rows) > 10:
+        lines.append(f"… 외 {len(rows) - 10}건")
+    return "\n".join(lines)
+
+
+def _natural_industrial_names(
+    question: str, rows: list[dict[str, Any]]
+) -> str:
+    subject = _subject_phrase(question)
+    names: list[str] = []
+    for row in rows:
+        raw = row.get("name")
+        if raw in (None, ""):
+            continue
+        s = str(raw).strip()
+        if s and s not in names:
+            names.append(s)
+    if not names:
+        return f"{subject}에 해당하는 산업단지 이름을 찾지 못했습니다."
+    lines = [f"{subject} 이름은 다음과 같습니다."]
+    for i, name in enumerate(names, start=1):
+        lines.append(f"{i}) {name}")
+    return "\n".join(lines)
+
+
 def _natural_count(question: str, n: Any) -> str:
     subject = _subject_phrase(question)
     n_s = _fmt_number(n)
-    unit = "채" if any(k in question for k in ("채", "아파트", "주택", "건물")) else "건"
     if "종류" in question:
         return f"{subject}의 종류는 {n_s}가지입니다."
+    if "건물" in question and "산업단지" in question:
+        unit = "채"
+        if "산업단지" not in subject:
+            subject = f"{subject} 중 산업단지 내 건물".replace("  ", " ")
+    elif "산업단지" in question or "기초구역" in question:
+        unit = "개"
+    elif any(k in question for k in ("채", "아파트", "주택", "건물")):
+        unit = "채"
+    else:
+        unit = "건"
     return f"{subject}{_eun_neun(subject)} 모두 {n_s}{unit}입니다."
 
 
@@ -605,12 +815,24 @@ def format_success_template(
         else _infer_rank_route(question)
     )
     if (
-        row_count == 1
-        and rank_route
+        rank_route
+        and rows
         and "A4" in rows[0]
         and any(k in rows[0] for k in ("A14", "A16", "A12", "A19", "A30", "A24"))
     ):
-        return _natural_rank(question, rank_route, rows[0])
+        if row_count == 1:
+            return _natural_rank(question, rank_route, rows[0])
+        return _natural_rank_list(question, rank_route, rows)
+
+    if (
+        route == "building_name_lookup"
+        and rows
+        and any(k in rows[0] for k in ("A4", "A24", "A5"))
+    ):
+        return _natural_building_name_lookup(question, rows)
+
+    if route == "industrial_names":
+        return _natural_industrial_names(question, rows)
 
     if single_metric and _looks_like_count_question(question):
         if "종류" in question:
@@ -673,11 +895,19 @@ def format_success(
 ) -> str:
     """성공 시 자연스러운 한국어 답변 (가능하면 LLM, 실패 시 템플릿)."""
     # 건물 순위는 템플릿이 컬럼 혼동·과장 없이 더 안전하다.
+    # 건물 순위·특정 건물명 조회는 템플릿이 컬럼 혼동·과장 없이 더 안전하다.
     prefer_template = bool(
         (route and str(route).startswith("building_rank_"))
+        or route == "building_name_lookup"
+        or route
+        in {
+            "industrial_count",
+            "industrial_code_prefix",
+            "industrial_names",
+            "buildings_in_industrial",
+        }
         or (
-            row_count == 1
-            and rows
+            rows
             and _infer_rank_route(question)
             and "A4" in rows[0]
         )

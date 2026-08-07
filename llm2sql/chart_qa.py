@@ -158,6 +158,139 @@ def chart_type_label(chart_type: str) -> str:
     return _CHART_TYPE_LABELS.get(chart_type, chart_type)
 
 
+# (질문 키워드, 데이터셋 label에 포함되면 매칭)
+_SERIES_FILTERS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("연면적",), ("연면적",)),
+    (("건물면적", "건축물면적", "건축면적"), ("건물면적", "건축물면적", "건축면적", "면적")),
+    (("면적",), ("면적",)),
+    (("높이", "고도"), ("높이",)),
+    (("층수", "지상층", "층"), ("층",)),
+    (
+        ("건물 수", "건물수", "건수", "채수", "개수", "동수"),
+        ("건물 수", "건수", "개수"),
+    ),
+)
+
+
+def is_chart_series_filter_question(question: str) -> bool:
+    """직전 차트에서 일부 지표만 남기라는 후속 질의."""
+    q = question.strip()
+    if not q:
+        return False
+    has_metric = any(any(k in q for k in keys) for keys, _ in _SERIES_FILTERS)
+    if not has_metric:
+        return False
+    onlyish = any(
+        k in q
+        for k in (
+            "만으로",
+            "만으로만",
+            "만 그려",
+            "만그려",
+            "만 보여",
+            "만보여",
+            "만 다시",
+            "만다시",
+            "만 차트",
+            "만차트",
+            "만 그래프",
+            "만으로 차트",
+            "만으로 그려",
+        )
+    ) or bool(re.search(r"[가-힣0-9]만(?:으로|으)?(?:\s|$)", q))
+    if not onlyish and "만" not in q:
+        return False
+    if onlyish:
+        return True
+    # 「높이만 차트로」처럼 차트 맥락 + 만
+    return "만" in q and any(
+        k in q for k in ("차트", "그래프", "그려", "시각화", "다시")
+    )
+
+
+def _source_datasets(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = spec.get("all_datasets") or spec.get("datasets") or []
+    return [dict(d) for d in raw if isinstance(d, dict)]
+
+
+def _requested_series_keys(question: str) -> list[tuple[str, ...]]:
+    """질문에 언급된 시리즈 매칭 키(label 부분문자열) 목록."""
+    q = question.strip()
+    found: list[tuple[str, ...]] = []
+    # 연면적 → 면적 보다 먼저 소비되도록 순서 유지, 이미 잡힌 넓은 키 중복 방지
+    used_spans: list[str] = []
+    for keys, label_bits in _SERIES_FILTERS:
+        hit = next((k for k in keys if k in q), None)
+        if not hit:
+            continue
+        # '면적'이 '연면적' 일부로만 잡힌 경우 스킵
+        if hit == "면적" and "연면적" in q:
+            continue
+        if hit == "층" and any(k in q for k in ("층수", "지상층")):
+            # 더 긴 키로 이미 처리됐을 수 있음
+            pass
+        if any(hit in u or u in hit for u in used_spans):
+            continue
+        used_spans.append(hit)
+        found.append(label_bits)
+    return found
+
+
+def _dataset_matches(label: str, label_bits: tuple[str, ...]) -> bool:
+    lab = str(label or "")
+    return any(bit in lab for bit in label_bits)
+
+
+def filter_chart_series(
+    spec: dict[str, Any], question: str
+) -> tuple[dict[str, Any] | None, str]:
+    """지표 일부만 남긴 차트 스펙과 안내 문구를 반환."""
+    source = _source_datasets(spec)
+    if len(source) < 1:
+        return None, "차트에 표시할 지표가 없습니다."
+
+    wanted = _requested_series_keys(question)
+    if not wanted:
+        names = ", ".join(
+            str(d.get("label") or "?") for d in source
+        )
+        return None, (
+            f"어떤 지표만 남길지 알려 주세요. 현재 차트 지표: {names}."
+        )
+
+    kept: list[dict[str, Any]] = []
+    for ds in source:
+        label = str(ds.get("label") or "")
+        if any(_dataset_matches(label, bits) for bits in wanted):
+            kept.append(dict(ds))
+
+    if not kept:
+        names = ", ".join(str(d.get("label") or "?") for d in source)
+        return None, (
+            "요청하신 지표가 현재 차트에 없습니다. "
+            f"선택 가능한 지표: {names}."
+        )
+
+    out = dict(spec)
+    out["all_datasets"] = source
+    out["datasets"] = kept
+    # 단일 시리즈면 단위 추정
+    if len(kept) == 1:
+        lab = str(kept[0].get("label") or "")
+        if "(m)" in lab or "높이" in lab:
+            out["unit"] = "m"
+        elif "㎡" in lab or "면적" in lab:
+            out["unit"] = "㎡"
+        elif "층" in lab:
+            out["unit"] = "층"
+        elif "동" in lab or "수" in lab:
+            out["unit"] = "동"
+
+    labels = ", ".join(str(d.get("label") or "?") for d in kept)
+    answer = f"요청하신 대로 {labels} 지표만으로 차트를 다시 그렸습니다."
+    return out, answer
+
+
 def is_chart_capability_question(question: str) -> bool:
     """가능한 차트/그래프 종류를 묻는 후속 질문."""
     q = question.strip()
@@ -369,16 +502,18 @@ def _chart_from_named_counts(
 
     if len(labels) < 2:
         return None
+    datasets = [
+        {
+            "label": dataset_label,
+            "data": values[:12],
+        }
+    ]
     return {
         "type": chart_type,
         "title": title,
         "labels": labels[:12],
-        "datasets": [
-            {
-                "label": dataset_label,
-                "data": values[:12],
-            }
-        ],
+        "datasets": datasets,
+        "all_datasets": [dict(d) for d in datasets],
         "unit": unit,
     }
 
@@ -427,6 +562,7 @@ def _chart_profile_compare(
         "title": _title_from_question(question, "지역 비교"),
         "labels": labels,
         "datasets": datasets,
+        "all_datasets": [dict(d) for d in datasets],
         "unit": unit,
     }
 
@@ -459,11 +595,13 @@ def _chart_rank_compare(
         values.append(val)
     if len(labels) < 2:
         return None
+    datasets = [{"label": f"{metric}({unit})" if unit else metric, "data": values}]
     return {
         "type": "bar",
         "title": _title_from_question(question, f"지역별 최고 {metric}"),
         "labels": labels,
-        "datasets": [{"label": f"{metric}({unit})" if unit else metric, "data": values}],
+        "datasets": datasets,
+        "all_datasets": [dict(d) for d in datasets],
         "unit": unit,
     }
 
