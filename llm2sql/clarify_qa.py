@@ -9,11 +9,8 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
-_DONG = re.compile(r"([가-힣0-9]{1,12}동)")
-_GU = re.compile(
-    r"(중구|서구|동구|영도구|부산진구|동래구|남구|북구|해운대구|사하구|"
-    r"금정구|강서구|연제구|수영구|사상구|기장군|[가-힣]{1,6}구)"
-)
+from llm2sql.domain import USAGE_ALIASES, extract_gu, extract_place, is_busan_wide
+
 _COL = re.compile(r"\b(A\d+)\b", re.I)
 
 # 의도·문법 조사 등 (미지 단어 판별에서 제외)
@@ -93,10 +90,15 @@ _STOP = {
     "상위",
     "하위",
     "이상",
+    "이상인",
     "이하",
+    "이하인",
     "초과",
     "미만",
     "넘는",
+    "채야",
+    "건이야",
+    "인가요",
     "이내",
     "근처",
     "안에",
@@ -143,16 +145,45 @@ _STOP = {
     "건물",
     "건축물",
     "아파트",
+    "부산",
+    "부산시",
+    "부산광역시",
+    "전체",
+    "시내",
+    "중에서",
+    "높은",
+    "낮은",
+    "에서",
     "공동주택",
     "단독주택",
     "공장",
     "창고",
     "창고시설",
+    "공공시설",
+    "공공시설물",
+    "공공용시설",
+    "공공용",
     "산업단지",
     "기초구역",
     "행정동",
     "법정동",
     "용도",
+    "지어진",
+    "지어진지",
+    "건축년",
+    "건축년수",
+    "준공",
+    "준공일",
+    "사용승인",
+    "사용승인일",
+    "허가일",
+    "허가일자",
+    "경과",
+    "년수",
+    "오래된",
+    "숫자",
+    "것의",
+    "넘은",
     "질문",
     "결과",
     "답변",
@@ -161,8 +192,20 @@ _STOP = {
     "부산광역시",
     "모든",
     "전체",
+    "전체에서",
+    "시내",
+    "시에서",
     "각각",
     "해당",
+    "중",
+    "후의",
+    "후",
+    "미만의",
+    "이상의",
+    "건물",
+    "건축물",
+    "숫자는",
+    "수는",
     "그",
     "저",
     "그런",
@@ -203,18 +246,7 @@ _VAGUE = (
     "최고인",
 )
 
-_USAGE_WORDS = (
-    "아파트",
-    "공동주택",
-    "단독주택",
-    "공장",
-    "창고",
-    "창고시설",
-    "교육연구시설",
-    "업무시설",
-    "숙박시설",
-    "종교시설",
-)
+_USAGE_WORDS = tuple(USAGE_ALIASES.keys())
 
 
 @dataclass(frozen=True)
@@ -223,6 +255,102 @@ class ClarifyAnswer:
     answer: str
     ambiguous_terms: list[str]
     options: list[dict[str, Any]]
+
+
+_CHOICE_RE = re.compile(
+    r"^\s*(?:번호\s*)?(?P<num>\d{1,2})\s*(?:번|번요|이요|입니다|요)?\s*[.。)]?\s*$"
+)
+_ORDINAL_MAP = {
+    "첫번째": 1,
+    "첫 번째": 1,
+    "첫째": 1,
+    "두번째": 2,
+    "두 번째": 2,
+    "둘째": 2,
+    "세번째": 3,
+    "세 번째": 3,
+    "셋째": 3,
+}
+
+
+def parse_choice_index(question: str) -> int | None:
+    """『1』『1번』『첫번째』 등 선택 번호를 파싱. 없으면 None."""
+    q = question.strip()
+    if not q:
+        return None
+    if q in _ORDINAL_MAP:
+        return _ORDINAL_MAP[q]
+    m = _CHOICE_RE.fullmatch(q)
+    if m:
+        return int(m.group("num"))
+    return None
+
+
+def _gu_dong_from_place(place: str) -> tuple[str | None, str | None]:
+    parts = str(place).split()
+    gu = next((p for p in parts if p.endswith("구") or p.endswith("군")), None)
+    dong = next((p for p in reversed(parts) if p.endswith("동")), None)
+    return gu, dong
+
+
+def rewrite_question_with_place(base_question: str, place: str) -> str:
+    """모호했던 동 질문을 구+동으로 구체화."""
+    gu, dong = _gu_dong_from_place(place)
+    if not dong:
+        return base_question.strip()
+    resolved = f"{gu} {dong}".strip() if gu else dong
+    base = base_question.strip()
+    # 이미 같은 구가 있으면 그대로 두고 동만 보장
+    if gu and gu in base and dong in base:
+        return base
+    if dong in base:
+        return base.replace(dong, resolved, 1)
+    return f"{resolved} {base}"
+
+
+def resolve_place_clarify_choice(
+    question: str,
+    *,
+    last_route: str | None,
+    last_question: str | None,
+    options: list[dict[str, Any]] | None,
+) -> tuple[str | None, str | None]:
+    """직전 clarify_place에 대한 번호 선택 처리.
+
+    Returns:
+        (rewritten_question, error_message)
+        - 선택 성공: (새 질문, None)
+        - 번호 답변인데 범위 밖: (None, 안내문)
+        - 해당 없음: (None, None)
+    """
+    if last_route != "clarify_place":
+        return None, None
+    opts = list(options or [])
+    if not opts:
+        return None, None
+    idx = parse_choice_index(question)
+    if idx is None:
+        # 구 이름으로 직접 골라도 허용 (예: 강서구 / 해운대구)
+        q = question.strip()
+        for opt in opts:
+            place = str(opt.get("place") or "")
+            gu, _dong = _gu_dong_from_place(place)
+            if gu and (q == gu or q == f"{gu}" or gu in q and len(q) <= len(gu) + 2):
+                base = last_question or ""
+                if not base:
+                    return None, None
+                return rewrite_question_with_place(base, place), None
+        return None, None
+    if idx < 1 or idx > len(opts):
+        return None, (
+            f"선택 번호는 1~{len(opts)} 사이여야 합니다. "
+            f"예: 1 또는 1번"
+        )
+    place = str(opts[idx - 1].get("place") or "")
+    base = last_question or ""
+    if not place or not base:
+        return None, "직전 확인 질문을 찾지 못했습니다. 구 이름을 넣어 다시 질문해 주세요."
+    return rewrite_question_with_place(base, place), None
 
 
 def check_ambiguity(
@@ -253,26 +381,59 @@ def check_ambiguity(
             answer=_vague_guidance(q, vague_hits),
         )
 
-    place = _extract_place(q)
-    gu_in_q = _GU.search(q)
-    gu_name = gu_in_q.group(1) if gu_in_q else None
+    place = extract_place(q)
+    gu_name = extract_gu(q)
+
+    # 건축 경과년수인데 동래/금정(D198)이 아니면 데이터 한계 안내
+    from llm2sql.domain import (
+        d198_table_for_gu,
+        extract_age_years,
+        looks_like_age_question,
+    )
+
+    if looks_like_age_question(q) and extract_age_years(q) is not None:
+        if gu_name and d198_table_for_gu(gu_name) is None:
+            return ClarifyAnswer(
+                intent="clarify_unsupported_age",
+                ambiguous_terms=["사용승인일자"],
+                options=[],
+                answer=(
+                    "건물 ‘준공·사용승인·건축년수’는 현재 동래구·금정구 "
+                    "용도별건물(AL_D198)의 사용승인일자(A34)·허가일자(A33)로만 "
+                    "조회할 수 있습니다.\n"
+                    "예: 금정구 구서동 단독주택 중 사용승인 후 30년 이상인 건수는?\n"
+                    "부산 전체로 물으시면 동래·금정 합산으로 답합니다."
+                ),
+            )
 
     # 2) 지명 모호/미존재 (동이 여러 구에 있거나 데이터에 없음)
     if place and place.endswith("동"):
         places = _lookup_places(conn, place, gu=gu_name)
         if not places:
-            return ClarifyAnswer(
-                intent="clarify_unknown_place",
-                ambiguous_terms=[place],
-                options=[],
-                answer=(
-                    f"「{place}」에 해당하는 법정동명을 건물 데이터에서 찾지 못했습니다.\n"
-                    "구 이름을 함께 적어 주시거나, 정확한 동명으로 다시 질문해 주세요.\n"
-                    "예: 금정구 구서동 아파트 특징, 해운대구 중동 건물 건수"
-                ),
-            )
+            admin = _lookup_admin_dong(conn, place)
+            if not admin:
+                from llm2sql.domain import legal_dong_guess
+
+                guess = legal_dong_guess(place)
+                hint = (
+                    f"\n혹시 법정동 「{guess}」을(를) 말씀하신 건가요?"
+                    if guess
+                    else ""
+                )
+                return ClarifyAnswer(
+                    intent="clarify_unknown_place",
+                    ambiguous_terms=[place],
+                    options=[],
+                    answer=(
+                        f"「{place}」에 해당하는 법정동명을 건물 데이터에서 찾지 못했습니다.\n"
+                        "구 이름을 함께 적어 주시거나, 정확한 동명으로 다시 질문해 주세요."
+                        f"{hint}\n"
+                        "예: 금정구 구서동 아파트 특징, 해운대구 중동 건물 건수"
+                    ),
+                )
+            # 행정동(구서1동 등)은 경계 교차 조회로 넘김
         # 구가 지정되지 않았고 후보가 2개 이상
-        if gu_name is None and len(places) > 1:
+        elif gu_name is None and len(places) > 1:
             lines = [
                 f"「{place}」이(가) 여러 지역에 있어 의미가 불분명합니다.",
                 "아래 중 어디를 말씀하신 건가요?",
@@ -282,7 +443,11 @@ def check_ambiguity(
                     f"{i}) {p['place']} (건물 {int(p['n']):,}동)"
                 )
             lines.append(
-                f"예: {places[0]['place'].split()[-2]} {place} 건물 몇 채야?"
+                "번호로 답해도 됩니다. 예: 1 또는 1번"
+            )
+            lines.append(
+                f"또는 이렇게 다시 질문해 주세요: "
+                f"{places[0]['place'].split()[-2]} {place} 건물 몇 채야?"
             )
             return ClarifyAnswer(
                 intent="clarify_place",
@@ -312,6 +477,23 @@ def check_ambiguity(
 
     # 4) 도메인에서 해석되지 않는 단어
     unknown = _unknown_terms(q, place=place, gu=gu_name)
+    # 부산 전역·순위/집계처럼 의도가 분명하면 미지 단어 clarify를 생략
+    if unknown and is_busan_wide(q):
+        unknown = [u for u in unknown if not str(u).startswith("부산")]
+    if unknown and any(
+        k in q
+        for k in (
+            "가장 높",
+            "제일 높",
+            "가장 큰",
+            "제일 큰",
+            "몇 채",
+            "몇채",
+            "건수",
+            "개수",
+        )
+    ):
+        unknown = []
     if unknown:
         return ClarifyAnswer(
             intent="clarify_unknown_term",
@@ -329,7 +511,7 @@ def check_ambiguity(
 
 
 def _vague_guidance(q: str, vague_hits: list[str]) -> str:
-    place = _extract_place(q)
+    place = extract_place(q)
     usage_label = None
     if "아파트" in q or "공동주택" in q:
         usage_label = "아파트(공동주택)"
@@ -378,16 +560,6 @@ def _vague_guidance(q: str, vague_hits: list[str]) -> str:
     return "\n".join(lines)
 
 
-def _extract_place(q: str) -> str | None:
-    m = _DONG.search(q)
-    if m:
-        return m.group(1)
-    m = _GU.search(q)
-    if m:
-        return m.group(1)
-    return None
-
-
 def _lookup_places(
     conn: psycopg.Connection,
     dong: str,
@@ -422,6 +594,25 @@ def _lookup_places(
                 (f"% {dong}", dong),
             )
         return list(cur.fetchall())
+
+
+def _lookup_admin_dong(
+    conn: psycopg.Connection,
+    dong: str,
+) -> str | None:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT "ADM_NM" AS name
+            FROM "BND_ADM_DONG_PG"
+            WHERE "ADM_NM" = %s OR "ADM_NM" LIKE %s
+            ORDER BY CASE WHEN "ADM_NM" = %s THEN 0 ELSE 1 END
+            LIMIT 1
+            """,
+            (dong, f"%{dong}%", dong),
+        )
+        row = cur.fetchone()
+        return str(row["name"]) if row else None
 
 
 def _looks_like_data_query(q: str) -> bool:
@@ -467,6 +658,21 @@ def _unknown_terms(
 ) -> list[str]:
     """조사 제거 후 남은 미등록 한글 토큰."""
     text = q
+    # 부산 전역 장소 표현은 미지 단어가 아님
+    for token in (
+        "부산광역시",
+        "부산시",
+        "부산 전체",
+        "부산내",
+        "부산 내",
+        "부산에서",
+        "부산시에서",
+        "부산광역시에서",
+        "부산시에",
+        "부산에",
+        "부산",
+    ):
+        text = text.replace(token, " ")
     for token in filter(None, [place, gu]):
         text = text.replace(token, " ")
     for w in _USAGE_WORDS:
@@ -480,17 +686,19 @@ def _unknown_terms(
     # 조사 꼬리 제거
     cleaned: list[str] = []
     for t in raw:
-        t2 = re.sub(r"(은|는|이|가|을|를|의|과|와|도|만|에|로|으로|까지|부터)$", "", t)
+        t2 = re.sub(
+            r"(은|는|이|가|을|를|의|과|와|도|만|에서|에게|에|으로|로|까지|부터|보다|중)$",
+            "",
+            t,
+        )
         if len(t2) < 2 or t2 in _STOP:
             continue
-        if t2.endswith(("동", "구")):  # 장소는 별도 처리
+        if t2.endswith(("동", "구", "시", "군")):  # 장소는 별도 처리
+            continue
+        if t2.startswith("부산"):
             continue
         if t2 not in cleaned:
             cleaned.append(t2)
-    # 너무 공격적이지 않게: 질문 길이가 짧고 미지 토큰이 있을 때만
     if not cleaned:
         return []
-    # 알려진 패턴(특징/건수 등)만 있으면 통과 — 이미 STOP에 있음
-    # 실질 미지 단어만 반환 (최대 3개)
-    # 너무 공격적이지 않게: 2글자 일반어는 제외, 3글자 이상만
     return [t for t in cleaned if len(t) >= 3][:3]

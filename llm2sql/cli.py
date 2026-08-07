@@ -5,8 +5,8 @@ import json
 import sys
 from typing import Any
 
-from llm2sql.config import load_settings
-from llm2sql.pipeline import ask
+from llm2sql.engine import Llm2SqlEngine
+from llm2sql.keyboard import is_exit_command
 from llm2sql.session import SessionContext
 
 
@@ -36,22 +36,23 @@ def _ensure_utf8_stdio() -> None:
                 pass
 
 
-def _print_result(result: dict[str, Any], *, verbose: bool, progress: bool) -> None:
+def _print_result(result: Any, *, verbose: bool, progress: bool) -> None:
+    data = result.to_dict() if hasattr(result, "to_dict") else result
     if progress:
         print("---", flush=True)
-    print(result.get("answer") or "(답변 없음)")
+    print(data.get("answer") or "(답변 없음)")
     if not verbose:
         return
-    if result.get("route"):
-        print(f"\n[route] {result['route']}")
-    if result.get("tables"):
-        print("[tables]", ", ".join(result["tables"]))
-    if result.get("sql"):
+    if data.get("route"):
+        print(f"\n[route] {data['route']}")
+    if data.get("tables"):
+        print("[tables]", ", ".join(data["tables"]))
+    if data.get("sql"):
         print("[sql]")
-        print(result["sql"])
-    if result.get("ok") and result.get("rows"):
-        print(f"[rows] {result['row_count']}")
-        for i, row in enumerate(result["rows"][:20], start=1):
+        print(data["sql"])
+    if data.get("ok") and data.get("rows"):
+        print(f"[rows] {data['row_count']}")
+        for i, row in enumerate(data["rows"][:20], start=1):
             print(f"{i}. {dict(row)}")
 
 
@@ -89,58 +90,73 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    settings = load_settings()
     session = SessionContext()
     on_progress = _print_progress if (args.progress and not args.json) else None
 
-    # 대화형: 인자 없음 또는 --chat
-    if args.chat or not args.question:
-        if args.question:
-            # --chat with first question
-            questions = [args.question]
-            first_done = False
-        else:
-            questions = []
-            first_done = True
-            print(
-                "대화형 모드입니다. 후속 질문 예: 「그 아파트의 이름은?」\n"
-                "기능/제한: 「기능 알려줘」 「제한이 뭐야?」 / 종료: exit",
-                flush=True,
-            )
-
-        while True:
-            if not first_done and questions:
-                q = questions.pop(0)
+    with Llm2SqlEngine.from_env() as engine:
+        if args.chat or not args.question:
+            if args.question:
+                questions = [args.question]
+                first_done = False
+            else:
+                questions = []
                 first_done = True
-            else:
-                try:
-                    q = input("질문> ").strip()
-                except (EOFError, KeyboardInterrupt):
-                    print()
+                print(
+                    "대화형 모드입니다. 후속 질문 예: 「그 아파트의 이름은?」\n"
+                    "기능/제한: 「기능 알려줘」 「제한이 뭐야?」 / 종료: exit, quit, 종료",
+                    flush=True,
+                )
+
+            while True:
+                if not first_done and questions:
+                    q = questions.pop(0)
+                    first_done = True
+                else:
+                    try:
+                        q = input("질문> ").strip()
+                    except (EOFError, KeyboardInterrupt):
+                        print()
+                        break
+                if not q:
+                    continue
+                if is_exit_command(q):
                     break
-            if not q:
-                continue
-            if q.lower() in {"exit", "quit", "q", "종료"}:
-                break
-            result = ask(q, settings, on_progress=on_progress, session=session)
-            if args.json:
-                print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-            else:
-                _print_result(result, verbose=args.verbose, progress=bool(args.progress))
-        return
+                result = engine.ask(
+                    q, on_progress=on_progress, session=session
+                )
+                if args.json:
+                    print(
+                        json.dumps(
+                            result.to_dict(),
+                            ensure_ascii=False,
+                            indent=2,
+                            default=str,
+                        )
+                    )
+                else:
+                    _print_result(
+                        result,
+                        verbose=args.verbose,
+                        progress=bool(args.progress),
+                    )
+            return
 
-    result = ask(
-        args.question, settings, on_progress=on_progress, session=session
-    )
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-        if not result.get("ok", True):
+        result = engine.ask(
+            args.question, on_progress=on_progress, session=session
+        )
+        if args.json:
+            print(
+                json.dumps(
+                    result.to_dict(), ensure_ascii=False, indent=2, default=str
+                )
+            )
+            if not result.ok:
+                sys.exit(1)
+            return
+
+        _print_result(result, verbose=args.verbose, progress=bool(args.progress))
+        if not result.ok:
             sys.exit(1)
-        return
-
-    _print_result(result, verbose=args.verbose, progress=bool(args.progress))
-    if not result.get("ok", True):
-        sys.exit(1)
 
 
 if __name__ == "__main__":

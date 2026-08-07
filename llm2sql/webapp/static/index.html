@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>llm2sql · 부산 GIS 챗봇</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <h1>llm2sql</h1>
+            <p>부산 GIS 자연어 조회</p>
+          </div>
+        </div>
+        <button type="button" id="new-chat" class="ghost-btn">새 대화</button>
+      </header>
+
+      <main id="messages" class="messages" aria-live="polite">
+        <div class="welcome">
+          <h2>무엇을 찾아볼까요?</h2>
+          <p>
+            건물 건수·순위·특징, 메타데이터 설명, 후속 질문까지 대화로
+            이어집니다.
+          </p>
+          <div class="suggestions" id="suggestions">
+            <button type="button" data-q="기능 알려줘">기능 알려줘</button>
+            <button type="button" data-q="해운대구 건물 몇 채야?">
+              해운대구 건물 몇 채야?
+            </button>
+            <button type="button" data-q="구서동에서 건물면적이 가장 큰 아파트는?">
+              구서동에서 건물면적이 가장 큰 아파트는?
+            </button>
+            <button type="button" data-q="구서동 아파트의 특징은?">
+              구서동 아파트의 특징은?
+            </button>
+          </div>
+        </div>
+      </main>
+
+      <footer class="composer">
+        <form id="chat-form" autocomplete="off">
+          <label class="sr-only" for="question">질문</label>
+          <textarea
+            id="question"
+            rows="1"
+            placeholder="예: 수영구에서 높이가 가장 높은 건물은?"
+            maxlength="2000"
+          ></textarea>
+          <button type="submit" id="send" aria-label="전송">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M3.4 20.6 21 12 3.4 3.4 3 10.2 15 12 3 13.8z"
+              />
+            </svg>
+          </button>
+        </form>
+        <p class="hint">Enter 전송 · Shift+Enter 줄바꿈</p>
+      </footer>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

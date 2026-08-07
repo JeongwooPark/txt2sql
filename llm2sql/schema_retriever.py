@@ -53,12 +53,21 @@ def _short_desc(text: str | None, max_len: int = 80) -> str:
     return cut
 
 
-def embed_text(text: str, *, model: str, host: str) -> list[float]:
+def embed_text(
+    text: str,
+    *,
+    model: str,
+    host: str | None = None,
+    client: Any | None = None,
+) -> list[float]:
     # mxbai-embed-large 등 임베딩 모델은 컨텍스트가 짧음(≈512 tokens)
     clipped = text.strip()
     if len(clipped) > 400:
         clipped = clipped[:400]
-    client = ollama.Client(host=host)
+    if client is None:
+        if not host:
+            raise ValueError("host 또는 client가 필요합니다.")
+        client = ollama.Client(host=host)
     response = client.embeddings(model=model, prompt=clipped)
     embedding = response["embedding"] if isinstance(response, dict) else response.embedding
     return list(embedding)
@@ -105,10 +114,13 @@ def search_catalog_tables(
     question: str,
     *,
     embed_model: str,
-    host: str,
+    host: str | None = None,
+    client: Any | None = None,
     top_k: int = 5,
 ) -> list[str]:
-    embedding = embed_text(question, model=embed_model, host=host)
+    embedding = embed_text(
+        question, model=embed_model, host=host, client=client
+    )
     lit = vector_literal(embedding)
     rows = conn.execute(
         """
@@ -247,11 +259,17 @@ def retrieve_schema(
     question: str,
     *,
     embed_model: str,
-    host: str,
+    host: str | None = None,
+    client: Any | None = None,
     top_k: int = 5,
 ) -> dict[str, Any]:
     tables = search_catalog_tables(
-        conn, question, embed_model=embed_model, host=host, top_k=top_k
+        conn,
+        question,
+        embed_model=embed_model,
+        host=host,
+        client=client,
+        top_k=top_k,
     )
     tables = apply_admin_boost(question, tables)
 

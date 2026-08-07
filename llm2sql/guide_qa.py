@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from llm2sql.domain import DONG_RE, GU_RE
+
 _HELP_HINTS = (
     "도움말",
     "헬프",
@@ -150,10 +152,6 @@ _DOMAIN_SIGNAL = (
     "PNU",
 )
 
-_PLACE = re.compile(
-    r"([가-힣0-9]{1,12}동|중구|서구|동구|영도구|부산진구|동래구|남구|북구|"
-    r"해운대구|사하구|금정구|강서구|연제구|수영구|사상구|기장군|[가-힣]{1,6}구)"
-)
 _COL = re.compile(r"\bA\d+\b", re.I)
 
 
@@ -274,7 +272,7 @@ def _is_generic_unscoped(q: str) -> bool:
     if any(k in q for k in generic):
         return True
     # 한글만 있고 장소/숫자/도메인 없음 + 의문
-    if _PLACE.search(q) or _COL.search(q):
+    if DONG_RE.search(q) or GU_RE.search(q) or _COL.search(q):
         return False
     if re.search(r"\d", q):
         return False
@@ -288,7 +286,7 @@ def _has_domain_signal(q: str) -> bool:
     ql = q.lower()
     if any(k in ql for k in _DOMAIN_SIGNAL):
         return True
-    if _PLACE.search(q) or _COL.search(q):
+    if DONG_RE.search(q) or GU_RE.search(q) or _COL.search(q):
         return True
     return False
 

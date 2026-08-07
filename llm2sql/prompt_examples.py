@@ -47,9 +47,21 @@ Domain mapping (critical):
   - "A4"=법정동명(use LIKE '%구명%'), "A9"=건축물용도명, "A14"=연면적,
     "A16"=높이(m), "A26"=지상층, "A27"=지하층
   - NEVER filter Hangul gu/dong names with "A3" (that is a code column).
-- District-only building tables:
-  - 동래구 → "AL_D198_26260_20250115" ("A25"=주요용도명, "A19"=연면적, "A30"=높이, "A31"=지상층)
-  - 금정구 → "AL_D198_26410_20250115" (same column pattern as 동래)
+  - AL_D010 has NO construction/approval year. "A22" is 데이터기준일자 only.
+- District-only building tables (have approval dates):
+  - 동래구 → "AL_D198_26260_20250115"
+  - 금정구 → "AL_D198_26410_20250115"
+  - "A25"=주요용도명, "A19"=연면적, "A30"=높이, "A31"=지상층
+  - "A33"=허가일자, "A34"=사용승인일자 (text 'YYYY-MM-DD')
+  - For 건축년수/준공/지어진지 N년:
+      "A34" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' AND
+      - N년 이상/넘는: "A34"::date <= (CURRENT_DATE - INTERVAL 'N years')
+      - N년 미만: "A34"::date > (CURRENT_DATE - INTERVAL 'N years')
+    NEVER use "A35"(데이터기준일자) for building age.
+  - 부산 전체 건축년수 → UNION/SUM of 동래+금정 D198 only (other gus lack dates).
+    Say in the answer that coverage is 동래·금정(사용승인일 보유 구).
+- 공공시설/공공시설물 → AL_D010 "A9"='공공용시설' or AL_D198 "A29"='공공용'
+- 행정동(구서1동 등) → join "BND_ADM_DONG_PG" on ST_Intersects; 법정동은 구서동
 - 기초구역 → "TL_KODIS_BAS_26_202507" ("SIG_KOR_NM", "BAS_AR", "BAS_ID")
 - 행정동 경계 → "BND_ADM_DONG_PG" ("ADM_NM", "ADM_CD")
 - 산업단지 → "AL_D060_00_20250804" ("A4"=원천시도시군구코드, "A6"=용도지역지구코드명)

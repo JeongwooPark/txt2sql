@@ -22,8 +22,11 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
     mentions_dongrae = "동래" in q
     mentions_geumjeong = "금정" in q
     gu_in_q = bool(re.search(r"[가-힣]{1,6}구", q))
+    busan_wide = any(
+        k in q for k in ("부산시", "부산광역시", "부산 전체", "부산내", "부산 내")
+    ) or q.strip().startswith("부산")
     if (
-        gu_in_q
+        (gu_in_q or busan_wide)
         and "건물" in q
         and uses_d198
         and not uses_d010
@@ -31,16 +34,41 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
         and not mentions_geumjeong
     ):
         reasons.append(
-            'For Busan gu-level building queries prefer "AL_D010_26_20250704", '
+            'For Busan-wide / gu-level building queries prefer "AL_D010_26_20250704", '
             "not district-only AL_D198 tables."
         )
 
-    # 높이인데 A16/A30 없음
-    if "높이" in q and "A16" not in s and "A30" not in s:
-        reasons.append('Height filters should use "A16" on AL_D010 (or "A30" on AL_D198).')
+    # 높이 순위인데 D198 A30만 사용 (부산 전역·구 질의)
+    if (
+        any(k in q for k in ("가장 높", "제일 높", "높이"))
+        and uses_d198
+        and not uses_d010
+        and not mentions_dongrae
+        and not mentions_geumjeong
+    ):
+        reasons.append(
+            'Building height ranking for Busan should use "AL_D010_26_20250704"."A16", '
+            'not district-only AL_D198 "A30".'
+        )
+
+    # 건축년수인데 데이터기준일(A35) 사용
+    if any(k in q for k in ("지어진", "건축년", "준공", "사용승인", "년 미만", "년 이상")):
+        if re.search(r'"A35"', s) or re.search(r"\bA35\b", s):
+            reasons.append(
+                'Building age must use AL_D198 "A34"(사용승인일자) or "A33"(허가일자), '
+                'never "A35"(데이터기준일자).'
+            )
+        if "AL_D010" in upper and ("A34" in s or "INTERVAL" in upper):
+            reasons.append(
+                "AL_D010 has no approval date; use AL_D198_26260 (동래) and/or "
+                "AL_D198_26410 (금정) with A34 text date cast."
+            )
 
     # 상위/순위인데 ORDER BY 없음
-    if any(k in q for k in ("상위", "순위", "가장 큰", "가장 많은", "큰 순")) and "ORDER BY" not in upper:
+    if any(
+        k in q
+        for k in ("상위", "순위", "가장 큰", "가장 많은", "가장 높", "제일 높", "큰 순")
+    ) and "ORDER BY" not in upper:
         reasons.append("Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT.")
 
     # 미터 거리/버퍼인데 geography 캐스트 없음 또는 D198 단독

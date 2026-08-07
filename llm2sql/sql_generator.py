@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import ollama
 
@@ -57,11 +58,15 @@ def generate_sql(
     schema_text: str,
     *,
     model: str,
-    host: str,
+    host: str | None = None,
+    client: Any | None = None,
     error_feedback: str | None = None,
     include_few_shot: bool = True,
 ) -> str:
-    client = ollama.Client(host=host)
+    if client is None:
+        if not host:
+            raise ValueError("host 또는 client가 필요합니다.")
+        client = ollama.Client(host=host)
     few = FEW_SHOT_EXAMPLES if include_few_shot else ""
     if error_feedback:
         user_content = (
@@ -79,13 +84,18 @@ def generate_sql(
             "SQL:"
         )
 
-    response = client.chat(
-        model=model,
-        messages=[
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
         ],
-        options={"temperature": 0},
-    )
+        "options": {"temperature": 0},
+    }
+    # qwen3 등 thinking 모델에서 사고 토큰 억제 (미지원 시 무시)
+    try:
+        response = client.chat(**kwargs, think=False)
+    except TypeError:
+        response = client.chat(**kwargs)
     content = response["message"]["content"]
     return _extract_sql(content)

@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 
 ProgressCallback = Callable[[str, str, dict[str, Any] | None], None]
+TokenCallback = Callable[[str], None]
 
 
 @dataclass

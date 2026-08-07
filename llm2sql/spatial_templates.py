@@ -1,23 +1,13 @@
+"""PostGIS 공간 질의 템플릿."""
+
 from __future__ import annotations
 
-import re
+from llm2sql.domain import extract_place
 
 
 def extract_place_token(question: str) -> str | None:
     """질문에서 동/구 명칭 후보를 추출."""
-    patterns = [
-        r"([가-힣0-9]{1,12}동)\s*안",
-        r"([가-힣]{1,10}구)\s*안",
-        r"([가-힣0-9]{1,12}동)\s*(내부|속|에\s*있는)",
-        r"([가-힣]{1,10}구)\s*(내부|속|에\s*있는)",
-        r"([가-힣0-9]{1,12}동)",
-        r"([가-힣]{1,10}구)",
-    ]
-    for pat in patterns:
-        m = re.search(pat, question)
-        if m:
-            return m.group(1)
-    return None
+    return extract_place(question)
 
 
 def building_in_dong_count_sql(place: str) -> str:

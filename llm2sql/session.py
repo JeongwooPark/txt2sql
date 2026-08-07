@@ -9,6 +9,7 @@ from typing import Any
 @dataclass
 class SessionContext:
     last_question: str | None = None
+    last_full_question: str | None = None
     last_route: str | None = None
     last_sql: str | None = None
     last_answer: str | None = None
@@ -28,6 +29,12 @@ class SessionContext:
         usage: str | None = None,
     ) -> None:
         self.last_question = question
+        # 장소·연수 등이 있는 실질 질의는 full로 유지 (짧은 기준 보정용)
+        if len(question.strip()) >= 12 or any(
+            k in question
+            for k in ("동", "구", "주택", "건물", "아파트", "년", "채", "몇")
+        ):
+            self.last_full_question = question
         self.last_route = result.get("route")
         self.last_sql = result.get("sql")
         self.last_answer = result.get("answer")

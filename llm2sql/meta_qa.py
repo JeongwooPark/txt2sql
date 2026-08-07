@@ -117,6 +117,61 @@ def is_metadata_question(question: str) -> bool:
     # 카탈로그 개수: "사용가능한 데이터는 몇개야?"
     if _asks_catalog_count(q):
         return True
+    # 장소+시설 목록 질의는 메타가 아님 ("구서동 공공시설물은 무엇이 있어?")
+    inventory = (
+        "무엇이 있어",
+        "뭐가 있어",
+        "뭐 있어",
+        "어떤 게 있어",
+        "어떤것이 있어",
+        "어떤 것이 있어",
+    )
+    if any(k in q for k in inventory) and any(
+        k in q
+        for k in (
+            "동",
+            "구",
+            "건물",
+            "시설",
+            "주택",
+            "아파트",
+            "공공",
+            "용도",
+        )
+    ):
+        return False
+    # 동·구 + 특징/비교 설명은 건물 프로필 (스키마 설명이 아님)
+    profile_like = any(
+        k in q
+        for k in (
+            "특징",
+            "특성",
+            "비교",
+            "요약",
+            "분포",
+            "프로필",
+            "경향",
+            "평균",
+        )
+    )
+    if profile_like and (
+        re.search(r"[가-힣0-9]{1,12}동", q)
+        or re.search(r"[가-힣]{1,6}구", q)
+        or any(
+            k in q
+            for k in (
+                "아파트",
+                "공동주택",
+                "단독주택",
+                "건물",
+                "건축물",
+            )
+        )
+    ):
+        return False
+    # "비교 설명" 등 서술형도 메타의 '설명'만으로 잡지 않음
+    if "설명" in q and profile_like:
+        return False
     # 명확한 데이터 조회면 메타가 아님
     if any(k in q for k in _DATA_QUERY_HINTS) and not any(
         k in q
