@@ -1,0 +1,12 @@
+{
+  "name": "llm2sql",
+  "install": "bash .cursor/scripts/install.sh",
+  "start": "bash .cursor/scripts/start.sh",
+  "terminals": [
+    {
+      "name": "web",
+      "command": "bash -lc 'export PATH=\"$HOME/.local/bin:$PATH\"; uv run llm2sql-web'"
+    }
+  ],
+  "ports": [8000]
+}
