@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from typing import Any
 
 
@@ -27,36 +27,16 @@ class AskResult:
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
-        if data.get("ambiguous_terms") is None:
-            data.pop("ambiguous_terms", None)
-        if data.get("diagnostics") is None:
-            data.pop("diagnostics", None)
+        for key in ("ambiguous_terms", "diagnostics", "chart_spec", "chart"):
+            if data.get(key) is None:
+                data.pop(key, None)
         if not data.get("chart_offer"):
             data.pop("chart_offer", None)
-        if data.get("chart_spec") is None:
-            data.pop("chart_spec", None)
-        if data.get("chart") is None:
-            data.pop("chart", None)
         return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AskResult:
-        known = {
-            "ok",
-            "answer",
-            "sql",
-            "tables",
-            "rows",
-            "row_count",
-            "route",
-            "error",
-            "steps",
-            "ambiguous_terms",
-            "diagnostics",
-            "chart_offer",
-            "chart_spec",
-            "chart",
-        }
+        known = {f.name for f in fields(cls)}
         kwargs = {k: data[k] for k in known if k in data}
         kwargs.setdefault("ok", True)
         kwargs.setdefault("answer", "")

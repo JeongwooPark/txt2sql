@@ -6,11 +6,25 @@ from dataclasses import dataclass, replace
 from dotenv import load_dotenv
 
 
+def _pick(data: dict[str, object], *keys: str, default: object = "") -> object:
+    for key in keys:
+        val = data.get(key)
+        if val not in (None, ""):
+            return val
+    return default
+
+
+def _as_bool(raw: object, default: bool) -> bool:
+    if raw is None or raw == "":
+        return default
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _route_mode(raw: object) -> str:
     mode = str(raw or "optimized").strip().lower()
-    if mode not in {"baseline", "optimized"}:
-        return "optimized"
-    return mode
+    return mode if mode in {"baseline", "optimized"} else "optimized"
 
 
 @dataclass(frozen=True)
@@ -36,20 +50,12 @@ class Settings:
 
     @classmethod
     def from_mapping(cls, data: dict[str, object]) -> Settings:
-        database_url = str(data.get("database_url") or data.get("DATABASE_URL") or "").strip()
+        database_url = str(_pick(data, "database_url", "DATABASE_URL")).strip()
         if not database_url:
             raise ValueError("database_url / DATABASE_URL이 필요합니다.")
 
-        def _bool(key: str, env_key: str, default: bool) -> bool:
-            raw = data.get(key, data.get(env_key, default))
-            if isinstance(raw, bool):
-                return raw
-            return str(raw).strip().lower() in {"1", "true", "yes", "on"}
-
         intent_mode = str(
-            data.get("intent_mode")
-            or data.get("INTENT_MODE")
-            or "hybrid"
+            _pick(data, "intent_mode", "INTENT_MODE", default="hybrid")
         ).strip().lower()
         if intent_mode not in {"rules", "hybrid", "llm"}:
             intent_mode = "hybrid"
@@ -57,46 +63,50 @@ class Settings:
         return cls(
             database_url=database_url,
             ollama_host=str(
-                data.get("ollama_host")
-                or data.get("OLLAMA_HOST")
-                or "http://localhost:11434"
+                _pick(
+                    data,
+                    "ollama_host",
+                    "OLLAMA_HOST",
+                    default="http://localhost:11434",
+                )
             ).strip(),
             ollama_model=str(
-                data.get("ollama_model")
-                or data.get("OLLAMA_MODEL")
-                or "qwen3:latest"
+                _pick(data, "ollama_model", "OLLAMA_MODEL", default="qwen3:latest")
             ).strip(),
             ollama_embed_model=str(
-                data.get("ollama_embed_model")
-                or data.get("OLLAMA_EMBED_MODEL")
-                or "mxbai-embed-large"
+                _pick(
+                    data,
+                    "ollama_embed_model",
+                    "OLLAMA_EMBED_MODEL",
+                    default="mxbai-embed-large",
+                )
             ).strip(),
-            schema_top_k=int(
-                data.get("schema_top_k") or data.get("SCHEMA_TOP_K") or 5
-            ),
+            schema_top_k=int(_pick(data, "schema_top_k", "SCHEMA_TOP_K", default=5)),
             default_limit=int(
-                data.get("default_limit") or data.get("DEFAULT_LIMIT") or 100
+                _pick(data, "default_limit", "DEFAULT_LIMIT", default=100)
             ),
             example_top_k=int(
-                data.get("example_top_k") or data.get("EXAMPLE_TOP_K") or 3
+                _pick(data, "example_top_k", "EXAMPLE_TOP_K", default=3)
             ),
             sql_max_retries=int(
-                data.get("sql_max_retries") or data.get("SQL_MAX_RETRIES") or 3
+                _pick(data, "sql_max_retries", "SQL_MAX_RETRIES", default=3)
             ),
-            use_explain=_bool("use_explain", "USE_EXPLAIN", True),
-            include_sample_values=_bool(
-                "include_sample_values", "INCLUDE_SAMPLE_VALUES", True
+            use_explain=_as_bool(_pick(data, "use_explain", "USE_EXPLAIN"), True),
+            include_sample_values=_as_bool(
+                _pick(data, "include_sample_values", "INCLUDE_SAMPLE_VALUES"),
+                True,
             ),
             intent_mode=intent_mode,
             intent_confidence_threshold=float(
-                data.get("intent_confidence_threshold")
-                or data.get("INTENT_CONFIDENCE_THRESHOLD")
-                or 0.55
+                _pick(
+                    data,
+                    "intent_confidence_threshold",
+                    "INTENT_CONFIDENCE_THRESHOLD",
+                    default=0.55,
+                )
             ),
             route_dispatch_mode=_route_mode(
-                data.get("route_dispatch_mode")
-                or data.get("ROUTE_DISPATCH_MODE")
-                or "optimized"
+                _pick(data, "route_dispatch_mode", "ROUTE_DISPATCH_MODE")
             ),
         )
 
@@ -104,39 +114,11 @@ class Settings:
 def load_settings(*, dotenv: bool = True) -> Settings:
     if dotenv:
         load_dotenv()
-
-    database_url = os.getenv("DATABASE_URL", "").strip()
-    if not database_url:
-        raise ValueError(
-            "DATABASE_URL이 설정되지 않았습니다. .env 파일을 확인하세요."
-        )
-
-    def _env_bool(name: str, default: bool) -> bool:
-        raw = os.getenv(name)
-        if raw is None:
-            return default
-        return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-    intent_mode = os.getenv("INTENT_MODE", "hybrid").strip().lower()
-    if intent_mode not in {"rules", "hybrid", "llm"}:
-        intent_mode = "hybrid"
-
-    return Settings(
-        database_url=database_url,
-        ollama_host=os.getenv("OLLAMA_HOST", "http://localhost:11434").strip(),
-        ollama_model=os.getenv("OLLAMA_MODEL", "qwen3:latest").strip(),
-        ollama_embed_model=os.getenv(
-            "OLLAMA_EMBED_MODEL", "mxbai-embed-large"
-        ).strip(),
-        schema_top_k=int(os.getenv("SCHEMA_TOP_K", "5")),
-        default_limit=int(os.getenv("DEFAULT_LIMIT", "100")),
-        example_top_k=int(os.getenv("EXAMPLE_TOP_K", "3")),
-        sql_max_retries=int(os.getenv("SQL_MAX_RETRIES", "3")),
-        use_explain=_env_bool("USE_EXPLAIN", True),
-        include_sample_values=_env_bool("INCLUDE_SAMPLE_VALUES", True),
-        intent_mode=intent_mode,
-        intent_confidence_threshold=float(
-            os.getenv("INTENT_CONFIDENCE_THRESHOLD", "0.55")
-        ),
-        route_dispatch_mode=_route_mode(os.getenv("ROUTE_DISPATCH_MODE", "optimized")),
-    )
+    try:
+        return Settings.from_mapping(dict(os.environ))
+    except ValueError as exc:
+        if "database_url" in str(exc).lower():
+            raise ValueError(
+                "DATABASE_URL이 설정되지 않았습니다. .env 파일을 확인하세요."
+            ) from exc
+        raise

@@ -72,6 +72,63 @@ def _wants_list(q: str) -> bool:
     return any(k in q for k in _LIST_HINT)
 
 
+_D010 = "AL_D010_26_20250704"
+_USAGE_KINDS = (
+    ("동래", "usage_kinds_dongrae", "AL_D198_26260_20250115", "동래구"),
+    ("금정", "usage_kinds_geumjeong", "AL_D198_26410_20250115", "금정구"),
+)
+
+
+def _count_sql(intent: str, table: str, where: str) -> RoutedQuery:
+    return RoutedQuery(
+        intent,
+        f'SELECT COUNT(*) AS cnt\nFROM "{table}"\nWHERE {where};',
+    )
+
+
+def _a4_place_filters(place: str | None, gu: str | None) -> list[str]:
+    where: list[str] = []
+    if place and place.endswith("동"):
+        where.append(place_a4_predicate(place))
+        if gu:
+            where.append(f'"A4" LIKE \'%{gu}%\'')
+    elif gu:
+        where.append(f'"A4" LIKE \'%{gu}%\'')
+    elif place:
+        where.append(place_a4_predicate(place))
+    return where
+
+
+def _route_usage_kinds(q: str) -> RoutedQuery | None:
+    if not (("용도" in q) and ("종류" in q or "몇 가지" in q or "몇가지" in q)):
+        return None
+    for key, intent, table, like in _USAGE_KINDS:
+        if key in q:
+            return RoutedQuery(
+                intent,
+                (
+                    f'SELECT COUNT(DISTINCT "A25") AS cnt\n'
+                    f'FROM "{table}"\n'
+                    f"WHERE \"A4\" LIKE '%{like}%' AND \"A25\" IS NOT NULL;"
+                ),
+            )
+    return None
+
+
+def _legal_dong_for_filter(
+    conn: psycopg.Connection | None, place: str
+) -> str:
+    if conn is None:
+        return place
+    from llm2sql.clarify_qa import _lookup_admin_dong
+
+    if _lookup_admin_dong(conn, place):
+        guessed = legal_dong_guess(place)
+        if guessed:
+            return guessed
+    return place
+
+
 def try_route(
     question: str,
     conn: psycopg.Connection | None = None,
@@ -106,7 +163,7 @@ def try_route(
             "buffer_count",
             (
                 'SELECT COUNT(*) AS cnt\n'
-                'FROM "AL_D010_26_20250704" b\n'
+                f'FROM "{_D010}" b\n'
                 "WHERE ST_DWithin(\n"
                 "  b.geometry::geography,\n"
                 f"  ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326)::geography,\n"
@@ -163,25 +220,9 @@ def try_route(
 
     # 구 주요용도명/용도 종류 (동래→D198_26260, 금정→D198_26410)
     # place/usage COUNT보다 먼저 매칭해야 "건물의 주요용도명 종류"가 건물건수로 오탐되지 않음
-    if ("용도" in q) and ("종류" in q or "몇 가지" in q or "몇가지" in q):
-        if "동래" in q:
-            return RoutedQuery(
-                "usage_kinds_dongrae",
-                (
-                    'SELECT COUNT(DISTINCT "A25") AS cnt\n'
-                    'FROM "AL_D198_26260_20250115"\n'
-                    "WHERE \"A4\" LIKE '%동래구%' AND \"A25\" IS NOT NULL;"
-                ),
-            )
-        if "금정" in q:
-            return RoutedQuery(
-                "usage_kinds_geumjeong",
-                (
-                    'SELECT COUNT(DISTINCT "A25") AS cnt\n'
-                    'FROM "AL_D198_26410_20250115"\n'
-                    "WHERE \"A4\" LIKE '%금정구%' AND \"A25\" IS NOT NULL;"
-                ),
-            )
+    usage_kinds = _route_usage_kinds(q)
+    if usage_kinds is not None:
+        return usage_kinds
 
     # 장소(동 우선) + 용도 COUNT / 행정동 공간 COUNT
     usage_count = _route_place_usage_count(q, conn=conn)
@@ -203,26 +244,20 @@ def try_route(
     if m and ("높이" in q) and _wants_count(q):
         gu, meters = m.group(1), m.group(2)
         op = ">" if ("넘는" in q or "초과" in q) else ">="
-        return RoutedQuery(
+        return _count_sql(
             "building_height_count",
-            (
-                'SELECT COUNT(*) AS cnt\n'
-                'FROM "AL_D010_26_20250704"\n'
-                f'WHERE "A4" LIKE \'%{gu}%\' AND "A16" {op} {meters};'
-            ),
+            _D010,
+            f'"A4" LIKE \'%{gu}%\' AND "A16" {op} {meters}',
         )
 
     # 구 + 지상층 (지상층 / 지상 N층)
     m = re.search(rf"{_GU}.*?지상\s*층?[이]?\s*(\d+)\s*층", q)
     if m and ("지상" in q) and (_wants_count(q) or "이상" in q):
         gu, floors = m.group(1), m.group(2)
-        return RoutedQuery(
+        return _count_sql(
             "building_floor_count",
-            (
-                'SELECT COUNT(*) AS cnt\n'
-                'FROM "AL_D010_26_20250704"\n'
-                f'WHERE "A4" LIKE \'%{gu}%\' AND "A26" >= {floors};'
-            ),
+            _D010,
+            f'"A4" LIKE \'%{gu}%\' AND "A26" >= {floors}',
         )
 
     # 동 공간 포함 (안에/내부/안쪽/경계 안)
@@ -243,7 +278,7 @@ def try_route(
             "building_in_dong_spatial",
             (
                 'SELECT COUNT(*) AS cnt\n'
-                'FROM "AL_D010_26_20250704" b\n'
+                f'FROM "{_D010}" b\n'
                 'JOIN "BND_ADM_DONG_PG" d\n'
                 "  ON ST_Intersects(b.geometry, d.geometry)\n"
                 f'WHERE d."ADM_NM" LIKE \'%{dong}%\';'
@@ -341,24 +376,13 @@ def try_route(
             where = f'"A4" LIKE \'%{gu}%\' AND "A14" >= {area}'
         if usage:
             where += f' AND "A9" = \'{usage}\''
-        return RoutedQuery(
-            "building_area_threshold_count",
-            (
-                'SELECT COUNT(*) AS cnt\n'
-                'FROM "AL_D010_26_20250704"\n'
-                f"WHERE {where};"
-            ),
-        )
+        return _count_sql("building_area_threshold_count", _D010, where)
 
     ranked = _route_building_rank(q)
     if ranked is not None:
         return ranked
 
     return None
-
-
-_USAGE_PAT = USAGE_PATTERN
-_USAGE_SQL = USAGE_ALIASES
 
 
 def _resolve_d198_table(
@@ -422,14 +446,7 @@ def _route_place_building_count(q: str) -> RoutedQuery | None:
     else:
         return None
 
-    return RoutedQuery(
-        "building_place_count",
-        (
-            'SELECT COUNT(*) AS cnt\n'
-            'FROM "AL_D010_26_20250704"\n'
-            f"WHERE {where};"
-        ),
-    )
+    return _count_sql("building_place_count", _D010, where)
 
 
 def _route_place_usage_count(
@@ -472,7 +489,7 @@ def _route_place_usage_count(
                     "building_admin_dong_usage_count",
                     (
                         'SELECT COUNT(*) AS cnt\n'
-                        'FROM "AL_D010_26_20250704" b\n'
+                        f'FROM "{_D010}" b\n'
                         'JOIN "BND_ADM_DONG_PG" d\n'
                         "  ON ST_Intersects(b.geometry, d.geometry)\n"
                         f'WHERE d."ADM_NM" LIKE \'%{place}%\'{usage_filter};'
@@ -493,14 +510,7 @@ def _route_place_usage_count(
     else:
         where += f" AND \"A9\" = '{usage}'"
 
-    return RoutedQuery(
-        "building_usage_count",
-        (
-            'SELECT COUNT(*) AS cnt\n'
-            'FROM "AL_D010_26_20250704"\n'
-            f"WHERE {where};"
-        ),
-    )
+    return _count_sql("building_usage_count", _D010, where)
 
 
 def _route_building_age(
@@ -532,14 +542,7 @@ def _route_building_age(
 
     where: list[str] = []
     if place and place.endswith("동"):
-        dong = place
-        if conn is not None:
-            from llm2sql.clarify_qa import _lookup_admin_dong
-
-            if _lookup_admin_dong(conn, place):
-                guessed = legal_dong_guess(place)
-                if guessed:
-                    dong = guessed
+        dong = _legal_dong_for_filter(conn, place)
         where.append(f'"A4" LIKE \'%{dong}%\'')
         if gu:
             where.append(f'"A4" LIKE \'%{gu}%\'')
@@ -600,14 +603,7 @@ def _route_facility_list(
     if table and public:
         where: list[str] = []
         if place and place.endswith("동"):
-            dong = place
-            if conn is not None:
-                from llm2sql.clarify_qa import _lookup_admin_dong
-
-                if _lookup_admin_dong(conn, place):
-                    guessed = legal_dong_guess(place)
-                    if guessed:
-                        dong = guessed
+            dong = _legal_dong_for_filter(conn, place)
             where.append(f'"A4" LIKE \'%{dong}%\'')
         elif gu:
             where.append(f'"A4" LIKE \'%{gu}%\'')
@@ -711,7 +707,7 @@ def _industrial_scope_sql(q: str) -> str:
     return f"(\"A8\" ILIKE '%{gu}%' OR \"A9\" ILIKE '%{gu}%')"
 
 
-def _industrial_names_sql(scope: str) -> str:
+def _industrial_distinct_names_sql(scope: str) -> str:
     return (
         "SELECT DISTINCT name FROM (\n"
         '  SELECT TRIM("A8") AS name FROM "AL_D060_00_20250804"\n'
@@ -721,9 +717,12 @@ def _industrial_names_sql(scope: str) -> str:
         f"  WHERE {scope} AND \"A9\" ILIKE '%산업단지%'\n"
         ") t\n"
         "WHERE name IS NOT NULL AND BTRIM(name) <> ''\n"
-        "  AND name <> '일반산업단지'\n"
-        "ORDER BY name;"
+        "  AND name <> '일반산업단지'"
     )
+
+
+def _industrial_names_sql(scope: str) -> str:
+    return _industrial_distinct_names_sql(scope) + "\nORDER BY name;"
 
 
 def _route_buildings_in_industrial(q: str) -> RoutedQuery | None:
@@ -762,7 +761,7 @@ def _route_buildings_in_industrial(q: str) -> RoutedQuery | None:
         "buildings_in_industrial",
         (
             'SELECT COUNT(*) AS cnt\n'
-            'FROM "AL_D010_26_20250704" b\n'
+            f'FROM "{_D010}" b\n'
             f"WHERE {where_sql};"
         ),
     )
@@ -788,21 +787,10 @@ def _route_industrial_count(q: str) -> RoutedQuery | None:
         return None
 
     scope = _industrial_scope_sql(q)
+    inner = _industrial_distinct_names_sql(scope)
     return RoutedQuery(
         "industrial_count",
-        (
-            "SELECT COUNT(*) AS cnt FROM (\n"
-            "  SELECT DISTINCT name FROM (\n"
-            '    SELECT TRIM("A8") AS name FROM "AL_D060_00_20250804"\n'
-            f"    WHERE {scope} AND \"A8\" ILIKE '%산업단지%'\n"
-            "    UNION\n"
-            '    SELECT TRIM("A9") AS name FROM "AL_D060_00_20250804"\n'
-            f"    WHERE {scope} AND \"A9\" ILIKE '%산업단지%'\n"
-            "  ) t\n"
-            "  WHERE name IS NOT NULL AND BTRIM(name) <> ''\n"
-            "    AND name <> '일반산업단지'\n"
-            ") u;"
-        ),
+        f"SELECT COUNT(*) AS cnt FROM (\n{inner}\n) u;",
     )
 
 
@@ -836,16 +824,9 @@ def _route_building_name_lookup(q: str) -> RoutedQuery | None:
     if not name:
         return None
 
-    where: list[str] = []
     place = extract_place(q)
     gu = extract_gu(q)
-    if place and place.endswith("동"):
-        where.append(place_a4_predicate(place))
-        if gu:
-            where.append(f'"A4" LIKE \'%{gu}%\'')
-    elif gu:
-        where.append(f'"A4" LIKE \'%{gu}%\'')
-
+    where = _a4_place_filters(place, gu)
     # 토큰 AND — 「구서역 포르투나」처럼 일부만 말해도 매칭
     for token in name.split():
         safe = token.replace("'", "''")
@@ -911,21 +892,10 @@ def _route_building_rank(q: str) -> RoutedQuery | None:
 
     place = extract_place(q)
     gu = extract_gu(q)
-    where: list[str] = []
-    if place and place.endswith("동"):
-        where.append(place_a4_predicate(place))
-        if gu:
-            where.append(f'"A4" LIKE \'%{gu}%\'')
-    elif gu:
-        where.append(f'"A4" LIKE \'%{gu}%\'')
-    elif place:
-        where.append(place_a4_predicate(place))
+    where = _a4_place_filters(place, gu)
     # 장소 없음·부산시 전체 → AL_D010 전역 (부산 DB)
 
-    usage_sql = None
-    m = re.search(_USAGE_PAT, q)
-    if m:
-        usage_sql = _USAGE_SQL.get(m.group(1), m.group(1))
+    usage_sql = extract_usage(q)
     if usage_sql:
         where.append(f'"A9" = \'{usage_sql}\'')
 
@@ -945,7 +915,7 @@ def _route_building_rank(q: str) -> RoutedQuery | None:
         f"building_rank_{metric_name}",
         (
             'SELECT "A0", "A4", "A5", "A9", "A12", "A14", "A15", "A16", "A19", "A24", "A25", "A26"\n'
-            'FROM "AL_D010_26_20250704"'
+            f'FROM "{_D010}"'
             f"{where_sql}\n"
             f'ORDER BY "{metric_col}" DESC NULLS LAST\n'
             f"LIMIT {limit_n};"
@@ -991,19 +961,9 @@ def fix_common_sql_mistakes(sql: str, question: str | None = None) -> str:
         return out
 
     # 동래/금정 주요용도명 종류 → D198 A25 고정
-    if ("용도" in q) and ("종류" in q or "몇 가지" in q or "몇가지" in q):
-        if "동래" in q:
-            return (
-                'SELECT COUNT(DISTINCT "A25") AS cnt\n'
-                'FROM "AL_D198_26260_20250115"\n'
-                "WHERE \"A4\" LIKE '%동래구%' AND \"A25\" IS NOT NULL;"
-            )
-        if "금정" in q:
-            return (
-                'SELECT COUNT(DISTINCT "A25") AS cnt\n'
-                'FROM "AL_D198_26410_20250115"\n'
-                "WHERE \"A4\" LIKE '%금정구%' AND \"A25\" IS NOT NULL;"
-            )
+    kinds = _route_usage_kinds(q)
+    if kinds is not None:
+        return kinds.sql
 
     # 동래·금정이 아닌 구/용도 COUNT인데 D198을 쓰면 AL_D010으로 교정
     gu = extract_gu(q)

@@ -43,7 +43,53 @@ _PROFILE_HINTS = (
     "비교",
     "대비",
     "차이",
+    "분석",
 )
+
+_FAR_HINTS = ("용적율", "용적률", "건폐율", "건폐률")
+_INDUSTRIAL_INSIDE_HINTS = ("내", "안", "속한", "내부", "안쪽", "포함")
+
+
+def _mentions_industrial_inside(question: str) -> bool:
+    q = question.strip()
+    if "산업단지" not in q:
+        return False
+    return any(k in q for k in _INDUSTRIAL_INSIDE_HINTS)
+
+
+def _wants_far_focus(question: str) -> bool:
+    return any(k in question for k in _FAR_HINTS)
+
+
+def _wants_industrial_compare(question: str) -> bool:
+    """같은 지역 전체 vs 산업단지 내 건물 특성 비교."""
+    q = question.strip()
+    if not _mentions_industrial_inside(q):
+        return False
+    return any(k in q for k in ("와", "과", "비교", "대비", "차이", "vs", "VS"))
+
+
+def _far_select_exprs(prefix: str = "") -> str:
+    """용적율(연면적/대지면적)·건폐율(건축면적/대지면적) 집계 조각."""
+    a12 = f'{prefix}"A12"'
+    a14 = f'{prefix}"A14"'
+    a15 = f'{prefix}"A15"'
+    far = f"(({a14})::numeric / ({a15})) * 100"
+    bcr = f"(({a12})::numeric / ({a15})) * 100"
+    far_ok = f"({a15}) > 10 AND ({a14}) > 0 AND {far} BETWEEN 1 AND 1500"
+    bcr_ok = f"({a15}) > 10 AND ({a12}) > 0 AND {bcr} BETWEEN 0.1 AND 100"
+    return f"""
+  ROUND(AVG(CASE WHEN {far_ok} THEN {far} END)::numeric, 1) AS avg_far,
+  ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {far}) FILTER (
+    WHERE {far_ok}
+  )::numeric, 1) AS med_far,
+  ROUND(MAX(CASE WHEN {far_ok} THEN {far} END)::numeric, 1) AS max_far,
+  COUNT(*) FILTER (WHERE {far_ok}) AS far_n,
+  ROUND(AVG(CASE WHEN {bcr_ok} THEN {bcr} END)::numeric, 1) AS avg_bcr,
+  ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {bcr}) FILTER (
+    WHERE {bcr_ok}
+  )::numeric, 1) AS med_bcr
+""".strip()
 
 
 @dataclass(frozen=True)
@@ -286,24 +332,26 @@ def is_profile_question(question: str) -> bool:
         "경향",
         "대략",
         "평균",
+        "분석",
     )
     compare_hints = ("비교", "대비", "차이")
-    has_summary = any(k in q for k in summary_hints)
+    has_summary = any(k in q for k in summary_hints) or _wants_far_focus(q)
     has_compare = any(k in q for k in compare_hints) or ("와" in q) or ("과" in q)
     if not has_summary and not has_compare:
         return False
     places = extract_places(q)
     usages = extract_usages(q)
-    # '비교'만 있고 요약 의도가 없으면, 복수 장소/용도 또는 시 전역 대비일 때만
+    # '비교'만 있고 요약 의도가 없으면, 복수 장소/용도·시 전역·산업단지 대비일 때만
     if has_compare and not has_summary:
         if len(places) < 2 and len(usages) < 2:
             if not (_wants_citywide_compare(q) and places):
-                return False
+                if not (_wants_industrial_compare(q) and (places or extract_gu(q))):
+                    return False
     if DONG_RE.search(q) or GU_RE.search(q):
         return True
     if any(k in q for k in USAGE_ALIASES):
         return True
-    if "건물" in q or "건축물" in q:
+    if "건물" in q or "건축물" in q or "아파트" in q:
         return True
     return False
 
@@ -327,8 +375,9 @@ def answer_profile_question(
     wants_compare = any(
         k in q for k in ("비교", "대비", "차이", "와 ", "과 ", "vs", "VS")
     ) or ("와" in q) or ("과" in q)
+    far_focus = _wants_far_focus(q)
 
-    if not places and not usages:
+    if not places and not usages and not _mentions_industrial_inside(q):
         return None
 
     # 부산시 전역 대비 단일 지역 (예: 부산시 전역 대비 구서동 특성)
@@ -352,11 +401,45 @@ def answer_profile_question(
             ],
             scope=f"{_label(place, usage, q)} · 부산시 전역",
             compare_kind="place",
+            far_focus=far_focus,
             model=model,
             host=host,
             client=client,
             on_token=on_token,
         )
+
+    # 지역 전체 vs 같은 지역 산업단지 내 (예: 사상구 아파트 vs 사상구 산업단지 내 아파트)
+    if _wants_industrial_compare(q):
+        place = places[0] if places else extract_gu(q) or extract_place(q)
+        usage = usages[0] if usages else extract_usage(q)
+        if place or usage:
+            base_label = _label(place, usage, q)
+            ind_label = _industrial_label(place, usage, q)
+            return _answer_compare_groups(
+                conn,
+                q,
+                groups_spec=[
+                    {
+                        "place": place,
+                        "usage": usage,
+                        "in_industrial": False,
+                        "label": base_label,
+                    },
+                    {
+                        "place": place,
+                        "usage": usage,
+                        "in_industrial": True,
+                        "label": ind_label,
+                    },
+                ],
+                scope=f"{base_label} · {ind_label}",
+                compare_kind="industrial",
+                far_focus=far_focus,
+                model=model,
+                host=host,
+                client=client,
+                on_token=on_token,
+            )
 
     # 지역 간 비교 (구서동 vs 연산동)
     if len(places) >= 2:
@@ -370,6 +453,7 @@ def answer_profile_question(
             ],
             scope=" · ".join(places[:3]),
             compare_kind="place",
+            far_focus=far_focus,
             model=model,
             host=host,
             client=client,
@@ -392,19 +476,23 @@ def answer_profile_question(
             ],
             scope=place or "선택 지역",
             compare_kind="usage",
+            far_focus=far_focus,
             model=model,
             host=host,
             client=client,
             on_token=on_token,
         )
 
-    place = places[0] if places else extract_place(q)
+    place = places[0] if places else extract_place(q) or extract_gu(q)
     usage = usages[0] if usages else extract_usage(q)
+    in_industrial = _mentions_industrial_inside(q)
     return _answer_single(
         conn,
         q,
         place,
         usage,
+        in_industrial=in_industrial,
+        far_focus=far_focus,
         model=model,
         host=host,
         client=client,
@@ -412,23 +500,35 @@ def answer_profile_question(
     )
 
 
-def _stats_sql(where_sql: str) -> str:
+def _stats_sql(where_sql: str, *, in_industrial: bool = False) -> str:
+    prefix = "b." if in_industrial else ""
+    far_exprs = _far_select_exprs(prefix)
+    from_sql = (
+        '"AL_D010_26_20250704" b'
+        if in_industrial
+        else '"AL_D010_26_20250704"'
+    )
+    a12 = f'{prefix}"A12"'
+    a14 = f'{prefix}"A14"'
+    a16 = f'{prefix}"A16"'
+    a26 = f'{prefix}"A26"'
     return f"""
 SELECT
   COUNT(*) AS cnt,
-  ROUND(AVG("A14")::numeric, 1) AS avg_area,
-  ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "A14")::numeric, 1) AS med_area,
-  ROUND(MIN("A14")::numeric, 1) AS min_area,
-  ROUND(MAX("A14")::numeric, 1) AS max_area,
-  ROUND(AVG("A16") FILTER (WHERE "A16" > 0 AND "A16" <= 600)::numeric, 1) AS avg_height,
-  ROUND(MAX("A16") FILTER (WHERE "A16" > 0 AND "A16" <= 600)::numeric, 1) AS max_height,
-  ROUND(AVG("A26")::numeric, 1) AS avg_floors,
-  ROUND(MAX("A26")::numeric, 0) AS max_floors,
-  ROUND(AVG("A12") FILTER (
-    WHERE "A12" > 0 AND "A12" <= 500000
-      AND ("A14" IS NULL OR "A14" <= 0 OR "A12" <= "A14" * 1.05 + 50)
-  )::numeric, 1) AS avg_bldg_area
-FROM "AL_D010_26_20250704"
+  ROUND(AVG({a14})::numeric, 1) AS avg_area,
+  ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {a14})::numeric, 1) AS med_area,
+  ROUND(MIN({a14})::numeric, 1) AS min_area,
+  ROUND(MAX({a14})::numeric, 1) AS max_area,
+  ROUND(AVG({a16}) FILTER (WHERE {a16} > 0 AND {a16} <= 600)::numeric, 1) AS avg_height,
+  ROUND(MAX({a16}) FILTER (WHERE {a16} > 0 AND {a16} <= 600)::numeric, 1) AS max_height,
+  ROUND(AVG({a26})::numeric, 1) AS avg_floors,
+  ROUND(MAX({a26})::numeric, 0) AS max_floors,
+  ROUND(AVG({a12}) FILTER (
+    WHERE {a12} > 0 AND {a12} <= 500000
+      AND ({a14} IS NULL OR {a14} <= 0 OR {a12} <= {a14} * 1.05 + 50)
+  )::numeric, 1) AS avg_bldg_area,
+  {far_exprs}
+FROM {from_sql}
 WHERE {where_sql}
 """.strip()
 
@@ -438,22 +538,38 @@ def _fetch_profile(
     *,
     place: str | None,
     usage: str | None,
+    in_industrial: bool = False,
 ) -> tuple[str, dict[str, Any], list[dict[str, Any]], str]:
+    prefix = "b." if in_industrial else ""
     where: list[str] = []
     if place:
-        where.append(place_a4_predicate(place))
+        pred = place_a4_predicate(place)
+        if in_industrial:
+            pred = pred.replace('"A4"', 'b."A4"')
+        where.append(pred)
     if usage:
-        where.append(f'"A9" = \'{usage}\'')
+        where.append(f'{prefix}"A9" = \'{usage}\'')
+    if in_industrial:
+        where.append(
+            "EXISTS ("
+            'SELECT 1 FROM "AL_D060_00_20250804" i '
+            "WHERE ST_Intersects(b.geometry, i.geometry)"
+            ")"
+        )
     where_sql = " AND ".join(where) if where else "TRUE"
-    sql = _stats_sql(where_sql)
+    sql = _stats_sql(where_sql, in_industrial=in_industrial)
 
+    struct_from = (
+        '"AL_D010_26_20250704" b' if in_industrial else '"AL_D010_26_20250704"'
+    )
+    struct_col = f'{prefix}"A11"'
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(sql)
         stats = cur.fetchone() or {}
         cur.execute(
             f"""
-            SELECT "A11" AS structure, COUNT(*) AS n
-            FROM "AL_D010_26_20250704"
+            SELECT {struct_col} AS structure, COUNT(*) AS n
+            FROM {struct_from}
             WHERE {where_sql}
             GROUP BY 1
             ORDER BY 2 DESC
@@ -464,27 +580,50 @@ def _fetch_profile(
     return where_sql, stats, structures, sql
 
 
+def _far_fields(stats: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "avg_far_pct": _num(stats.get("avg_far")),
+        "median_far_pct": _num(stats.get("med_far")),
+        "max_far_pct": _num(stats.get("max_far")),
+        "far_sample_count": int(stats.get("far_n") or 0),
+        "avg_bcr_pct": _num(stats.get("avg_bcr")),
+        "median_bcr_pct": _num(stats.get("med_bcr")),
+        "far_note": (
+            "용적율은 연면적÷대지면적×100, 건폐율은 건축면적÷대지면적×100으로 "
+            "대지면적·면적이 유효한 건물만 집계했습니다."
+        ),
+    }
+
+
 def _answer_single(
     conn: psycopg.Connection,
     q: str,
     place: str | None,
     usage: str | None,
     *,
+    in_industrial: bool = False,
+    far_focus: bool = False,
     model: str | None = None,
     host: str | None = None,
     client: Any | None = None,
     on_token: TokenCallback | None = None,
 ) -> ProfileAnswer:
     where_sql, stats, structures, sql = _fetch_profile(
-        conn, place=place, usage=usage
+        conn, place=place, usage=usage, in_industrial=in_industrial
     )
     usages_rows: list[dict[str, Any]] = []
     if not usage:
+        prefix = "b." if in_industrial else ""
+        from_sql = (
+            '"AL_D010_26_20250704" b'
+            if in_industrial
+            else '"AL_D010_26_20250704"'
+        )
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 f"""
-                SELECT COALESCE("A9", '(미상)') AS usage, COUNT(*) AS n
-                FROM "AL_D010_26_20250704"
+                SELECT COALESCE({prefix}"A9", '(미상)') AS usage, COUNT(*) AS n
+                FROM {from_sql}
                 WHERE {where_sql}
                 GROUP BY 1
                 ORDER BY 2 DESC
@@ -494,7 +633,14 @@ def _answer_single(
             usages_rows = list(cur.fetchall())
 
     cnt = int(stats.get("cnt") or 0)
-    label = _label(place, usage, q)
+    label = (
+        _industrial_label(place, usage, q)
+        if in_industrial
+        else _label(place, usage, q)
+    )
+    tables = ["AL_D010_26_20250704"]
+    if in_industrial:
+        tables.append("AL_D060_00_20250804")
     if cnt == 0:
         answer = (
             f"{label}에 해당하는 건물을 찾지 못했습니다. "
@@ -505,7 +651,7 @@ def _answer_single(
             intent="building_profile",
             answer=answer,
             sql=sql,
-            tables=["AL_D010_26_20250704"],
+            tables=tables,
             rows=[],
         )
 
@@ -522,6 +668,9 @@ def _answer_single(
         "avg_floors": _num(stats.get("avg_floors")),
         "max_floors": _num(stats.get("max_floors")),
         "avg_building_area_m2": _num(stats.get("avg_bldg_area")),
+        "in_industrial": in_industrial,
+        "far_focus": far_focus,
+        **_far_fields(stats),
         "top_structures": [
             {"name": s.get("structure") or "미상", "count": int(s.get("n") or 0)}
             for s in structures
@@ -535,7 +684,15 @@ def _answer_single(
     answer = _finalize_profile_answer(
         q,
         payload=payload,
-        fallback=_prose_single(label, stats, structures, usages_rows, apartment_note),
+        fallback=_prose_single(
+            label,
+            stats,
+            structures,
+            usages_rows,
+            apartment_note,
+            far_focus=far_focus,
+            in_industrial=in_industrial,
+        ),
         model=model,
         host=host,
         client=client,
@@ -545,7 +702,7 @@ def _answer_single(
         intent="building_profile",
         answer=answer,
         sql=sql,
-        tables=["AL_D010_26_20250704"],
+        tables=tables,
         rows=[stats, *structures, *usages_rows],
     )
 
@@ -557,6 +714,7 @@ def _answer_compare_groups(
     groups_spec: list[dict[str, Any]],
     scope: str,
     compare_kind: str,
+    far_focus: bool = False,
     model: str | None = None,
     host: str | None = None,
     client: Any | None = None,
@@ -565,23 +723,40 @@ def _answer_compare_groups(
     sqls: list[str] = []
     all_rows: list[dict[str, Any]] = []
     groups: list[dict[str, Any]] = []
+    any_industrial = False
 
     for spec in groups_spec:
         place = spec.get("place")
         usage = spec.get("usage")
-        label = spec.get("label") or _label(place, usage, q)
+        in_industrial = bool(spec.get("in_industrial"))
+        any_industrial = any_industrial or in_industrial
+        label = spec.get("label") or (
+            _industrial_label(place, usage, q)
+            if in_industrial
+            else _label(place, usage, q)
+        )
         _, stats, structures, sql = _fetch_profile(
-            conn, place=place, usage=usage
+            conn,
+            place=place,
+            usage=usage,
+            in_industrial=in_industrial,
         )
         sqls.append(sql)
         all_rows.append(
-            {"place": place, "usage": usage, "label": label, **stats}
+            {
+                "place": place,
+                "usage": usage,
+                "label": label,
+                "in_industrial": in_industrial,
+                **stats,
+            }
         )
         groups.append(
             {
                 "label": label,
                 "place": place,
                 "usage": usage,
+                "in_industrial": in_industrial,
                 "building_count": int(stats.get("cnt") or 0),
                 "avg_floor_area_m2": _num(stats.get("avg_area")),
                 "median_floor_area_m2": _num(stats.get("med_area")),
@@ -590,6 +765,7 @@ def _answer_compare_groups(
                 "avg_floors": _num(stats.get("avg_floors")),
                 "max_floors": _num(stats.get("max_floors")),
                 "avg_building_area_m2": _num(stats.get("avg_bldg_area")),
+                **_far_fields(stats),
                 "top_structures": [
                     {
                         "name": s.get("structure") or "미상",
@@ -604,6 +780,7 @@ def _answer_compare_groups(
         "scope": scope,
         "compare": True,
         "compare_kind": compare_kind,
+        "far_focus": far_focus,
         "groups": groups,
         "apartment_note": "아파트" in q
         and any(g.get("usage") == "공동주택" for g in groups),
@@ -611,17 +788,22 @@ def _answer_compare_groups(
     answer = _finalize_profile_answer(
         q,
         payload=payload,
-        fallback=_prose_compare(scope, groups, q, compare_kind=compare_kind),
+        fallback=_prose_compare(
+            scope, groups, q, compare_kind=compare_kind, far_focus=far_focus
+        ),
         model=model,
         host=host,
         client=client,
         on_token=on_token,
     )
+    tables = ["AL_D010_26_20250704"]
+    if any_industrial:
+        tables.append("AL_D060_00_20250804")
     return ProfileAnswer(
         intent="building_profile_compare",
         answer=answer,
         sql="\n;\n".join(sqls),
-        tables=["AL_D010_26_20250704"],
+        tables=tables,
         rows=all_rows,
     )
 
@@ -660,25 +842,38 @@ def _prose_single(
     structures: list[dict[str, Any]],
     usages_rows: list[dict[str, Any]],
     apartment_note: bool,
+    *,
+    far_focus: bool = False,
+    in_industrial: bool = False,
 ) -> str:
     cnt = int(stats.get("cnt") or 0)
     parts = [
         f"{with_topic(label)} 부산 건물자료 기준으로 {cnt:,}동입니다.",
-        (
+    ]
+    if far_focus or stats.get("avg_far") is not None:
+        far_n = int(stats.get("far_n") or 0)
+        parts.append(
+            f"용적율(연면적÷대지면적)은 평균 {_fmt(stats.get('avg_far'))}%"
+            f"(중앙값 {_fmt(stats.get('med_far'))}%, "
+            f"최고 {_fmt(stats.get('max_far'))}%, "
+            f"유효표본 {far_n:,}동)이고, "
+            f"건폐율 평균은 {_fmt(stats.get('avg_bcr'))}%입니다."
+        )
+    if not far_focus:
+        parts.append(
             f"연면적은 평균 {_fmt(stats.get('avg_area'))}㎡, "
             f"중앙값 {_fmt(stats.get('med_area'))}㎡ 정도이며 "
             f"최소 {_fmt(stats.get('min_area'))}㎡에서 "
             f"최대 {_fmt(stats.get('max_area'))}㎡까지 분포합니다."
-        ),
-        (
+        )
+        parts.append(
             f"높이는 평균 {_fmt(stats.get('avg_height'))}m"
             f"(최고 {_fmt(stats.get('max_height'))}m), "
             f"지상층은 평균 {_fmt(stats.get('avg_floors'))}층"
             f"(최고 {_fmt(stats.get('max_floors'))}층)이고, "
             f"건축면적 평균은 {_fmt(stats.get('avg_bldg_area'))}㎡입니다."
-        ),
-    ]
-    if structures:
+        )
+    if structures and not far_focus:
         struct_txt = ", ".join(
             f"{s['structure'] or '미상'} {int(s['n']):,}동" for s in structures
         )
@@ -688,6 +883,8 @@ def _prose_single(
             f"{u['usage']} {int(u['n']):,}동" for u in usages_rows
         )
         parts.append(f"용도 구성은 {usage_txt} 순입니다.")
+    if in_industrial:
+        parts.append("산업단지 경계와 교차하는 건물만 집계했습니다.")
     if apartment_note:
         parts.append(
             "참고로 질문의 아파트는 건축물용도명 공동주택으로 집계했습니다."
@@ -701,9 +898,16 @@ def _prose_compare(
     q: str,
     *,
     compare_kind: str = "usage",
+    far_focus: bool = False,
 ) -> str:
     citywide = any(str(g.get("label") or "") == "부산시 전역" for g in groups)
-    if citywide:
+    if compare_kind == "industrial":
+        parts = [
+            f"{scope}의 용적율·건물 특성을 비교하면 다음과 같습니다."
+            if far_focus
+            else f"{scope}의 건물 특징을 비교하면 다음과 같습니다."
+        ]
+    elif citywide:
         parts = [f"{scope} 건물 특징을 비교하면 다음과 같습니다."]
     elif compare_kind == "place":
         parts = [f"{scope}의 건물 특징을 비교하면 다음과 같습니다."]
@@ -715,24 +919,50 @@ def _prose_compare(
         if cnt == 0:
             parts.append(f"{with_topic(str(label))} 해당 건물을 찾지 못했습니다.")
             continue
-        parts.append(
-            f"{with_topic(str(label))} {cnt:,}동으로, "
-            f"평균 연면적 {_fmt(g.get('avg_floor_area_m2'))}㎡, "
-            f"평균 높이 {_fmt(g.get('avg_height_m'))}m, "
-            f"평균 지상 {_fmt(g.get('avg_floors'))}층입니다."
-        )
+        if far_focus:
+            parts.append(
+                f"{with_topic(str(label))} {cnt:,}동으로, "
+                f"평균 용적율 {_fmt(g.get('avg_far_pct'))}%"
+                f"(중앙값 {_fmt(g.get('median_far_pct'))}%, "
+                f"유효 {_fmt(g.get('far_sample_count'))}동), "
+                f"평균 건폐율 {_fmt(g.get('avg_bcr_pct'))}%입니다."
+            )
+        else:
+            parts.append(
+                f"{with_topic(str(label))} {cnt:,}동으로, "
+                f"평균 연면적 {_fmt(g.get('avg_floor_area_m2'))}㎡, "
+                f"평균 높이 {_fmt(g.get('avg_height_m'))}m, "
+                f"평균 지상 {_fmt(g.get('avg_floors'))}층"
+                + (
+                    f", 평균 용적율 {_fmt(g.get('avg_far_pct'))}%"
+                    if g.get("avg_far_pct") is not None
+                    else ""
+                )
+                + "입니다."
+            )
     valid = [g for g in groups if int(g.get("building_count") or 0) > 0]
     if len(valid) >= 2:
         a, b = valid[0], valid[1]
         a_name, b_name = a["label"], b["label"]
-        if (a.get("avg_floor_area_m2") or 0) and (b.get("avg_floor_area_m2") or 0):
+        if far_focus and (a.get("avg_far_pct") or 0) and (b.get("avg_far_pct") or 0):
+            higher = (
+                a_name
+                if float(a["avg_far_pct"]) >= float(b["avg_far_pct"])
+                else b_name
+            )
+            parts.append(
+                f"평균 용적율은 {higher} 쪽이 더 높습니다 "
+                f"({a_name} {_fmt(a.get('avg_far_pct'))}%, "
+                f"{b_name} {_fmt(b.get('avg_far_pct'))}%)."
+            )
+        elif (a.get("avg_floor_area_m2") or 0) and (b.get("avg_floor_area_m2") or 0):
             bigger = (
                 a_name
                 if float(a["avg_floor_area_m2"]) >= float(b["avg_floor_area_m2"])
                 else b_name
             )
             parts.append(f"평균 연면적은 {bigger} 쪽이 더 큽니다.")
-        if (a.get("avg_height_m") or 0) and (b.get("avg_height_m") or 0):
+        if (a.get("avg_height_m") or 0) and (b.get("avg_height_m") or 0) and not far_focus:
             taller = (
                 a_name
                 if float(a["avg_height_m"]) >= float(b["avg_height_m"])
@@ -761,6 +991,10 @@ def _prose_compare(
                 )
     if "아파트" in q:
         parts.append("아파트는 공동주택 용도로 집계했습니다.")
+    if far_focus:
+        parts.append(
+            "용적율·건폐율은 대지면적과 면적이 유효한 건물만으로 계산했습니다."
+        )
     return " ".join(parts)
 
 
@@ -774,6 +1008,15 @@ def _label(place: str | None, usage: str | None, q: str) -> str:
         else:
             parts.append(usage)
     return " ".join(parts) if parts else "선택 조건"
+
+
+def _industrial_label(place: str | None, usage: str | None, q: str) -> str:
+    base = _label(place, usage, q)
+    if not base or base == "선택 조건":
+        return "산업단지 내 건물"
+    if "산업단지" in base:
+        return base
+    return f"{base} · 산업단지 내"
 
 
 def _num(value: Any) -> float | int | None:

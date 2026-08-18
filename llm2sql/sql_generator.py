@@ -3,9 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-import ollama
-
 from llm2sql.example_store import format_retrieved_examples
+from llm2sql.llm import chat
 from llm2sql.prompt_examples import DOMAIN_HINTS, FEW_SHOT_EXAMPLES
 
 
@@ -65,14 +64,7 @@ def generate_sql(
     include_few_shot: bool = True,
     few_shot: str | None = None,
 ) -> str:
-    if client is None:
-        if not host:
-            raise ValueError("host 또는 client가 필요합니다.")
-        client = ollama.Client(host=host)
-    if few_shot is not None:
-        few = few_shot if include_few_shot else ""
-    else:
-        few = FEW_SHOT_EXAMPLES if include_few_shot else ""
+    few = (few_shot if few_shot is not None else FEW_SHOT_EXAMPLES) if include_few_shot else ""
     if error_feedback:
         user_content = (
             f"Schema:\n{schema_text}\n\n"
@@ -88,21 +80,16 @@ def generate_sql(
             f"Question: {question}\n\n"
             "SQL:"
         )
-
-    kwargs: dict[str, Any] = {
-        "model": model,
-        "messages": [
+    content = chat(
+        model=model,
+        host=host,
+        client=client,
+        temperature=0,
+        messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
         ],
-        "options": {"temperature": 0},
-    }
-    # qwen3 등 thinking 모델에서 사고 토큰 억제 (미지원 시 무시)
-    try:
-        response = client.chat(**kwargs, think=False)
-    except TypeError:
-        response = client.chat(**kwargs)
-    content = response["message"]["content"]
+    )
     return _extract_sql(content)
 
 

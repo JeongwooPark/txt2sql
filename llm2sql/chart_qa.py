@@ -524,7 +524,9 @@ def _chart_profile_compare(
     labels: list[str] = []
     counts: list[float] = []
     heights: list[float] = []
+    fars: list[float] = []
     has_height = False
+    has_far = False
     for row in rows:
         label = row.get("label") or row.get("place")
         cnt = row.get("cnt")
@@ -541,21 +543,35 @@ def _chart_profile_compare(
             try:
                 heights.append(float(h))
                 has_height = True
-                continue
             except (TypeError, ValueError):
-                pass
-        heights.append(0.0)
+                heights.append(0.0)
+        else:
+            heights.append(0.0)
+        far = row.get("avg_far")
+        if far is not None:
+            try:
+                fars.append(float(far))
+                has_far = True
+            except (TypeError, ValueError):
+                fars.append(0.0)
+        else:
+            fars.append(0.0)
 
     if len(labels) < 2:
         return None
 
-    datasets: list[dict[str, Any]] = [
-        {"label": "건물 수(동)", "data": counts}
-    ]
+    far_focus = any(k in question for k in ("용적율", "용적률", "건폐율", "건폐률"))
+    datasets: list[dict[str, Any]] = [{"label": "건물 수(동)", "data": counts}]
     unit = "동"
-    if has_height and any(h > 0 for h in heights):
+    if has_far and any(v > 0 for v in fars) and (far_focus or not has_height):
+        datasets.append({"label": "평균 용적율(%)", "data": fars})
+        unit = "동·%"
+    elif has_height and any(h > 0 for h in heights):
         datasets.append({"label": "평균 높이(m)", "data": heights})
         unit = "동·m"
+    elif has_far and any(v > 0 for v in fars):
+        datasets.append({"label": "평균 용적율(%)", "data": fars})
+        unit = "동·%"
 
     return {
         "type": "bar",

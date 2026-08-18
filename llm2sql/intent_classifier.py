@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from llm2sql.answer import _chat
+from llm2sql.llm import chat as _chat
 from llm2sql.guide_qa import _is_coverage_question, try_guide
 from llm2sql.meta_qa import is_metadata_question
 from llm2sql.profile_qa import is_profile_question, is_usage_overview_question

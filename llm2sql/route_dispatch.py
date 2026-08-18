@@ -37,12 +37,16 @@ class RouteMatch:
 
 
 def tables_for_intent(intent: str) -> list[str]:
+    d010 = ["AL_D010_26_20250704"]
+    d060 = ["AL_D060_00_20250804"]
+    d198 = ["AL_D198_26260_20250115", "AL_D198_26410_20250115"]
+    bas = ["TL_KODIS_BAS_26_202507"]
     if intent == "buildings_in_industrial":
-        return ["AL_D010_26_20250704", "AL_D060_00_20250804"]
-    if intent.startswith("industrial_") or intent == "industrial_bas_intersect":
-        if intent == "industrial_bas_intersect":
-            return ["AL_D060_00_20250804", "TL_KODIS_BAS_26_202507"]
-        return ["AL_D060_00_20250804"]
+        return d010 + d060
+    if intent == "industrial_bas_intersect":
+        return d060 + bas
+    if intent.startswith("industrial_"):
+        return d060
     if intent.startswith("building_rank_") or intent in {
         "building_name_lookup",
         "building_place_count",
@@ -55,11 +59,11 @@ def tables_for_intent(intent: str) -> list[str]:
         "building_in_dong_spatial",
         "buffer_count",
     }:
-        return ["AL_D010_26_20250704"]
+        return d010
     if intent.startswith("bas_"):
-        return ["TL_KODIS_BAS_26_202507"]
+        return bas
     if intent.startswith("building_age"):
-        return ["AL_D198_26260_20250115", "AL_D198_26410_20250115"]
+        return d198
     return []
 
 

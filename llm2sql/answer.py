@@ -7,9 +7,8 @@ import re
 import time
 from typing import Any
 
-import ollama
-
 from llm2sql.domain import extract_place, extract_usage, is_busan_wide
+from llm2sql.llm import chat, resolve_client
 from llm2sql.progress import TokenCallback
 
 ANSWER_SYSTEM_PROMPT = """당신은 부산 GIS 데이터베이스 질의 결과를 사용자에게 설명하는 한국어 안내원입니다.
@@ -203,6 +202,30 @@ def _row_floors(row: dict[str, Any]) -> Any:
     return row.get("A31")
 
 
+def _row_name(row: dict[str, Any], *, fallback: str | None = None) -> str | None:
+    name = row.get("A24")
+    if name not in (None, "") and str(name).lower() != "nan":
+        return str(name)
+    return fallback
+
+
+def _row_addr(row: dict[str, Any]) -> str:
+    return " ".join(
+        str(x).strip()
+        for x in (row.get("A4"), row.get("A5"))
+        if x not in (None, "") and str(x).lower() != "nan"
+    )
+
+
+def _rank_target(question: str) -> str:
+    usage = extract_usage(question)
+    if "아파트" in question and usage == "공동주택":
+        return "아파트"
+    if usage:
+        return usage
+    return "건물"
+
+
 def _row_usage(row: dict[str, Any]) -> Any:
     for key in ("A9", "A25"):
         val = row.get(key)
@@ -279,21 +302,9 @@ def _infer_rank_route(question: str) -> str | None:
 def _natural_rank(question: str, route: str, row: dict[str, Any]) -> str:
     metric = str(route).replace("building_rank_", "")
     place = _place_label(question)
-    usage = extract_usage(question)
-    if "아파트" in question and usage == "공동주택":
-        target = "아파트"
-    elif usage:
-        target = usage
-    else:
-        target = "건물"
-
+    target = _rank_target(question)
     where = f"{place} " if place else ""
-    name = row.get("A24")
-    name_s = (
-        str(name)
-        if name not in (None, "") and str(name).lower() != "nan"
-        else None
-    )
+    name_s = _row_name(row)
     jibeon = row.get("A5")
 
     if metric == "높이":
@@ -329,13 +340,7 @@ def _natural_rank_list(
 ) -> str:
     metric = str(route).replace("building_rank_", "")
     place = _place_label(question)
-    usage = extract_usage(question)
-    if "아파트" in question and usage == "공동주택":
-        target = "아파트"
-    elif usage:
-        target = usage
-    else:
-        target = "건물"
+    target = _rank_target(question)
     where = f"{place} " if place else ""
 
     if metric == "높이":
@@ -347,12 +352,7 @@ def _natural_rank_list(
 
     lines = [head]
     for i, row in enumerate(rows, start=1):
-        name = row.get("A24")
-        name_s = (
-            str(name)
-            if name not in (None, "") and str(name).lower() != "nan"
-            else None
-        )
+        name_s = _row_name(row)
         who = (
             f"「{name_s}」"
             if name_s
@@ -405,19 +405,9 @@ def _natural_building_name_lookup(
 
     if len(rows) == 1 and attr_only:
         row = rows[0]
-        name = row.get("A24")
-        name_s = (
-            str(name)
-            if name not in (None, "") and str(name).lower() != "nan"
-            else "해당 건물"
-        )
+        name_s = _row_name(row, fallback="해당 건물")
         if attr_only == "주소":
-            loc = " ".join(
-                str(x).strip()
-                for x in (row.get("A4"), row.get("A5"))
-                if x not in (None, "") and str(x).lower() != "nan"
-            )
-            return f"「{name_s}」의 주소는 {loc or '—'}입니다."
+            return f"「{name_s}」의 주소는 {_row_addr(row) or '—'}입니다."
         if attr_only == "지번":
             return f"「{name_s}」의 지번은 {row.get('A5') or '—'}입니다."
         if attr_only == "높이":
@@ -433,25 +423,15 @@ def _natural_building_name_lookup(
 
     if len(rows) == 1:
         row = rows[0]
-        name = row.get("A24")
-        name_s = (
-            str(name)
-            if name not in (None, "") and str(name).lower() != "nan"
-            else None
-        )
+        name_s = _row_name(row)
         title = (
             f"「{name_s}」에 대한 정보입니다."
             if name_s
             else "요청하신 건물 정보입니다."
         )
-        loc = " ".join(
-            str(x).strip()
-            for x in (row.get("A4"), row.get("A5"))
-            if x not in (None, "") and str(x).lower() != "nan"
-        )
         return (
             f"{title}\n"
-            f"- 위치: {loc or '—'}\n"
+            f"- 위치: {_row_addr(row) or '—'}\n"
             f"- 용도: {_row_usage(row) or '—'}\n"
             f"- 구조: {row.get('A11') or '—'}\n"
             f"- 건물면적: {_fmt_number(row.get('A12'))}㎡\n"
@@ -463,19 +443,9 @@ def _natural_building_name_lookup(
         f"조건에 맞는 건물이 {len(rows)}건 있습니다. 주요 결과는 다음과 같습니다."
     ]
     for i, row in enumerate(rows[:10], start=1):
-        name = row.get("A24")
-        name_s = (
-            str(name)
-            if name not in (None, "") and str(name).lower() != "nan"
-            else f"지번 {row.get('A5') or '—'}"
-        )
+        name_s = _row_name(row, fallback=f"지번 {row.get('A5') or '—'}")
         if attr_only == "주소":
-            loc = " ".join(
-                str(x).strip()
-                for x in (row.get("A4"), row.get("A5"))
-                if x not in (None, "") and str(x).lower() != "nan"
-            )
-            lines.append(f"{i}) 「{name_s}」 — {loc or '—'}")
+            lines.append(f"{i}) 「{name_s}」 — {_row_addr(row) or '—'}")
         else:
             lines.append(
                 f"{i}) 「{name_s}」 — {row.get('A4') or '—'}, "
@@ -596,11 +566,7 @@ def _strip_answer_text(text: str) -> str:
 
 
 def _resolve_client(*, host: str | None, client: Any | None) -> Any:
-    if client is not None:
-        return client
-    if not host:
-        raise ValueError("host 또는 client가 필요합니다.")
-    return ollama.Client(host=host)
+    return resolve_client(host=host, client=client)
 
 
 def _chat(
@@ -611,17 +577,13 @@ def _chat(
     client: Any | None = None,
     temperature: float = 0.2,
 ) -> str:
-    client = _resolve_client(host=host, client=client)
-    kwargs: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "options": {"temperature": temperature},
-    }
-    try:
-        response = client.chat(**kwargs, think=False)
-    except TypeError:
-        response = client.chat(**kwargs)
-    return response["message"]["content"]
+    return chat(
+        model=model,
+        messages=messages,
+        host=host,
+        client=client,
+        temperature=temperature,
+    )
 
 
 def _chat_stream(
@@ -634,32 +596,44 @@ def _chat_stream(
     on_token: TokenCallback | None = None,
 ) -> str:
     """Ollama chat 스트림. 토큰마다 on_token을 호출하고 전체 문자열을 반환."""
-    client = _resolve_client(host=host, client=client)
-    kwargs: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "options": {"temperature": temperature},
-        "stream": True,
-    }
-    try:
-        stream = client.chat(**kwargs, think=False)
-    except TypeError:
-        stream = client.chat(**kwargs)
+    return chat(
+        model=model,
+        messages=messages,
+        host=host,
+        client=client,
+        temperature=temperature,
+        stream=True,
+        on_token=on_token,
+    )
 
-    parts: list[str] = []
-    for chunk in stream:
-        message = chunk.get("message") if isinstance(chunk, dict) else None
-        content = ""
-        if isinstance(message, dict):
-            content = message.get("content") or ""
-        elif message is not None:
-            content = getattr(message, "content", None) or ""
-        if not content:
-            continue
-        parts.append(content)
-        if on_token is not None:
-            on_token(content)
-    return "".join(parts)
+
+def _llm_narrate(
+    *,
+    system: str,
+    user: str,
+    model: str,
+    host: str | None,
+    client: Any | None,
+    temperature: float,
+    on_token: TokenCallback | None,
+    empty_error: str,
+) -> str:
+    raw = chat(
+        model=model,
+        host=host,
+        client=client,
+        temperature=temperature,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        stream=on_token is not None,
+        on_token=on_token,
+    )
+    answer = _strip_answer_text(raw)
+    if not answer:
+        raise ValueError(empty_error)
+    return answer
 
 
 def emit_text_chunks(
@@ -690,11 +664,14 @@ PROFILE_SYSTEM_PROMPT = """당신은 부산 GIS 건물 집계 결과를 사용�
 - 불릿·번호 목록·마크다운을 쓰지 말고 2~6문장의 문단으로 답하세요.
 - focus=usage_overview 이면 상위 용도 구성·비율을 중심으로 설명하고, 용도명의 일반적 의미는 짧게만 덧붙이세요.
 - compare=true 이고 compare_kind=top_building 이면 각 지역의 ‘최고 건물’을 모두 소개하고, metric 기준으로 어느 지역 건물이 더 높은지/큰지 비교하세요.
+- compare=true 이고 compare_kind=industrial 이면 지역 전체와 산업단지 내 건물을 대비해 설명하세요.
+- far_focus=true 이거나 avg_far_pct가 있으면 용적율(필요 시 건폐율)을 중심으로 비교·설명하세요.
 - compare=true 이고 일반 groups 집계면 평균·동 수 등을 비교하세요.
 - groups에 '부산시 전역'이 있으면 특정 지역을 시 전체 평균·규모와 대비해 설명하세요.
 - SQL, 컬럼코드(A12 등), 테이블명, 라우트명을 넣지 마세요.
-- 면적은 ㎡, 높이는 m, 층은 층, 건물은 동/채로 쓰세요.
+- 면적은 ㎡, 높이는 m, 층은 층, 용적율·건폐율은 %, 건물은 동/채로 쓰세요.
 - apartment_note가 있으면 아파트=공동주택 집계라는 점을 자연스럽게 한 문장으로 언급하세요.
+- far_note가 있으면 용적율 산출 방식을 한 문장으로 짧게 안내하세요.
 - 조사는 자연스럽게 하나만 쓰세요. '은(는)', '이(가)', '을(를)'처럼 병기하지 마세요.
 - 출력은 답변 본문만.
 """
@@ -715,31 +692,16 @@ def narrate_building_profile(
         f"집계 결과(JSON):\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n\n"
         "위 집계만 근거로 한국어 특징 요약을 작성하세요."
     )
-    messages = [
-        {"role": "system", "content": PROFILE_SYSTEM_PROMPT},
-        {"role": "user", "content": user_content},
-    ]
-    if on_token is not None:
-        raw = _chat_stream(
-            model=model,
-            host=host,
-            client=client,
-            messages=messages,
-            temperature=0.3,
-            on_token=on_token,
-        )
-    else:
-        raw = _chat(
-            model=model,
-            host=host,
-            client=client,
-            messages=messages,
-            temperature=0.3,
-        )
-    answer = _strip_answer_text(raw)
-    if not answer:
-        raise ValueError("빈 프로필 LLM 답변")
-    return answer
+    return _llm_narrate(
+        system=PROFILE_SYSTEM_PROMPT,
+        user=user_content,
+        model=model,
+        host=host,
+        client=client,
+        temperature=0.3,
+        on_token=on_token,
+        empty_error="빈 프로필 LLM 답변",
+    )
 
 
 def generate_natural_answer(
@@ -761,33 +723,17 @@ def generate_natural_answer(
         f"조회 결과(JSON):\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n\n"
         "위 결과만 근거로 한국어 답변을 작성하세요."
     )
-    # SQL은 모델이 숫자 왜곡하지 않도록 넣지 않음 (필요 시 실패 경로에서만)
     _ = sql
-    messages = [
-        {"role": "system", "content": ANSWER_SYSTEM_PROMPT},
-        {"role": "user", "content": user_content},
-    ]
-    if on_token is not None:
-        raw = _chat_stream(
-            model=model,
-            host=host,
-            client=client,
-            messages=messages,
-            temperature=0.2,
-            on_token=on_token,
-        )
-    else:
-        raw = _chat(
-            model=model,
-            host=host,
-            client=client,
-            messages=messages,
-            temperature=0.2,
-        )
-    answer = _strip_answer_text(raw)
-    if not answer:
-        raise ValueError("빈 LLM 답변")
-    return answer
+    return _llm_narrate(
+        system=ANSWER_SYSTEM_PROMPT,
+        user=user_content,
+        model=model,
+        host=host,
+        client=client,
+        temperature=0.2,
+        on_token=on_token,
+        empty_error="빈 LLM 답변",
+    )
 
 
 def format_success_template(
@@ -894,7 +840,6 @@ def format_success(
     on_token: TokenCallback | None = None,
 ) -> str:
     """성공 시 자연스러운 한국어 답변 (가능하면 LLM, 실패 시 템플릿)."""
-    # 건물 순위는 템플릿이 컬럼 혼동·과장 없이 더 안전하다.
     # 건물 순위·특정 건물명 조회는 템플릿이 컬럼 혼동·과장 없이 더 안전하다.
     prefer_template = bool(
         (route and str(route).startswith("building_rank_"))

@@ -4,9 +4,9 @@ import hashlib
 import re
 from typing import Any
 
-import ollama
 import psycopg
 
+from llm2sql.llm import resolve_client
 from llm2sql.semantic_meta import (
     SAMPLE_COLUMNS,
     column_synonyms,
@@ -71,10 +71,7 @@ def embed_text(
     clipped = text.strip()
     if len(clipped) > 400:
         clipped = clipped[:400]
-    if client is None:
-        if not host:
-            raise ValueError("host 또는 client가 필요합니다.")
-        client = ollama.Client(host=host)
+    client = resolve_client(host=host, client=client)
     response = client.embeddings(model=model, prompt=clipped)
     embedding = response["embedding"] if isinstance(response, dict) else response.embedding
     return list(embedding)
