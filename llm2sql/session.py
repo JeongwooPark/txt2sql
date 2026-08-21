@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,7 +33,32 @@ class SessionContext:
     ) -> None:
         self.last_question = question
         # 장소·연수 등이 있는 실질 질의는 full로 유지 (짧은 기준 보정용)
-        if len(question.strip()) >= 12 or any(
+        n_m = re.search(r"(\d+)\s*(개|곳|채)", question)
+        if (
+            re.search(rf"\d+\s*년\s*(단위|간격|별|씩)", question)
+            or re.search(r"[가-힣]+\s*년\s*(단위|간격|별|씩)", question)
+            or re.search(r"(연대별|년대별)", question)
+            or re.search(
+                r"\d+\s*(?:㎡|제곱미터|m2|평|km|킬로미터|층)?\s*(단위|간격|별|씩)",
+                question,
+            )
+            or re.search(r"\d+\s*(?:단위로|으로)?\s*묶", question)
+            or any(
+                k in question
+                for k in ("크기별", "구간별", "단위별", "크기 단위")
+            )
+        ) and self.last_full_question:
+            pass
+        elif n_m and self.last_full_question and len(question.strip()) < 16:
+            # '5개는'처럼 건수만 바꿀 때, 예전 '3개'가 full에 남지 않게 치환
+            replaced = re.sub(
+                r"\d+\s*(개|곳|채)",
+                n_m.group(0),
+                self.last_full_question,
+                count=1,
+            )
+            self.last_full_question = replaced
+        elif len(question.strip()) >= 12 or any(
             k in question
             for k in ("동", "구", "주택", "건물", "아파트", "년", "채", "몇")
         ):
@@ -113,11 +139,34 @@ class SessionContext:
                 # 다건·비건물 결과면 focus 해제
                 if len(norm_rows) != 1:
                     self.focus_row = None
+                sql = str(result.get("sql") or "")
+                tables = result.get("tables") or []
+                if "AL_D198" in sql:
+                    d198 = next(
+                        (t for t in tables if str(t).startswith("AL_D198")),
+                        None,
+                    )
+                    if d198:
+                        self.table = str(d198)
+                    else:
+                        m = re.search(r'"(AL_D198_[^"]+)"', sql)
+                        if m:
+                            self.table = m.group(1)
+
+        from llm2sql.domain import extract_gu, extract_place, extract_usage
 
         if place:
             self.place = place
+        else:
+            guessed = extract_place(question) or extract_gu(question)
+            if guessed:
+                self.place = guessed
         if usage:
             self.usage = usage
+        else:
+            guessed_u = extract_usage(question)
+            if guessed_u:
+                self.usage = guessed_u
 
     def clear_focus(self) -> None:
         self.focus_row = None

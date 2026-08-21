@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -11,8 +12,6 @@ from psycopg.rows import dict_row
 
 from llm2sql.answer import emit_text_chunks, narrate_building_profile
 from llm2sql.domain import (
-    DONG_RE,
-    GU_RE,
     USAGE_ALIASES,
     d198_table_for_gu,
     extract_gu,
@@ -26,6 +25,8 @@ from llm2sql.domain import (
     with_topic,
 )
 from llm2sql.progress import TokenCallback
+from llm2sql.spatial_templates import admin_dong_where
+from llm2sql.gazetteer import uses_admin_boundary
 
 _PROFILE_HINTS = (
     "특징",
@@ -140,7 +141,7 @@ def is_usage_overview_question(question: str) -> bool:
     )
     if not explainish:
         return False
-    if DONG_RE.search(q) or GU_RE.search(q):
+    if extract_place(q) or extract_gu(q):
         return True
     return any(k in q for k in ("건물", "건축물", "주택", "아파트"))
 
@@ -318,6 +319,14 @@ def is_profile_question(question: str) -> bool:
 
     if is_rank_compare_question(q):
         return False
+    # 법정동→행정동 비율 질의는 공간 분배 라우트
+    if any(k in q for k in ("몇%", "몇 %", "퍼센트씩", "몇 퍼센트", "%씩", "몇 프로")):
+        return False
+    if "행정동" in q and any(
+        k in q for k in ("무엇", "목록", "내에", "안에", "구성")
+    ):
+        if not any(k in q for k in ("특징", "비교", "퍼센트", "건물", "아파트")):
+            return False
 
     summary_hints = (
         "특징",
@@ -347,7 +356,7 @@ def is_profile_question(question: str) -> bool:
             if not (_wants_citywide_compare(q) and places):
                 if not (_wants_industrial_compare(q) and (places or extract_gu(q))):
                     return False
-    if DONG_RE.search(q) or GU_RE.search(q):
+    if extract_places(q) or extract_gu(q):
         return True
     if any(k in q for k in USAGE_ALIASES):
         return True
@@ -370,6 +379,21 @@ def answer_profile_question(
         return None
 
     q = question.strip()
+    place = extract_place(q)
+    gu_name = extract_gu(q)
+    if place:
+        from llm2sql.gazetteer import is_locality
+
+        if is_locality(place):
+            from llm2sql.clarify_qa import _lookup_admin_dong, _lookup_places
+
+            found = _lookup_places(conn, place, gu=gu_name)
+            if not found:
+                admin = _lookup_admin_dong(conn, place)
+                # '%하동%'이 '하단동'에 걸리는 부분일치 오탐 제외
+                if admin != place:
+                    return None
+
     places = extract_places(q)
     usages = extract_usages(q)
     wants_compare = any(
@@ -500,14 +524,53 @@ def answer_profile_question(
     )
 
 
-def _stats_sql(where_sql: str, *, in_industrial: bool = False) -> str:
-    prefix = "b." if in_industrial else ""
+def _use_admin_boundary(place: str | None) -> bool:
+    """행정동 전용 명칭은 A4(법정동)가 아니라 경계 교차로 집계한다."""
+    return uses_admin_boundary(place)
+
+
+def _profile_from_where(
+    *,
+    place: str | None,
+    usage: str | None,
+    in_industrial: bool = False,
+) -> tuple[str, str, str, bool]:
+    """(컬럼 prefix, FROM, WHERE, 행정동경계 사용)."""
+    admin = _use_admin_boundary(place)
+    alias = admin or in_industrial
+    prefix = "b." if alias else ""
+    if admin:
+        from_sql = (
+            '"AL_D010_26_20250704" b\n'
+            'JOIN "BND_ADM_DONG_PG" d\n'
+            "  ON ST_Intersects(b.geometry, d.geometry)"
+        )
+        where = [admin_dong_where(str(place))]
+    else:
+        from_sql = (
+            '"AL_D010_26_20250704" b' if alias else '"AL_D010_26_20250704"'
+        )
+        where: list[str] = []
+        if place:
+            pred = place_a4_predicate(place)
+            if alias:
+                pred = pred.replace('"A4"', 'b."A4"')
+            where.append(pred)
+    if usage:
+        where.append(f'{prefix}"A9" = \'{usage}\'')
+    if in_industrial:
+        where.append(
+            "EXISTS ("
+            'SELECT 1 FROM "AL_D060_00_20250804" i '
+            "WHERE ST_Intersects(b.geometry, i.geometry)"
+            ")"
+        )
+    where_sql = " AND ".join(where) if where else "TRUE"
+    return prefix, from_sql, where_sql, admin
+
+
+def _stats_sql(where_sql: str, *, prefix: str = "", from_sql: str) -> str:
     far_exprs = _far_select_exprs(prefix)
-    from_sql = (
-        '"AL_D010_26_20250704" b'
-        if in_industrial
-        else '"AL_D010_26_20250704"'
-    )
     a12 = f'{prefix}"A12"'
     a14 = f'{prefix}"A14"'
     a16 = f'{prefix}"A16"'
@@ -540,28 +603,10 @@ def _fetch_profile(
     usage: str | None,
     in_industrial: bool = False,
 ) -> tuple[str, dict[str, Any], list[dict[str, Any]], str]:
-    prefix = "b." if in_industrial else ""
-    where: list[str] = []
-    if place:
-        pred = place_a4_predicate(place)
-        if in_industrial:
-            pred = pred.replace('"A4"', 'b."A4"')
-        where.append(pred)
-    if usage:
-        where.append(f'{prefix}"A9" = \'{usage}\'')
-    if in_industrial:
-        where.append(
-            "EXISTS ("
-            'SELECT 1 FROM "AL_D060_00_20250804" i '
-            "WHERE ST_Intersects(b.geometry, i.geometry)"
-            ")"
-        )
-    where_sql = " AND ".join(where) if where else "TRUE"
-    sql = _stats_sql(where_sql, in_industrial=in_industrial)
-
-    struct_from = (
-        '"AL_D010_26_20250704" b' if in_industrial else '"AL_D010_26_20250704"'
+    prefix, from_sql, where_sql, _admin = _profile_from_where(
+        place=place, usage=usage, in_industrial=in_industrial
     )
+    sql = _stats_sql(where_sql, prefix=prefix, from_sql=from_sql)
     struct_col = f'{prefix}"A11"'
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(sql)
@@ -569,7 +614,7 @@ def _fetch_profile(
         cur.execute(
             f"""
             SELECT {struct_col} AS structure, COUNT(*) AS n
-            FROM {struct_from}
+            FROM {from_sql}
             WHERE {where_sql}
             GROUP BY 1
             ORDER BY 2 DESC
@@ -611,14 +656,11 @@ def _answer_single(
     where_sql, stats, structures, sql = _fetch_profile(
         conn, place=place, usage=usage, in_industrial=in_industrial
     )
+    prefix, from_sql, where_sql, admin = _profile_from_where(
+        place=place, usage=usage, in_industrial=in_industrial
+    )
     usages_rows: list[dict[str, Any]] = []
     if not usage:
-        prefix = "b." if in_industrial else ""
-        from_sql = (
-            '"AL_D010_26_20250704" b'
-            if in_industrial
-            else '"AL_D010_26_20250704"'
-        )
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 f"""
@@ -641,6 +683,8 @@ def _answer_single(
     tables = ["AL_D010_26_20250704"]
     if in_industrial:
         tables.append("AL_D060_00_20250804")
+    if admin:
+        tables.append("BND_ADM_DONG_PG")
     if cnt == 0:
         answer = (
             f"{label}에 해당하는 건물을 찾지 못했습니다. "
@@ -724,12 +768,16 @@ def _answer_compare_groups(
     all_rows: list[dict[str, Any]] = []
     groups: list[dict[str, Any]] = []
     any_industrial = False
+    any_admin = False
 
     for spec in groups_spec:
         place = spec.get("place")
         usage = spec.get("usage")
         in_industrial = bool(spec.get("in_industrial"))
         any_industrial = any_industrial or in_industrial
+        admin = _use_admin_boundary(place)
+        any_admin = any_admin or admin
+        place_basis = "행정동 경계" if admin else "법정동 주소"
         label = spec.get("label") or (
             _industrial_label(place, usage, q)
             if in_industrial
@@ -748,6 +796,7 @@ def _answer_compare_groups(
                 "usage": usage,
                 "label": label,
                 "in_industrial": in_industrial,
+                "place_basis": place_basis,
                 **stats,
             }
         )
@@ -757,6 +806,7 @@ def _answer_compare_groups(
                 "place": place,
                 "usage": usage,
                 "in_industrial": in_industrial,
+                "place_basis": place_basis,
                 "building_count": int(stats.get("cnt") or 0),
                 "avg_floor_area_m2": _num(stats.get("avg_area")),
                 "median_floor_area_m2": _num(stats.get("med_area")),
@@ -799,6 +849,8 @@ def _answer_compare_groups(
     tables = ["AL_D010_26_20250704"]
     if any_industrial:
         tables.append("AL_D060_00_20250804")
+    if any_admin:
+        tables.append("BND_ADM_DONG_PG")
     return ProfileAnswer(
         intent="building_profile_compare",
         answer=answer,
@@ -828,7 +880,13 @@ def _finalize_profile_answer(
                 client=client,
                 on_token=on_token,
             )
-            return fix_dual_particles(answer)
+            answer = fix_dual_particles(answer)
+            if payload.get("apartment_note") and "공동주택" not in answer:
+                extra = " 아파트는 공동주택 용도로 집계했습니다."
+                answer = answer.rstrip() + extra
+                if on_token is not None:
+                    emit_text_chunks(extra, on_token)
+            return answer
         except Exception:
             pass
     fixed = fix_dual_particles(fallback)
@@ -913,6 +971,23 @@ def _prose_compare(
         parts = [f"{scope}의 건물 특징을 비교하면 다음과 같습니다."]
     else:
         parts = [f"{scope}에서 용도별 건물 특징을 비교하면 다음과 같습니다."]
+    admins = [
+        str(g.get("place"))
+        for g in groups
+        if _use_admin_boundary(g.get("place"))
+    ]
+    legals = [
+        str(g.get("place"))
+        for g in groups
+        if g.get("place")
+        and not _use_admin_boundary(g.get("place"))
+        and str(g.get("label") or "") != "부산시 전역"
+    ]
+    if admins and legals:
+        parts.append(
+            f"{'·'.join(admins)}은 행정동 경계, "
+            f"{'·'.join(legals)}은 법정동 주소 기준으로 집계했습니다."
+        )
     for g in groups:
         cnt = int(g.get("building_count") or 0)
         label = g.get("label") or "해당 조건"

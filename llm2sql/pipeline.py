@@ -5,7 +5,14 @@ from typing import Any
 
 import psycopg
 
-from llm2sql.answer import emit_text_chunks, format_failure, format_success
+from llm2sql.answer import (
+    emit_text_chunks,
+    format_failure,
+    format_success,
+    format_success_template,
+    build_distribution,
+    build_share_distribution,
+)
 from llm2sql.chart_qa import (
     attach_chart_offer,
     chart_capability_answer,
@@ -18,7 +25,12 @@ from llm2sql.chart_qa import (
     parse_chart_type_request,
     with_chart_type,
 )
-from llm2sql.clarify_qa import check_ambiguity, resolve_place_clarify_choice
+from llm2sql.clarify_qa import (
+    ClarifyAnswer,
+    check_ambiguity,
+    resolve_place_clarify_choice,
+    unknown_term_guidance,
+)
 from llm2sql.config import Settings
 from llm2sql.db import connect, execute_query
 from llm2sql.domain import (
@@ -28,7 +40,20 @@ from llm2sql.domain import (
     looks_like_building_name_lookup,
     looks_like_standalone_question,
 )
-from llm2sql.followup_qa import answer_followup, is_followup_question
+from llm2sql.d198_attrs import (
+    is_value_bin_followup,
+    is_year_grain_followup,
+    rows_as_bin_counts,
+    session_has_year_stats,
+    wrap_year_sql_as_bin,
+    year_stats_grain,
+)
+from llm2sql.followup_qa import (
+    answer_followup,
+    is_followup_question,
+    is_list_attr_followup,
+    try_subset_followup,
+)
 from llm2sql.guide_qa import _coverage_text, _is_coverage_question, try_guide
 from llm2sql.intent_classifier import (
     IntentPrediction,
@@ -46,7 +71,13 @@ from llm2sql.profile_qa import (
 from llm2sql.progress import ProgressCallback, ProgressTracker, TokenCallback
 from llm2sql.rag_sql import run_rag_sql
 from llm2sql.rank_compare_qa import answer_rank_compare, is_rank_compare_question
-from llm2sql.route_dispatch import DispatchMode, match_route, tables_for_intent
+from llm2sql.route_dispatch import (
+    DispatchMode,
+    match_route,
+    tables_for_intent,
+    tables_from_sql,
+)
+from llm2sql.router_lexicon import map_unknown_to_router
 from llm2sql.session import SessionContext
 
 _AGE_REPLY_HINTS = (
@@ -72,6 +103,27 @@ _META_ATTR_ONLY = re.compile(
     r"(지번|주소|이름|건물명|높이|용도|연면적|건물면적|층수|몇\s*층)"
     r"(은|는|이|가)?\s*\??"
 )
+
+
+def _ensure_result_table(
+    result: dict[str, Any], question: str
+) -> dict[str, Any]:
+    """구간·비율 답변에 HTML 표용 table 페이로드를 붙인다."""
+    if result.get("table"):
+        return result
+    route = str(result.get("route") or "")
+    rows = list(result.get("rows") or [])
+    table = None
+    if route in {"d198_year_stats", "d198_value_bins"}:
+        table = build_distribution(
+            question, rows=rows, route=route, row_count=len(rows)
+        )
+    elif route == "legal_dong_admin_share":
+        table = build_share_distribution(rows)
+    if table:
+        result = dict(result)
+        result["table"] = table
+    return result
 
 
 def _payload(
@@ -122,11 +174,63 @@ def _llm_kw(settings: Settings, ollama_client: Any | None) -> dict[str, Any]:
     }
 
 
+def _resolve_unknown_terms(
+    question: str,
+    clarify: ClarifyAnswer,
+    settings: Settings,
+    progress: ProgressTracker,
+    *,
+    conn: psycopg.Connection,
+    ollama_client: Any | None,
+    deferred_route: Any | None,
+) -> tuple[str, Any | None, ClarifyAnswer | None]:
+    """미지 단어를 라우터 어휘에 맞추고, 못 맞추면 보완 질문을 남긴다."""
+    progress.emit("route", "미지용어 → 라우터 유사어 탐색")
+    syn = map_unknown_to_router(
+        question,
+        list(clarify.ambiguous_terms),
+        **_llm_kw(settings, ollama_client),
+    )
+    if syn.mappings:
+        mapped_txt = ", ".join(f"{src}→{dst}" for src, dst in syn.mappings)
+        progress.emit("route", f"미지용어 대응 ({syn.source}): {mapped_txt}")
+        question = syn.question
+        routed_syn = try_route(question, conn=conn)
+        if routed_syn is not None:
+            deferred_route = routed_syn
+    if syn.unmapped:
+        remaining = ClarifyAnswer(
+            intent="clarify_unknown_term",
+            ambiguous_terms=list(syn.unmapped),
+            options=[],
+            answer=unknown_term_guidance(list(syn.unmapped), mapped=syn.mappings),
+        )
+        return question, deferred_route, remaining
+    if syn.mappings:
+        return question, deferred_route, None
+    remaining = ClarifyAnswer(
+        intent="clarify_unknown_term",
+        ambiguous_terms=list(clarify.ambiguous_terms),
+        options=[],
+        answer=unknown_term_guidance(list(clarify.ambiguous_terms)),
+    )
+    return question, deferred_route, remaining
+
+
+def _strip_count_tail(question: str) -> str:
+    return re.sub(
+        r"\s*(은|는)?\s*"
+        r"(몇\s*채야|몇\s*개야|몇\s*채\??|몇\s*개\??|건수는\??|수는\??)\s*\??$",
+        "",
+        question.strip(),
+    ).rstrip("?？")
+
+
 def _expand_followup_question(
     question: str,
     session: SessionContext | None,
 ) -> str:
-    """짧은 기준 보정(건축년수·준공일 등)만 직전 질문과 합친다.
+    """짧은 기준 보정·지시어 후속을 직전 질문과 합친다.
 
     새 장소·새 주제의 독립 질문은 그대로 둔다.
     """
@@ -135,9 +239,36 @@ def _expand_followup_question(
     q = question.strip()
     if looks_like_standalone_question(q):
         return question
+    if is_list_attr_followup(q, session):
+        return question
+    if year_stats_grain(q) is not None and session_has_year_stats(session):
+        base = session.last_full_question or session.last_question
+        if base and base.strip() != q:
+            return f"{base} {q}"
+    if is_value_bin_followup(q, session):
+        base = session.last_full_question or session.last_question
+        if base and base.strip() != q:
+            return f"{base} {q}"
     base = session.last_full_question or session.last_question
     if not base:
         return question
+    subsetish = has_anaphora(q) or any(
+        h in q for h in ("그 중", "그중", "이 중", "그중에")
+    ) or (
+        "제외" in q and any(k in q for k in ("건설일", "사용승인", "준공", "지어"))
+    ) or (
+        "최근" in q and re.search(r"\d+\s*개", q)
+    ) or (
+        re.search(r"\d+\s*개", q)
+        and any(k in q for k in ("출력", "보여", "목록"))
+    )
+    if subsetish:
+        follow = re.sub(
+            r"^(그 중에|그 중|그중|이 중에|이 중|그중에)\s*",
+            "",
+            q,
+        )
+        return f"{_strip_count_tail(base)} 중에서 {follow}"
     if len(q) > 40:
         return question
     if not any(k in q for k in _AGE_REPLY_HINTS):
@@ -230,6 +361,96 @@ def _rewrite_session_question(
             question = rewritten
 
     return question, None
+
+
+def _try_list_attr_followup(
+    question: str,
+    settings: Settings,
+    progress: ProgressTracker,
+    session: SessionContext | None,
+    *,
+    ollama_client: Any | None,
+    on_token: TokenCallback | None,
+) -> dict[str, Any] | None:
+    """직전 목록을 유지한 채 사용승인일 등만 덧붙인다. 건수를 다시 자르지 않는다."""
+    _ = ollama_client
+    if session is None or not is_list_attr_followup(question, session):
+        return None
+    rows = list(session.last_rows)
+    sql = session.last_sql or ""
+    route = session.last_route or "d198_attr_list"
+    fmt_q = session.last_full_question or session.last_question or question
+    if not any(k in fmt_q for k in ("사용승인", "허가일", "건설일")):
+        fmt_q = f"{fmt_q} 사용승인일"
+    progress.emit("route", "직전 목록 유지·속성 추가")
+    progress.emit("sql", "직전 SQL 재사용", sql=sql)
+    answer = format_success_template(
+        fmt_q,
+        sql=sql,
+        rows=rows,
+        row_count=len(rows),
+        route=route,
+    )
+    emit_text_chunks(answer, on_token)
+    return _payload(
+        answer=answer,
+        sql=sql,
+        tables=tables_from_sql(sql),
+        rows=rows,
+        route=route,
+    )
+
+
+def _try_year_grain_followup(
+    question: str,
+    settings: Settings,
+    progress: ProgressTracker,
+    session: SessionContext | None,
+    *,
+    ollama_client: Any | None,
+    on_token: TokenCallback | None,
+) -> dict[str, Any] | None:
+    """직전 연도별 건립 건수를 N년 단위로 다시 묶는다."""
+    _ = settings
+    if session is None or not is_year_grain_followup(question, session):
+        return None
+    grain = year_stats_grain(question) or 10
+    src_rows = list(session.last_rows or [])
+    rows = rows_as_bin_counts(src_rows, grain)
+    sql = wrap_year_sql_as_bin(session.last_sql or "", grain)
+    if not rows or not sql:
+        return None
+    fmt_q = session.last_full_question or session.last_question or question
+    if grain == 10:
+        if "10년" not in fmt_q and "연대" not in fmt_q:
+            fmt_q = f"{fmt_q} 10년 단위"
+    elif f"{grain}년" not in fmt_q:
+        fmt_q = f"{fmt_q} {grain}년 단위"
+    progress.emit("route", f"직전 연도별 통계를 {grain}년 단위로 재집계")
+    progress.emit("sql", f"연도 집계를 {grain}년 단위로 변환", sql=sql)
+    answer = format_success(
+        fmt_q,
+        sql=sql,
+        rows=rows,
+        row_count=len(rows),
+        route="d198_year_stats",
+        on_token=on_token,
+        **_llm_kw(settings, ollama_client),
+    )
+    extra: dict[str, Any] = {}
+    table = build_distribution(
+        fmt_q, rows=rows, route="d198_year_stats", row_count=len(rows)
+    )
+    if table:
+        extra["table"] = table
+    return _payload(
+        answer=answer,
+        sql=sql,
+        tables=tables_from_sql(session.last_sql or sql),
+        rows=rows,
+        route="d198_year_stats",
+        **extra,
+    )
 
 
 def _chart_reply(
@@ -452,11 +673,53 @@ def run_ask(
         if early is not None:
             return early
 
+    listed = _try_list_attr_followup(
+        question,
+        settings,
+        progress,
+        session,
+        ollama_client=ollama_client,
+        on_token=on_token,
+    )
+    if listed is not None:
+        listed["steps"] = progress.steps
+        if session is not None and listed.get("ok"):
+            keep_full = session.last_full_question
+            session.update_from_result(question, listed)
+            if keep_full:
+                session.last_full_question = keep_full
+        return listed
+
+    grained = _try_year_grain_followup(
+        question,
+        settings,
+        progress,
+        session,
+        ollama_client=ollama_client,
+        on_token=on_token,
+    )
+    if grained is not None:
+        grained["steps"] = progress.steps
+        if session is not None and grained.get("ok"):
+            keep_full = session.last_full_question
+            session.update_from_result(question, grained)
+            if keep_full:
+                session.last_full_question = keep_full
+        return attach_chart_offer(grained, question=question)
+
     chart = _try_chart_turn(question, session, progress, on_token)
     if chart is not None:
         return chart
 
-    preferred = _classify_intent(question, settings, progress, ollama_client)
+    # 안내·범위 외는 의도분류 LLM보다 먼저 (지연·오분류 방지)
+    guide_early = try_guide(question)
+    if guide_early is not None:
+        return _guide_result(guide_early, progress, on_token)
+
+    preferred = None
+    followup_now = session is not None and is_followup_question(question, session)
+    if not followup_now:
+        preferred = _classify_intent(question, settings, progress, ollama_client)
     preferred, guide = _try_guide_turn(question, preferred, progress, on_token)
     if guide is not None:
         return guide
@@ -498,6 +761,7 @@ def run_ask(
             error=f"{type(exc).__name__}: {exc}",
         )
     result["steps"] = progress.steps
+    result = _ensure_result_table(result, effective)
     before_offer = str(result.get("answer") or "")
     result = attach_chart_offer(result, question=effective)
     if (
@@ -510,7 +774,7 @@ def run_ask(
     if session is not None and result.get("ok"):
         if looks_like_standalone_question(question) and not str(
             result.get("route") or ""
-        ).startswith("followup_"):
+        ).startswith(("followup_", "d198_year_stats", "d198_value_bins")):
             session.clear_focus()
         session.update_from_result(effective, result)
     return result
@@ -568,6 +832,8 @@ def _try_preferred_intent(
         clarify = check_ambiguity(conn, question)
         if clarify is None:
             return None
+        if clarify.intent == "clarify_unknown_term":
+            return None
         emit_text_chunks(clarify.answer, on_token)
         return _qa_ok(clarify, ambiguous_terms=clarify.ambiguous_terms)
 
@@ -586,7 +852,7 @@ def _finish_routed_query(
     route_label: str,
 ) -> dict[str, Any]:
     """규칙 라우터 SQL을 실행하고 한국어 답변까지 만든다."""
-    tables = tables_for_intent(routed.intent)
+    tables = tables_from_sql(routed.sql) or tables_for_intent(routed.intent)
     progress.emit("route", route_label)
     progress.emit("sql", "라우터 SQL 확정", sql=routed.sql)
     progress.emit("execute", "DB 조회 실행")
@@ -615,12 +881,24 @@ def _finish_routed_query(
         on_token=on_token,
         **_llm_kw(settings, ollama_client),
     )
+    extra: dict[str, Any] = {}
+    if routed.intent in {"d198_year_stats", "d198_value_bins"}:
+        table = build_distribution(
+            question, rows=rows, route=routed.intent, row_count=len(rows)
+        )
+        if table:
+            extra["table"] = table
+    elif routed.intent == "legal_dong_admin_share":
+        table = build_share_distribution(rows)
+        if table:
+            extra["table"] = table
     return _payload(
         answer=answer,
         sql=routed.sql,
         tables=tables,
         rows=rows,
         route=routed.intent,
+        **extra,
     )
 
 
@@ -635,12 +913,83 @@ def _ask_inner(
     on_token: TokenCallback | None = None,
     preferred_intent: IntentPrediction | None = None,
 ) -> dict[str, Any]:
+    if session is not None:
+        subset = try_subset_followup(question, session)
+        if subset is not None:
+            return _finish_routed_query(
+                question,
+                settings,
+                progress,
+                conn=conn,
+                ollama_client=ollama_client,
+                on_token=on_token,
+                routed=subset,
+                route_label="직전 조건 유지 후속",
+            )
+        grain = year_stats_grain(question)
+        if (
+            grain is not None
+            and grain >= 2
+            and session_has_year_stats(session)
+        ):
+            base = session.last_full_question or session.last_question or ""
+            merged = question
+            if base and base.strip() not in question:
+                merged = f"{base} {question}".strip()
+            routed_year = try_route(merged, conn=conn)
+            if routed_year is not None and routed_year.intent == "d198_year_stats":
+                return _finish_routed_query(
+                    merged,
+                    settings,
+                    progress,
+                    conn=conn,
+                    ollama_client=ollama_client,
+                    on_token=on_token,
+                    routed=routed_year,
+                    route_label=f"직전 연도 통계 {grain}년 단위",
+                )
+        if is_value_bin_followup(question, session):
+            base = session.last_full_question or session.last_question or ""
+            merged = question
+            if base and base.strip() not in question:
+                merged = f"{base} {question}".strip()
+            routed_bin = try_route(merged, conn=conn)
+            if routed_bin is not None and routed_bin.intent == "d198_value_bins":
+                return _finish_routed_query(
+                    merged,
+                    settings,
+                    progress,
+                    conn=conn,
+                    ollama_client=ollama_client,
+                    on_token=on_token,
+                    routed=routed_bin,
+                    route_label="직전 조건 유지 수치 구간",
+                )
+
     if is_followup_question(question, session) and session is not None:
         progress.emit("route", "후속 질문(직전 결과 참조)으로 판단")
         follow = answer_followup(conn, question, session)
-        progress.emit("answer", f"후속 답변 완료 ({follow.intent})")
-        emit_text_chunks(follow.answer, on_token)
-        return _qa_ok(follow)
+        if follow.intent == "followup_no_context" or not follow.rows:
+            progress.emit("answer", f"후속 답변 완료 ({follow.intent})")
+            emit_text_chunks(follow.answer, on_token)
+            return _qa_ok(follow)
+        progress.emit("answer", "후속 답변 자연어 생성")
+        answer = format_success(
+            question,
+            sql=follow.sql or "",
+            rows=follow.rows,
+            row_count=len(follow.rows),
+            route=follow.intent,
+            on_token=on_token,
+            **_llm_kw(settings, ollama_client),
+        )
+        return _payload(
+            answer=answer,
+            sql=follow.sql,
+            tables=follow.tables,
+            rows=follow.rows,
+            route=follow.intent,
+        )
 
     mode: DispatchMode = (
         "baseline" if settings.route_dispatch_mode == "baseline" else "optimized"
@@ -653,6 +1002,8 @@ def _ask_inner(
             label = "건물명 조회 라우트"
         elif early.intent.startswith("building_rank_"):
             label = f"건물 순위 라우트 ({early.intent})"
+        elif early.intent == "legal_dong_admin_members":
+            label = "법정동 구성 행정동 목록"
         else:
             label = f"산업단지 라우트 ({early.intent})"
         return _finish_routed_query(
@@ -738,6 +1089,16 @@ def _ask_inner(
 
     progress.emit("route", "모호성/미지 용어 점검")
     clarify = check_ambiguity(conn, question)
+    if clarify is not None and clarify.intent == "clarify_unknown_term":
+        question, deferred_route, clarify = _resolve_unknown_terms(
+            question,
+            clarify,
+            settings,
+            progress,
+            conn=conn,
+            ollama_client=ollama_client,
+            deferred_route=deferred_route,
+        )
     if clarify is not None:
         progress.emit(
             "clarify",

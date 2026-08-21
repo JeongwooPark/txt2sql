@@ -418,6 +418,43 @@ def build_chart_spec(
     if route == "building_profile_compare":
         return _chart_profile_compare(rows, question)
 
+    if route in {"d198_year_stats", "d198_value_bins"}:
+        from llm2sql.d198_attrs import (
+            format_value_bin_label,
+            format_year_stats_label,
+            parse_value_bin,
+        )
+
+        labels: list[str] = []
+        values: list[float] = []
+        vspec = parse_value_bin(question) if route == "d198_value_bins" else None
+        for row in rows:
+            period = row.get("year", row.get("period", row.get("decade")))
+            n = row.get("n", row.get("cnt"))
+            if period is None or n is None:
+                continue
+            try:
+                val = float(n)
+            except (TypeError, ValueError):
+                continue
+            if vspec is not None:
+                labels.append(format_value_bin_label(row, vspec))
+            else:
+                labels.append(format_year_stats_label(row, question=question))
+            values.append(val)
+        if len(labels) < 2:
+            return None
+        cap = 40
+        fallback = "구간별 건수" if route == "d198_value_bins" else "연도별 건립 수"
+        return {
+            "type": "bar",
+            "title": _title_from_question(question, fallback),
+            "labels": labels[:cap],
+            "datasets": [{"label": "건축물 수(동)", "data": values[:cap]}],
+            "all_datasets": [{"label": "건축물 수(동)", "data": values[:cap]}],
+            "unit": "동",
+        }
+
     return None
 
 

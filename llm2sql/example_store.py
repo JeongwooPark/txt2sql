@@ -59,6 +59,27 @@ EXAMPLE_BANK: tuple[SqlExample, ...] = (
         tags=("buffer", "spatial", "count"),
     ),
     SqlExample(
+        question="구서동 주변 100m안에 있는 건물은?",
+        sql=(
+            'SELECT b."A0", b."A4", b."A5", b."A9", b."A12", b."A14", b."A16", '
+            'b."A24", b."A26"\n'
+            'FROM "AL_D010_26_20250704" b\n'
+            "CROSS JOIN (\n"
+            "  SELECT ST_Union(d.geometry) AS geom\n"
+            '  FROM "BND_ADM_DONG_PG" d\n'
+            "  WHERE (d.\"ADM_NM\" = '구서동' OR d.\"ADM_NM\" ~ '^구서[0-9]+동$')\n"
+            ") z\n"
+            "WHERE z.geom IS NOT NULL\n"
+            "  AND b.geometry && ST_Expand(z.geom, 0.0015)\n"
+            "  AND ST_DWithin(b.geometry::geography, z.geom::geography, 100)\n"
+            "ORDER BY ST_Distance(b.geometry::geography, z.geom::geography),\n"
+            '  b."A14" DESC NULLS LAST\n'
+            "LIMIT 50;"
+        ),
+        tables=("AL_D010_26_20250704", "BND_ADM_DONG_PG"),
+        tags=("buffer", "spatial", "dong", "list"),
+    ),
+    SqlExample(
         question="산업단지와 교차하는 해운대구 기초구역 목록",
         sql=(
             'SELECT DISTINCT t."BAS_ID", t."SIG_KOR_NM", t."BAS_AR"\n'
@@ -91,6 +112,18 @@ EXAMPLE_BANK: tuple[SqlExample, ...] = (
         ),
         tables=("AL_D010_26_20250704", "BND_ADM_DONG_PG"),
         tags=("spatial", "dong", "count"),
+    ),
+    SqlExample(
+        question="구서1동과 교차하는 기초구역은 몇 개야?",
+        sql=(
+            'SELECT COUNT(DISTINCT t."BAS_ID") AS cnt\n'
+            'FROM "TL_KODIS_BAS_26_202507" t\n'
+            'JOIN "BND_ADM_DONG_PG" d\n'
+            "  ON t.geometry && d.geometry AND ST_Intersects(t.geometry, d.geometry)\n"
+            "WHERE d.\"ADM_NM\" = '구서1동' AND d.\"ADM_CD\" LIKE '21%';"
+        ),
+        tables=("TL_KODIS_BAS_26_202507", "BND_ADM_DONG_PG"),
+        tags=("spatial", "bas", "dong", "count"),
     ),
     SqlExample(
         question="해운대구에서 건물 높이가 50미터 이상인 건물은 몇 개야?",

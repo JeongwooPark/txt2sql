@@ -55,6 +55,7 @@ intent 정의:
 - '송정동'처럼 여러 구에 있을 수 있는 동 + 건수 → clarify 가능. 확실치 않으면 clarify
 - 'A9가 뭐야'처럼 컬럼 코드 의미 → meta
 - '사용가능한 데이터 이름/목록' → meta (건물 용도명 조회 sql 아님)
+- '할 수 있는 것을 말해' / '할 수 잇는 것은' / '뭘 할 수 있어' / '기능 알려줘' → guide (지명·건물 조회 sql 아님)
 - 'GIS건물통합정보_부산광역시에 들어있는 내용'처럼 특정 데이터셋 설명 → meta (coverage 아님)
 - 'GIS건물통합정보_부산광역시 데이터 요약해줘' → meta (지역 건물 프로필이 아님)
 - '구서동포르투나 아파트 정보 있나'처럼 특정 건물명 조회 → sql (clarify/meta 아님)
@@ -179,6 +180,48 @@ def _looks_like_dataset_content_question(question: str) -> bool:
     return contentish and datasetish
 
 
+_COUNTISH = (
+    "몇",
+    "건수",
+    "개수",
+    "채야",
+    "개야",
+    "수는",
+    "수가",
+    "몇개",
+    "몇채",
+    "얼마나",
+)
+_RANKISH = ("가장 큰", "가장 높", "제일 큰", "제일 높", "연면적이 가장")
+_SUBJECTIVE = ("제일 좋은", "가장 좋은", "추천", "괜찮은")
+
+
+def _skip_llm_intent(rules: IntentPrediction, q: str) -> bool:
+    """규칙이 이미 분명하면 의도분류 LLM을 생략한다."""
+    if rules.intent in {"guide", "coverage", "out_of_scope"} and rules.confidence >= 0.9:
+        return True
+    if (
+        rules.intent in {"rank_compare", "usage_overview", "meta", "profile"}
+        and rules.confidence >= 0.85
+    ):
+        return True
+    if rules.intent == "clarify" and any(k in q for k in _SUBJECTIVE):
+        return True
+    if rules.intent == "sql" and any(k in q for k in _COUNTISH):
+        return True
+    if rules.intent == "sql" and any(k in q for k in _RANKISH):
+        return True
+    if rules.intent == "sql":
+        from llm2sql.domain import (
+            looks_like_building_name_lookup,
+            looks_like_measure_threshold,
+        )
+
+        if looks_like_building_name_lookup(q) or looks_like_measure_threshold(q):
+            return True
+    return False
+
+
 def classify_intent_hybrid(
     question: str,
     *,
@@ -187,11 +230,19 @@ def classify_intent_hybrid(
     client: Any | None = None,
     threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> IntentPrediction:
-    """LLM 분류를 우선하고, 실패·저신뢰 시 규칙으로 폴백.
+    """규칙 고신뢰는 즉시 채택, 애매한 경우만 LLM 분류.
 
     정확도 우선: 단일지역 순위/주관표현 등 LLM 오분류 패턴은 규칙으로 보정.
     """
     rules = predict_intent_rules(question)
+    q = question.strip()
+    if _skip_llm_intent(rules, q):
+        return IntentPrediction(
+            rules.intent,
+            rules.confidence,
+            f"규칙 고신뢰 ({rules.reason})",
+            "hybrid",
+        )
     try:
         llm = classify_intent_llm(
             question, model=model, host=host, client=client
@@ -205,7 +256,6 @@ def classify_intent_hybrid(
         )
 
     # 고신뢰 규칙 보정이 분명한 경우 규칙 우선
-    q = question.strip()
     if _looks_like_dataset_content_question(q):
         return IntentPrediction(
             "meta", 0.92, "데이터셋 내용/설명→meta", "hybrid"

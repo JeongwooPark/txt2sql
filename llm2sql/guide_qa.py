@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from llm2sql.domain import DONG_RE, GU_RE
-
 _HELP_HINTS = (
     "도움말",
     "헬프",
@@ -38,6 +36,40 @@ _HELP_HINTS = (
     "예시 질문",
     "가이드",
     "what can you",
+    "할 수 있는 것",
+    "할 수 있는거",
+    "할 수 있는 거",
+    "할수 있는 것",
+    "할수있는것",
+)
+
+# 공백을 없앤 뒤 비교. 도메인 신호가 없을 때만 쓴다.
+_CAN_DO_COMPACT = (
+    "할수있는",
+    "할수잇는",
+    "할수있어",
+    "할수잇어",
+    "할줄아",
+    "가능한것",
+    "가능한거",
+    "가능한게",
+    "가능한일",
+    "가능한기능",
+    "가능한질문",
+    "뭐가가능",
+    "무엇이가능",
+    "어떤게가능",
+    "어떤것을할수",
+    "어떤걸할수",
+)
+
+# 있다/있는 오타 (잇다)
+_HELP_TYPOS = (
+    ("잇는", "있는"),
+    ("잇어", "있어"),
+    ("잇음", "있음"),
+    ("잇나", "있나"),
+    ("잇습", "있습"),
 )
 
 _LIMIT_HINTS = (
@@ -207,7 +239,8 @@ def try_guide(question: str) -> GuideAnswer | None:
             answer=_capabilities_text(intro="질문이 비어 있습니다."),
         )
 
-    q_lower = q.lower()
+    q_help = _fold_help_typos(q)
+    q_lower = q_help.lower()
 
     # 인사만
     if _is_greeting_only(q):
@@ -225,17 +258,19 @@ def try_guide(question: str) -> GuideAnswer | None:
         return GuideAnswer(intent="guide_coverage", answer=_coverage_text())
 
     # 제한/못 하는 것
-    if any(k in q for k in _LIMIT_HINTS) and (
-        any(k in q for k in _HELP_HINTS)
-        or any(k in q for k in ("뭐", "무엇", "알려", "설명", "있어", "있나"))
-        or "제한" in q
-        or "한계" in q
+    if any(k in q_help for k in _LIMIT_HINTS) and (
+        any(k in q_help for k in _HELP_HINTS)
+        or any(k in q_help for k in ("뭐", "무엇", "알려", "설명", "있어", "있나"))
+        or "제한" in q_help
+        or "한계" in q_help
     ):
         return GuideAnswer(intent="guide_limits", answer=_limits_text())
 
     # 역할/기능/도움말
-    if any(k in q for k in _HELP_HINTS) or any(
-        k in q_lower for k in ("help", "what can you")
+    if (
+        any(k in q_help for k in _HELP_HINTS)
+        or any(k in q_lower for k in ("help", "what can you"))
+        or _is_capability_question(q_help)
     ):
         # '사용가능한 데이터' 등은 카탈로그 질의로 둠
         if any(
@@ -309,9 +344,10 @@ def _is_greeting_only(q: str) -> bool:
 
 
 def _is_out_of_scope(q: str) -> bool:
-    if _has_domain_signal(q):
-        return False
-    return any(k in q.lower() for k in _OUT_OF_SCOPE)
+    ql = q.lower()
+    if any(k in ql for k in _OUT_OF_SCOPE):
+        return True
+    return False
 
 
 def _is_generic_unscoped(q: str) -> bool:
@@ -344,7 +380,7 @@ def _is_generic_unscoped(q: str) -> bool:
     if any(k in q for k in generic):
         return True
     # 한글만 있고 장소/숫자/도메인 없음 + 의문
-    if DONG_RE.search(q) or GU_RE.search(q) or _COL.search(q):
+    if _COL.search(q):
         return False
     if re.search(r"\d", q):
         return False
@@ -358,9 +394,39 @@ def _has_domain_signal(q: str) -> bool:
     ql = q.lower()
     if any(k in ql for k in _DOMAIN_SIGNAL):
         return True
-    if DONG_RE.search(q) or GU_RE.search(q) or _COL.search(q):
+    if _COL.search(q):
         return True
-    return False
+    from llm2sql.gazetteer import find_places
+
+    return any(h.is_dong or h.is_sigungu for h in find_places(q))
+
+
+def _fold_help_typos(q: str) -> str:
+    """『잇는』처럼 있다 오타를 보정한다."""
+    out = q
+    for src, dst in _HELP_TYPOS:
+        out = out.replace(src, dst)
+    return out
+
+
+def _is_capability_question(q: str) -> bool:
+    """『할 수 있는 것을 말해』처럼 시스템 기능을 묻는 짧은 질문."""
+    folded = _fold_help_typos(q)
+    if _has_domain_signal(q) or _has_domain_signal(folded):
+        return False
+    if any(
+        k in folded
+        for k in (
+            "사용가능",
+            "사용 가능",
+            "데이터셋",
+            "데이터가 몇",
+            "데이터는 몇",
+        )
+    ):
+        return False
+    compact = re.sub(r"\s+", "", folded).lower()
+    return any(k in compact for k in _CAN_DO_COMPACT)
 
 
 def _short_howto() -> str:
@@ -385,7 +451,7 @@ def _capabilities_text(*, intro: str | None = None) -> str:
             "",
             "가능한 기능:",
             "1) 데이터셋/컬럼(속성) 설명 — 예: A4 의미, 어떤 데이터가 있어?",
-            "2) 건수·순위·공간 조건 조회 — 예: 해운대구 건물 몇 채, 500m 이내",
+            "2) 건수·순위·공간 조건 조회 — 예: 해운대구 건물 몇 채, 구서동 주변 100m",
             "3) 동·용도 특징 요약 — 예: 구서동 아파트 특징",
             "4) 모호한 표현 확인 — 예: 송정동(복수 구), ‘제일 좋은’",
             "5) 후속 질문 — 예: 그 아파트 이름/지번/높이는?",

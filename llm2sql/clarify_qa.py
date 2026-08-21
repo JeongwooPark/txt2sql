@@ -32,6 +32,29 @@ _STOP = {
     "보여줘",
     "구해",
     "조회",
+    "출력",
+    "출력해",
+    "출력해줘",
+    "묶어",
+    "묶어라",
+    "묶어줘",
+    "묶음",
+    "단위",
+    "단위로",
+    "구하라",
+    "구해라",
+    "구해줘",
+    "찾아",
+    "찾아줘",
+    "찾아라",
+    "찾아주세요",
+    "검색하라",
+    "검색해라",
+    "조회하라",
+    "조회해라",
+    "나열",
+    "최근",
+    "최근에",
     "말해",
     "대한",
     "관련",
@@ -91,11 +114,25 @@ _STOP = {
     "하위",
     "이상",
     "이상인",
+    "이상인것",
+    "이상인것은",
     "이하",
     "이하인",
+    "이하인것",
+    "이하인것은",
     "초과",
+    "초과인",
+    "초과인것",
+    "초과인것은",
     "미만",
+    "미만인",
+    "미만인것",
+    "미만인것은",
     "넘는",
+    "것은",
+    "것들",
+    "인것",
+    "중에",
     "채야",
     "건이야",
     "인가요",
@@ -110,7 +147,11 @@ _STOP = {
     "좌표",
     "점",
     "미터",
+    "킬로미터",
     "제곱미터",
+    "제곱킬로미터",
+    "평방미터",
+    "센티미터",
     "층",
     "높이",
     "면적",
@@ -174,6 +215,9 @@ _STOP = {
     "건축년수",
     "준공",
     "준공일",
+    "시공년도",
+    "시공연도",
+    "시공년",
     "사용승인",
     "사용승인일",
     "허가일",
@@ -483,7 +527,15 @@ def check_ambiguity(
         is_chart_series_filter_question,
         is_chart_type_change_question,
     )
-    from llm2sql.domain import looks_like_building_name_lookup
+    from llm2sql.d198_attrs import (
+        looks_like_value_bin_question,
+        looks_like_year_stats_question,
+    )
+    from llm2sql.domain import (
+        extract_building_name_candidate,
+        looks_like_building_name_lookup,
+        looks_like_measure_threshold,
+    )
     from llm2sql.guide_qa import _is_coverage_question
 
     if (
@@ -492,39 +544,61 @@ def check_ambiguity(
         or is_chart_series_filter_question(q)
         or _is_coverage_question(q)
         or looks_like_building_name_lookup(q)
+        or looks_like_measure_threshold(q)
+        or looks_like_value_bin_question(q)
+        or looks_like_year_stats_question(q)
     ):
         unknown = []
+    else:
+        name = extract_building_name_candidate(q) or ""
+        name_bits = set(name.split())
+        compact_name = name.replace(" ", "")
+        unknown = [
+            u
+            for u in unknown
+            if u not in name_bits
+            and u not in compact_name
+            and compact_name not in u
+        ]
     # 부산 전역·순위/집계처럼 의도가 분명하면 미지 단어 clarify를 생략
     if unknown and is_busan_wide(q):
         unknown = [u for u in unknown if not str(u).startswith("부산")]
-    if unknown and any(
-        k in q
-        for k in (
-            "가장 높",
-            "제일 높",
-            "가장 큰",
-            "제일 큰",
-            "몇 채",
-            "몇채",
-            "건수",
-            "개수",
-        )
-    ):
-        unknown = []
     if unknown:
         return ClarifyAnswer(
             intent="clarify_unknown_term",
             ambiguous_terms=unknown,
             options=[],
-            answer=(
-                f"질문 속 「{', '.join(unknown)}」의 의미가 데이터 속성으로 분명하지 않습니다.\n"
-                "다음 중 무엇에 가까운지 알려 주시면 정확히 답할 수 있습니다.\n"
-                "- 장소(구/동), 건물 용도(공동주택·단독주택 등), "
-                "수치 조건(연면적·높이·층수), 데이터셋/컬럼 설명"
-            ),
+            answer=unknown_term_guidance(unknown),
         )
 
     return None
+
+
+def unknown_term_guidance(
+    unknown: list[str],
+    *,
+    mapped: list[tuple[str, str]] | tuple[tuple[str, str], ...] | None = None,
+) -> str:
+    """라우터 어휘와 대응하지 못한 단어에 대한 보완 질문."""
+    terms = ", ".join(unknown)
+    lines: list[str] = []
+    if mapped:
+        mapped_txt = ", ".join(f"「{src}」→「{dst}」" for src, dst in mapped)
+        lines.append(f"일부 표현은 라우터 용어로 바꿔 보았습니다 ({mapped_txt}).")
+    lines.append(
+        f"질문 속 「{terms}」을(를) 라우터에 있는 단어와 대응하지 못했습니다."
+    )
+    lines.append("다음 중 무엇에 가까운지 알려 주시면 이어서 조회할 수 있습니다.")
+    lines.extend(
+        [
+            "- 장소(구/동)",
+            "- 건물 용도(아파트·공동주택·단독주택 등)",
+            "- 수치 조건(연면적·높이·층수, 예: 2000㎡ 단위로 묶기)",
+            "- 시간(사용승인일·연도별·5년 단위)",
+            "- 데이터셋/컬럼 설명",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _vague_guidance(q: str, vague_hits: list[str]) -> str:
@@ -626,7 +700,7 @@ def _lookup_admin_dong(
             ORDER BY CASE WHEN "ADM_NM" = %s THEN 0 ELSE 1 END
             LIMIT 1
             """,
-            (dong, f"%{dong}%", dong),
+            (dong, f"% {dong}", dong),
         )
         row = cur.fetchone()
         return str(row["name"]) if row else None
@@ -700,19 +774,29 @@ def _unknown_terms(
     text = re.sub(r"[0-9a-zA-Z_\"'.,?？!！()[\]{}]+", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     raw = [t for t in re.findall(r"[가-힣]{2,}", text) if t not in _STOP]
-    # 조사 꼬리 제거
+    _particle = re.compile(
+        r"(은|는|이|가|을|를|의|과|와|도|만|에서|에게|에|으로|로|까지|부터|보다|중)$"
+    )
     cleaned: list[str] = []
     for t in raw:
-        t2 = re.sub(
-            r"(은|는|이|가|을|를|의|과|와|도|만|에서|에게|에|으로|로|까지|부터|보다|중)$",
-            "",
-            t,
-        )
-        if len(t2) < 2 or t2 in _STOP:
+        stripped = _particle.sub("", t)
+        if stripped in _STOP:
             continue
-        if t2.endswith(("동", "구", "시", "군")):  # 장소는 별도 처리
+        if len(stripped) >= 3:
+            t2 = stripped
+        elif t not in _STOP and len(t) >= 3:
+            t2 = t
+        else:
+            continue
+        if t2.endswith(("동", "구", "시", "군", "읍", "면", "리")):
+            continue
+        from llm2sql.gazetteer import is_known_place
+
+        if is_known_place(t2) or is_known_place(t):
             continue
         if t2.startswith("부산"):
+            continue
+        if t2.startswith(("이상", "이하", "초과", "미만")):
             continue
         if t2 not in cleaned:
             cleaned.append(t2)

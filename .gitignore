@@ -22,4 +22,5 @@ demo_case_*
 
 # baseline eval outputs
 benchmark_baseline_results.json
+scripts/_out_*.json
 

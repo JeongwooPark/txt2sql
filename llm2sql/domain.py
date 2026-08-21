@@ -9,6 +9,10 @@ GU_PATTERN = (
     r"금정구|강서구|연제구|수영구|사상구|기장군|[가-힣]{1,6}구)"
 )
 DONG_PATTERN = r"([가-힣0-9]{1,12}동)"
+# 거리(100m, 1km). 숫자+동(구서1동)과 구분하려고 단위를 요구한다.
+LENGTH_DIST_PATTERN = (
+    r"(\d+(?:\.\d+)?)\s*(킬로미터|㎞|km|미터|m)(?![a-zA-Z²2])"
+)
 
 GU_RE = re.compile(GU_PATTERN)
 DONG_RE = re.compile(DONG_PATTERN)
@@ -37,6 +41,7 @@ USAGE_ALIASES: dict[str, str] = {
     "아파트": "공동주택",
     "공동주택": "공동주택",
     "단독주택": "단독주택",
+    "단독추택": "단독주택",
     "다가구": "단독주택",
     "공장": "공장",
     "창고": "창고시설",
@@ -60,6 +65,76 @@ USAGE_PATTERN = (
     r"공공시설물|공공시설|공공용시설)"
 )
 USAGE_RE = re.compile(USAGE_PATTERN)
+
+# 건축물구조명(A11) — 긴 별칭 우선 매칭
+STRUCTURE_ALIASES: dict[str, str] = {
+    "철골철근콘크리트": "%철골철근콘크리트%",
+    "철근콘크리트": "%철근콘크리트%",
+    "철골콘크리트": "%철골콘크리트%",
+    "프리케스트콘크리트": "%프리케스트콘크리트%",
+    "프리캐스트콘크리트": "%프리케스트콘크리트%",
+    "기타콘크리트": "%기타콘크리트%",
+    "콘크리트": "%콘크리트%",
+    "조적구조": "%조적%",
+    "벽돌구조": "%벽돌%",
+    "목구조": "%목%",
+    "철골구조": "%철골%",
+    "조적": "%조적%",
+    "벽돌": "%벽돌%",
+    "철골": "%철골%",
+}
+
+
+def extract_structure(question: str) -> tuple[str, str] | None:
+    """질문의 구조 표현 → (표시명, A11 ILIKE 패턴)."""
+    for alias in sorted(STRUCTURE_ALIASES, key=len, reverse=True):
+        if alias in question:
+            return alias, STRUCTURE_ALIASES[alias]
+    return None
+
+
+def extract_special_land(question: str) -> tuple[str, str] | None:
+    """질문의 특수지(A6/A7) 표현 → (표시명, SQL 조건)."""
+    q = question.strip()
+    if "산업단지" in q and "산지" not in q:
+        return None
+    mountain = (
+        "산지",
+        "산번지",
+        "산 번지",
+        "산 지번",
+        "임야",
+        "산에 있는",
+        "산 위에",
+        "산위에",
+        "특수지가 산",
+        "특수지구분 산",
+        "특수지구분이 산",
+    )
+    if any(k in q for k in mountain):
+        return (
+            "산지",
+            '("A6"::text = \'2\' OR TRIM(COALESCE("A7", \'\')) = \'산\')',
+        )
+    if any(k in q for k in ("일반지번", "일반 지번", "특수지 일반", "특수지구분 일반")):
+        return (
+            "일반지번",
+            '("A6"::text = \'1\' OR TRIM(COALESCE("A7", \'\')) = \'일반\')',
+        )
+    if any(k in q for k in ("가지번", "가지 번지")):
+        return (
+            "가지번",
+            '("A6"::text IN (\'3\', \'4\') OR COALESCE("A7", \'\') ILIKE \'%가지%\')',
+        )
+    if any(k in q for k in ("블럭지번", "블록지번", "블럭 지번", "블록 지번")):
+        return (
+            "블럭지번",
+            (
+                '("A6"::text IN (\'5\', \'6\', \'7\') OR COALESCE("A7", \'\') ILIKE \'%블럭%\' '
+                "OR COALESCE(\"A7\", '') ILIKE '%블록%')"
+            ),
+        )
+    return None
 
 # 구 단위 용도별건물(사용승인·허가일자 보유)
 D198_BY_GU: dict[str, str] = {
@@ -115,6 +190,8 @@ _FALSE_DONG = frozenset(
         "연동",
         "가동",
         "충동",
+        "행정동",
+        "법정동",
     }
 )
 
@@ -126,7 +203,16 @@ def extract_place(question: str) -> str | None:
 
 
 def extract_places(question: str) -> list[str]:
-    """질문에 등장하는 동·구를 순서대로 (중복 제거)."""
+    """질문에 등장하는 동·구를 순서대로 (중복 제거).
+
+    부산 지명 사전이 있으면 등록된 법정동·행정동·구군만 최장일치한다.
+    """
+    from llm2sql.gazetteer import extract_gazetteer_places, load_gazetteer
+
+    gaz = load_gazetteer()
+    if gaz.legal_dong or gaz.admin_dong:
+        return extract_gazetteer_places(question)
+
     found: list[str] = []
     for m in DONG_RE.finditer(question):
         dong = m.group(1)
@@ -141,14 +227,26 @@ def extract_places(question: str) -> list[str]:
         return found
     for m in GU_RE.finditer(question):
         gu = m.group(1)
+        if gu not in BUSAN_GU_CODES:
+            continue
         if gu not in found:
             found.append(gu)
     return found
 
 
 def extract_gu(question: str) -> str | None:
-    m = GU_RE.search(question)
-    return m.group(1) if m else None
+    from llm2sql.gazetteer import find_places, load_gazetteer
+
+    gaz = load_gazetteer()
+    if gaz.sigungu:
+        for hit in find_places(question):
+            if hit.is_sigungu:
+                return hit.name
+    for m in GU_RE.finditer(question):
+        gu = m.group(1)
+        if gu in BUSAN_GU_CODES:
+            return gu
+    return None
 
 
 def busan_gu_code(gu: str | None) -> str | None:
@@ -213,6 +311,24 @@ _BUILDING_ATTR_HINTS = (
     "구조",
     "이름",
     "건물명",
+    "시공년도",
+    "시공연도",
+    "시공년",
+    "시공일",
+    "준공년도",
+    "준공연도",
+    "준공일",
+    "건축년도",
+    "건축연도",
+    "건설년도",
+    "건설연도",
+    "건립년도",
+    "건립연도",
+    "사용승인일",
+    "사용승인일자",
+    "허가일",
+    "허가일자",
+    "건설일",
 )
 _NAME_STRIP_PHRASES = (
     "에 대한",
@@ -242,8 +358,16 @@ _NAME_STRIP_PHRASES = (
     "알려줘",
     "알려 줘",
     "찾아줘",
+    "찾아 줘",
+    "찾아라",
+    "찾아주세요",
+    "찾아 주세요",
     "검색해",
+    "검색하라",
+    "검색해라",
     "조회해",
+    "조회하라",
+    "조회해라",
     "건물명",
     "건물이름",
     "건물 이름",
@@ -267,12 +391,66 @@ _NAME_STRIP_PHRASES = (
     "건물면적은",
     "건물면적이",
     "건물면적",
+    "면적은",
+    "면적이",
+    "면적",
+    "시공년도는",
+    "시공년도",
+    "시공연도는",
+    "시공연도",
+    "시공년",
+    "시공일",
+    "준공년도는",
+    "준공년도",
+    "준공연도",
+    "준공일은",
+    "준공일",
+    "건축년도는",
+    "건축년도",
+    "건축연도",
+    "건설년도는",
+    "건설년도",
+    "건립년도",
+    "사용승인일자는",
+    "사용승인일은",
+    "사용승인일자",
+    "사용승인일",
+    "허가일은",
+    "허가일자",
+    "허가일",
+    "건설일",
+    "이상인것은",
+    "이상인것",
+    "이상은",
+    "이상인 것",
+    "이상",
+    "이하인것은",
+    "이하인것",
+    "이하는",
+    "이하인 것",
+    "이하",
+    "미만인것은",
+    "미만인것",
+    "미만은",
+    "미만인 것",
+    "미만",
+    "초과인것은",
+    "초과인것",
+    "초과는",
+    "초과인 것",
+    "초과",
     "용도는",
     "용도가",
     "용도",
     "구조는",
     "구조가",
-    "구조",
+        "구조물",
+        "구조",
+        "콘크리트",
+        "철근콘크리트",
+        "산지",
+        "산번지",
+        "특수지",
     "층수는",
     "층수가",
     "층수",
@@ -294,8 +472,43 @@ _NAME_STOP = frozenset(
         "높이",
         "연면적",
         "건물면적",
+        "면적",
+        "중에",
+        "이상",
+        "이하",
+        "초과",
+        "미만",
+        "넘는",
         "용도",
         "구조",
+        "구조물",
+        "콘크리트",
+        "산지",
+        "건폐율",
+        "용적율",
+        "용적률",
+        "집합건축물",
+        "표제부",
+        "주건축물",
+        "부속건축물",
+        "세부용도",
+        "용도분류",
+        "주요용도명",
+        "사용승인일자",
+        "사용승인일",
+        "시공년도",
+        "시공연도",
+        "시공년",
+        "준공년도",
+        "준공일",
+        "건축년도",
+        "건축연도",
+        "건설년도",
+        "건립년도",
+        "허가일자",
+        "허가일",
+        "지하층",
+        "종류",
         "층수",
         "있",
         "있는",
@@ -305,6 +518,11 @@ _NAME_STOP = frozenset(
         "주세요",
         "해줘",
         "하라",
+        "찾아라",
+        "찾아줘",
+        "찾아",
+        "검색하라",
+        "조회하라",
         "좀",
         "그",
         "저",
@@ -314,6 +532,11 @@ _NAME_STOP = frozenset(
         "건축물",
         "아파트",
         "단지",
+        "가장",
+        "제일",
+        "최대",
+        "상위",
+        "최고",
         "이름",
         "명칭",
         "뭐",
@@ -322,8 +545,29 @@ _NAME_STOP = frozenset(
         "부산",
         "부산시",
         "부산광역시",
+        "주변",
+        "근처",
+        "인근",
+        "버퍼",
+        "반경",
+        "이내",
+        "안에",
+        "내부",
+        "건수",
+        "개수",
+        "퍼센트",
+        "퍼센트씩",
+        "비율",
+        "프로",
     }
 )
+
+
+def _replace_hangul_word(text: str, word: str) -> str:
+    """한글 단어만 통째로 치환. '학교'가 '부산대학교' 안에서 잘리지 않게 한다."""
+    if not word:
+        return text
+    return re.sub(rf"(?<![가-힣]){re.escape(word)}(?![가-힣])", " ", text)
 
 
 def extract_building_name_candidate(question: str) -> str | None:
@@ -337,7 +581,7 @@ def extract_building_name_candidate(question: str) -> str | None:
     if gu:
         text = text.replace(gu, " ")
     for alias in sorted(USAGE_ALIASES, key=len, reverse=True):
-        text = text.replace(alias, " ")
+        text = _replace_hangul_word(text, alias)
     for phrase in sorted(_NAME_STRIP_PHRASES, key=len, reverse=True):
         text = text.replace(phrase, " ")
     text = re.sub(r"[0-9a-zA-Z_\"'.,?？!！()[\]{}]+", " ", text)
@@ -372,6 +616,32 @@ def extract_building_name_candidate(question: str) -> str | None:
     return " ".join(expanded[:4])
 
 
+def looks_like_measure_threshold(question: str) -> bool:
+    """면적·높이·층수 등 수치 임계(이상/이하) 질의."""
+    q = question.strip()
+    if not q or not re.search(r"\d+", q):
+        return False
+    if not any(k in q for k in ("이상", "이하", "초과", "미만", "넘는")):
+        return False
+    return any(
+        k in q
+        for k in (
+            "연면적",
+            "건물면적",
+            "건축면적",
+            "대지면적",
+            "면적",
+            "높이",
+            "층수",
+            "지상층",
+            "미터",
+            "평",
+            "킬로미터",
+            "제곱미터",
+        )
+    )
+
+
 def looks_like_building_name_lookup(question: str) -> bool:
     """특정 건물명(고유명사) 존재·정보 조회 질의인지."""
     q = question.strip()
@@ -386,10 +656,64 @@ def looks_like_building_name_lookup(question: str) -> bool:
             "GIS",
             "AL_D",
             "데이터셋",
+            "어떤 데이터",
+            "데이터가 있",
+            "사용가능",
             "테이블",
             "컬럼",
             "스키마",
             "속성 설명",
+        )
+    ):
+        return False
+    if looks_like_measure_threshold(q):
+        return False
+    # 장소+용도/건물 건수는 고유명사 조회가 아님
+    place_hit = extract_place(q) or extract_gu(q)
+    countish = any(
+        k in q for k in ("몇", "건수", "개수", "채수", "채야", "수는", "수가")
+    )
+    if place_hit and countish and (
+        extract_usage(q)
+        or any(k in q for k in ("건물", "건축물"))
+    ):
+        return False
+    if len(extract_places(q)) >= 2 and any(k in q for k in ("건물", "건축물", "채")):
+        return False
+    if any(k in q for k in ("주변", "근처", "인근", "버퍼", "반경")) and re.search(
+        r"\d+(?:\.\d+)?\s*(?:킬로미터|㎞|km|미터|m)",
+        q,
+    ):
+        return False
+    if re.search(
+        r"[가-힣0-9]{1,12}동\s*(?:안(?:에|쪽)?|내부|경계\s*안)",
+        q,
+    ) and any(k in q for k in ("건물", "건축물", "채")):
+        return False
+    if any(k in q for k in ("교차", "겹치", "인접", "맞닿", "버퍼", "반경")) and any(
+        k in q for k in ("기초구역", "행정동", "행정구역", "건물", "건축물")
+    ):
+        return False
+    if any(k in q for k in ("퍼센트", "비율", "몇%", "%씩", "몇 프로")):
+        return False
+    if ("종류" in q and "용도" in q) or "몇 가지" in q or "몇가지" in q:
+        return False
+    if extract_structure(q):
+        return False
+    if extract_special_land(q):
+        return False
+    # 순위·최댓값 질의는 건물명 조회가 아님
+    if any(
+        k in q
+        for k in (
+            "가장",
+            "제일",
+            "최대",
+            "상위",
+            "1등",
+            "최고",
+            "큰 순",
+            "높은 순",
         )
     ):
         return False
@@ -405,11 +729,22 @@ def looks_like_building_name_lookup(question: str) -> bool:
         "건물",
         "아파트",
         "주택",
+        "정보",
+        "자료",
+        "내용",
+        "결과",
     }:
         return False
     compact = name.replace(" ", "")
     if len(compact) < 2:
         return False
+    distinctive = len(compact) >= 3
+    if not distinctive:
+        from llm2sql.d198_attrs import is_d198_attr_question
+        from llm2sql.catalog_attrs import is_catalog_attr_question
+
+        if is_d198_attr_question(q) or is_catalog_attr_question(q):
+            return False
     explicit = any(k in q for k in _BUILDING_NAME_EXPLICIT)
     if explicit:
         return True
@@ -418,7 +753,13 @@ def looks_like_building_name_lookup(question: str) -> bool:
     has_lookup = any(k in q for k in _BUILDING_LOOKUP_HINTS)
     has_attr = any(k in q for k in _BUILDING_ATTR_HINTS)
     # 「구서역포르투나 아파트의 주소는?」— 단지명+용도+속성
-    if has_kind and (has_lookup or has_attr) and len(compact) >= 3:
+    if has_kind and (has_lookup or has_attr) and distinctive:
+        return True
+    # 「구서역 포르투나의 시공년도는」— 고유명사 + 속성 (아파트/찾기 없이도)
+    if has_attr and distinctive:
+        return True
+    # 「부산대학교를 찾아라」— 고유명사 + 찾기 (아파트/동 없이도)
+    if has_lookup and distinctive:
         return True
     return has_place and has_kind and (has_lookup or has_attr)
 
@@ -450,7 +791,7 @@ def extract_usages(question: str) -> list[str]:
 
 def place_a4_predicate(place: str) -> str:
     """AL_D010 A4 필터 SQL 조각."""
-    if place.endswith("동"):
+    if place.endswith(("동", "가", "리", "로")):
         return f'("A4" LIKE \'% {place}\' OR "A4" = \'{place}\')'
     return f'"A4" LIKE \'%{place}%\''
 
@@ -465,8 +806,28 @@ def looks_like_age_question(question: str) -> bool:
     return any(k in question for k in AGE_HINTS)
 
 
+def extract_calendar_year(question: str) -> tuple[int, str | None] | None:
+    """'2020년 이후'처럼 달력 연도. 경과년수(30년)와 구분한다."""
+    m = re.search(
+        r"((?:19|20)\d{2})\s*년\s*(이후|이전|이래|까지)?",
+        question,
+    )
+    if not m:
+        return None
+    return int(m.group(1)), m.group(2)
+
+
 def extract_age_years(question: str) -> int | None:
-    """'30년 넘은', '10년 미만', '건축 20년' 등에서 연수 추출."""
+    """'30년 넘은', '10년 미만', '건축 20년' 등에서 연수 추출.
+
+    1900~2100은 달력 연도('2020년 이후')로 보고 경과년수에서 제외한다.
+    """
+    if extract_calendar_year(question) is not None:
+        return None
+    if re.search(r"\d+\s*년\s*(단위|간격|별|씩)", question):
+        return None
+    if re.search(r"[가-힣]+\s*년\s*(단위|간격|별|씩)", question):
+        return None
     m = re.search(
         r"(\d+)\s*년\s*(?:이\s*)?(?:넘|이상|이하|미만|초과|이내|된|지남|경과)?",
         question,
@@ -668,8 +1029,11 @@ def looks_like_standalone_question(question: str) -> bool:
     if extract_gu(q):
         return True
     place = extract_place(q)
-    if place and place.endswith("동"):
-        return True
+    if place:
+        from llm2sql.gazetteer import is_locality
+
+        if is_locality(place):
+            return True
     # 짧은 기준 보정("건축년수")은 독립 질문이 아님
     if len(q) <= 12 and looks_like_age_question(q) and extract_age_years(q) is None:
         return False

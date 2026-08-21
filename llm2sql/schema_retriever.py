@@ -364,12 +364,14 @@ def build_compact_schema(
     )
     spatial_intent = any(
         k in question
-        for k in ("안에", "내부", "속하는", "교차", "버퍼", "거리", "근처", "이내")
+        for k in ("안에", "내부", "속하는", "교차", "버퍼", "거리", "근처", "이내", "주변", "반경")
     )
     if spatial_intent:
         tips += (
             "- SPATIAL INTENT DETECTED: use ST_Intersects with "
             '"BND_ADM_DONG_PG" or "TL_KODIS_BAS_26_202507"; do not rely on attribute-only filters.\n'
+            "- Dong buffer (주변/반경 N m) → ST_Union of matching BND_ADM_DONG_PG "
+            "and ST_DWithin(...::geography, meters).\n"
         )
     return "\n\n".join(parts) + tips
 

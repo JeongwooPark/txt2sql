@@ -85,18 +85,192 @@ CASES: list[dict[str, Any]] = [
         "expect_contains": ["찾지 못"],
         "note": "없는 지명 확인",
     },
+    {
+        "id": "n11",
+        "question": "해운대구에서 건물 높이가 50미터 이상인 건물은 몇 개야?",
+        "expect_route": "building_height_count",
+        "expect_sql": ['"A16" >= 50'],
+        "expect_value": 805,
+        "expect_contains": ["805"],
+        "note": "높이 이상 COUNT",
+    },
+    {
+        "id": "n12",
+        "question": "해운대구에서 건물 높이가 50미터 이하인 건물은 몇 개야?",
+        "expect_route": "building_height_count",
+        "expect_sql": ['"A16" <= 50'],
+        "expect_value": 31941,
+        "expect_contains": ["31,941"],
+        "note": "높이 이하 COUNT",
+    },
+    {
+        "id": "n13",
+        "question": "해운대구에서 건물 높이가 50미터 미만인 건물은 몇 개야?",
+        "expect_route": "building_height_count",
+        "expect_sql": ['"A16" < 50'],
+        "expect_value": 31939,
+        "expect_contains": ["31,939"],
+        "note": "높이 미만 COUNT",
+    },
+    {
+        "id": "n14",
+        "question": "해운대구에서 건물 높이가 50미터 초과인 건물은 몇 개야?",
+        "expect_route": "building_height_count",
+        "expect_sql": ['"A16" > 50'],
+        "expect_value": 803,
+        "expect_contains": ["803"],
+        "note": "높이 초과 COUNT",
+    },
+    {
+        "id": "n15",
+        "question": "금정구에서 지상층이 10층 이상인 건물은 몇 개야?",
+        "expect_route": "building_floor_count",
+        "expect_sql": ['"A26" >= 10'],
+        "expect_value": 546,
+        "expect_contains": ["546"],
+        "note": "층수 이상 COUNT",
+    },
+    {
+        "id": "n16",
+        "question": "금정구에서 지상층이 10층 이하인 건물은 몇 개야?",
+        "expect_route": "building_floor_count",
+        "expect_sql": ['"A26" <= 10'],
+        "expect_value": 38325,
+        "expect_contains": ["38,325"],
+        "note": "층수 이하 COUNT",
+    },
+    {
+        "id": "n17",
+        "question": "금정구에서 지상층이 10층 미만인 건물은 몇 개야?",
+        "expect_route": "building_floor_count",
+        "expect_sql": ['"A26" < 10'],
+        "expect_value": 38248,
+        "expect_contains": ["38,248"],
+        "note": "층수 미만 COUNT",
+    },
+    {
+        "id": "n18",
+        "question": "금정구에서 지상층이 10층 초과인 건물은 몇 개야?",
+        "expect_route": "building_floor_count",
+        "expect_sql": ['"A26" > 10'],
+        "expect_value": 469,
+        "expect_contains": ["469"],
+        "note": "층수 초과 COUNT",
+    },
+    {
+        "id": "n19",
+        "question": "금정구에서 연면적 2000 이상인 건물 수는?",
+        "expect_route": "building_area_threshold_count",
+        "expect_sql": ['"A14" >= 2000'],
+        "expect_value": 1068,
+        "expect_contains": ["1,068"],
+        "note": "연면적 이상 COUNT",
+    },
+    {
+        "id": "n20",
+        "question": "금정구에서 연면적 2000 이하인 건물 수는?",
+        "expect_route": "building_area_threshold_count",
+        "expect_sql": ['"A14" <= 2000'],
+        "expect_value": 37726,
+        "expect_contains": ["37,726"],
+        "note": "연면적 이하 COUNT",
+    },
+    {
+        "id": "n21",
+        "question": "금정구에서 연면적 2000 미만인 건물 수는?",
+        "expect_route": "building_area_threshold_count",
+        "expect_sql": ['"A14" < 2000'],
+        "expect_value": 37726,
+        "expect_contains": ["37,726"],
+        "note": "연면적 미만 COUNT (경계값 없음)",
+    },
+    {
+        "id": "n22",
+        "question": "금정구에서 연면적 2000 초과인 건물 수는?",
+        "expect_route": "building_area_threshold_count",
+        "expect_sql": ['"A14" > 2000'],
+        "expect_value": 1068,
+        "expect_contains": ["1,068"],
+        "note": "연면적 초과 COUNT (경계값 없음)",
+    },
+    {
+        "id": "n23",
+        "question": "구서동 건축물 중에 면적이 10000이상인것은?",
+        "expect_route": "building_area_threshold_list",
+        "expect_sql": ['"A14" >= 10000'],
+        "expect_contains": ["연면적"],
+        "note": "동 면적 이상 목록(붙여쓰기)",
+    },
+    {
+        "id": "n24",
+        "question": "구서동 건축물 중에 면적이 10000이하인 것",
+        "expect_route": "building_area_threshold_list",
+        "expect_sql": ['"A14" <= 10000'],
+        "note": "동 면적 이하 목록(띄어쓰기)",
+    },
+    {
+        "id": "n25",
+        "question": "구서동 건축물 중에 면적이 10000미만인 것",
+        "expect_route": "building_area_threshold_list",
+        "expect_sql": ['"A14" < 10000'],
+        "note": "동 면적 미만 목록",
+    },
+    {
+        "id": "n26",
+        "question": "구서동 건축물 중에 면적이 10000초과인 것",
+        "expect_route": "building_area_threshold_list",
+        "expect_sql": ['"A14" > 10000'],
+        "expect_contains": ["연면적"],
+        "note": "동 면적 초과 목록",
+    },
+    {
+        "id": "n27",
+        "question": "해운대구에서 건물 높이가 50미터 이하인 것",
+        "expect_route": "building_height_threshold_list",
+        "expect_sql": ['"A16" <= 50'],
+        "note": "높이 이하 목록형(건수 힌트 없음)",
+    },
+    {
+        "id": "n28",
+        "question": "금정구에서 지상층이 10층 미만인 것",
+        "expect_route": "building_floor_threshold_list",
+        "expect_sql": ['"A26" < 10'],
+        "note": "층수 미만 목록형(건수 힌트 없음)",
+    },
 ]
+
+
+def _extract_scalar(rows: list[dict[str, Any]] | None) -> int | None:
+    if not rows:
+        return None
+    row = rows[0]
+    for value in row.values():
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+    return None
 
 
 def _pass_case(case: dict[str, Any], result: dict[str, Any]) -> tuple[bool, list[str]]:
     issues: list[str] = []
     route = result.get("route")
     answer = result.get("answer") or ""
+    sql = result.get("sql") or ""
     if case.get("expect_route") and route != case["expect_route"]:
         issues.append(f"route={route} (expected {case['expect_route']})")
     for token in case.get("expect_contains") or []:
         if token not in answer:
             issues.append(f"missing:{token}")
+    for token in case.get("expect_sql") or []:
+        if token not in sql:
+            issues.append(f"sql_missing:{token}")
+    if "expect_value" in case:
+        got = _extract_scalar(result.get("rows"))
+        if got != case["expect_value"]:
+            issues.append(f"value={got} (expected {case['expect_value']})")
     if not result.get("ok", True):
         issues.append(f"ok=False error={result.get('error')}")
     return (len(issues) == 0, issues)
@@ -108,7 +282,7 @@ def main() -> None:
     results: list[dict[str, Any]] = []
     passed = 0
 
-    print("=== 신규 기능 감증 테스트 (10문항) ===\n")
+    print("=== 신규 기능 감증 테스트 (기존+임계 비교) ===\n")
     t0 = time.perf_counter()
 
     for case in CASES:
@@ -142,7 +316,7 @@ def main() -> None:
         results.append(row)
 
         status = "PASS" if ok else "FAIL"
-        print(f"[{case['id']}] {status} ({elapsed_ms} ms) — {case['note']}")
+        print(f"[{case['id']}] {status} ({elapsed_ms} ms) - {case['note']}")
         print(f"  Q: {q}")
         print(f"  route: {result.get('route')}")
         ans = (result.get("answer") or "").replace("\n", " / ")

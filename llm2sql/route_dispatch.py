@@ -6,6 +6,7 @@ optimized: try_route 1회 + allowlist early + 잔여 결과는 이후 단계 재
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -36,6 +37,16 @@ class RouteMatch:
     try_route_calls: int
 
 
+def tables_from_sql(sql: str | None) -> list[str]:
+    if not sql:
+        return []
+    seen: list[str] = []
+    for name in re.findall(r'FROM\s+"([^"]+)"', sql, flags=re.I):
+        if name not in seen:
+            seen.append(name)
+    return seen
+
+
 def tables_for_intent(intent: str) -> list[str]:
     d010 = ["AL_D010_26_20250704"]
     d060 = ["AL_D060_00_20250804"]
@@ -56,13 +67,52 @@ def tables_for_intent(intent: str) -> list[str]:
         "building_area_topn",
         "building_area_top1_value",
         "building_area_threshold_count",
+        "building_area_threshold_list",
+        "building_height_threshold_list",
+        "building_floor_threshold_list",
+        "building_structure_list",
+        "building_structure_count",
+        "building_special_land_list",
+        "building_special_land_count",
+        "building_attr_list",
+        "building_attr_count",
         "building_in_dong_spatial",
+        "building_in_dong_spatial_list",
         "buffer_count",
+        "place_buffer_count",
+        "place_buffer_list",
+        "place_buffer_outside_count",
+        "place_buffer_outside_list",
     }:
+        if intent in {
+            "building_in_dong_spatial",
+            "building_in_dong_spatial_list",
+            "place_buffer_count",
+            "place_buffer_list",
+            "place_buffer_outside_count",
+            "place_buffer_outside_list",
+        }:
+            return d010 + ["BND_ADM_DONG_PG"]
         return d010
-    if intent.startswith("bas_"):
+    if intent in {"spatial_bldg_bas_count", "spatial_bldg_bas_list"}:
+        return d010 + ["TL_KODIS_BAS_26_202507"]
+    if intent == "legal_dong_admin_share":
+        return d010 + ["BND_ADM_DONG_PG"]
+    if intent == "legal_dong_admin_members":
+        return ["BND_ADM_DONG_PG"]
+    if intent.startswith("spatial_bas_dong") or intent == "spatial_bas_bnd_gu_count":
+        return ["TL_KODIS_BAS_26_202507", "BND_ADM_DONG_PG"]
+    if intent == "spatial_dong_touch_list":
+        return ["BND_ADM_DONG_PG"]
+    if intent.startswith("d010_attr"):
+        return d010
+    if intent.startswith("d060_attr"):
+        return d060
+    if intent.startswith("bnd_attr"):
+        return ["BND_ADM_DONG_PG"]
+    if intent.startswith("bas_attr") or intent.startswith("bas_"):
         return bas
-    if intent.startswith("building_age"):
+    if intent.startswith("building_age") or intent.startswith("d198_"):
         return d198
     return []
 
@@ -71,6 +121,8 @@ def _is_early_intent(intent: str) -> bool:
     if intent == "building_name_lookup":
         return True
     if intent in EARLY_INDUSTRIAL_INTENTS:
+        return True
+    if intent == "legal_dong_admin_members":
         return True
     if intent.startswith("building_rank_"):
         return True

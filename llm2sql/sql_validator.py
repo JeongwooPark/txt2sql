@@ -56,7 +56,7 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
             'not district-only AL_D198 "A30".'
         )
 
-    # 건축년수인데 데이터기준일(A35) 사용
+    # 건축년수인데 데이터기준일(A35) 사용 / 달력연도를 INTERVAL 경과년수로 오인
     if any(k in q for k in ("지어진", "건축년", "준공", "사용승인", "년 미만", "년 이상")):
         if re.search(r'"A35"', s) or re.search(r"\bA35\b", s):
             reasons.append(
@@ -68,6 +68,25 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
                 "AL_D010 has no approval date; use AL_D198_26260 (동래) and/or "
                 "AL_D198_26410 (금정) with A34 text date cast."
             )
+        if re.search(r"(?:19|20)\d{2}\s*년", q) and re.search(
+            r"INTERVAL\s+'?(?:19|20)\d{2}\s*years'",
+            s,
+            flags=re.I,
+        ):
+            reasons.append(
+                "Calendar years like 2020년 이후 must compare A34/A33 to '2020-01-01', "
+                "not INTERVAL '2020 years'."
+            )
+        if (
+            any(k in q for k in ("최근", "오래된"))
+            and any(k in q for k in ("지어진", "준공"))
+            and any(k in q for k in ("금정", "동래"))
+            and "AL_D010" in upper
+        ):
+            reasons.append(
+                "최근/오래된 건축은 동래·금정 AL_D198 \"A34\"(사용승인일자)를 쓰고 "
+                "AL_D010 \"A13\" MAX 집계를 쓰지 마세요."
+            )
 
     # 상위/순위인데 ORDER BY 없음
     if any(
@@ -77,9 +96,22 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
         reasons.append("Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT.")
 
     # 미터 거리/버퍼인데 geography 캐스트 없음 또는 D198 단독
-    if any(k in q for k in ("미터", "근처", "버퍼", "이내")) and (
+    coord_buffer = any(k in q for k in ("미터", "킬로미터", "km", "근처", "버퍼", "이내")) and (
         "129." in q or "좌표" in q or "점(" in q
-    ):
+    )
+    place_buffer = (
+        bool(re.search(r"\d+(?:\.\d+)?\s*(?:킬로미터|㎞|km|미터|m)", q))
+        and (
+            any(k in q for k in ("주변", "근처", "인근", "버퍼", "반경"))
+            or bool(
+                re.search(r"\d+(?:\.\d+)?\s*(?:킬로미터|㎞|km|미터|m)\s*(?:안|이내)", q)
+            )
+        )
+        and bool(re.search(r"[가-힣0-9]{1,12}동", q))
+        and "건물" in q
+        and not coord_buffer
+    )
+    if coord_buffer:
         if "AL_D198" in upper and "AL_D010" not in upper:
             reasons.append(
                 'Coordinate buffer queries must use "AL_D010_26_20250704", not AL_D198.'
@@ -88,9 +120,45 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
             reasons.append(
                 "For meter distances on SRID 4326, cast geometry to geography in ST_DWithin."
             )
+    if place_buffer:
+        if "AL_D198" in upper and "AL_D010" not in upper:
+            reasons.append(
+                'Place buffer queries must use "AL_D010_26_20250704", not AL_D198.'
+            )
+        if "ST_DWITHIN" not in upper:
+            reasons.append(
+                "Place buffer queries require ST_DWithin against the dong boundary."
+            )
+        elif "GEOGRAPHY" not in upper:
+            reasons.append(
+                "For meter distances on SRID 4326, cast geometry to geography in ST_DWithin."
+            )
+        if "BND_ADM_DONG" not in upper:
+            reasons.append(
+                'Place buffer queries must use "BND_ADM_DONG_PG" (dong polygon buffer).'
+            )
 
-    # 동 공간 의도인데 attribute LIKE만
-    if any(k in q for k in ("안에", "내부", "안쪽", "경계 안")) and "건물" in q:
+    # 동 ∩ 기초구역인데 속성만
+    if (
+        "기초구역" in q
+        and any(k in q for k in ("교차", "겹치", "안에", "인접"))
+        and "산업단지" not in q
+        and (
+            "건물" in q
+            or bool(re.search(r"[가-힣0-9]{1,12}동", q))
+            or "행정" in q
+            or "센서스" in q
+        )
+    ):
+        if "ST_INTERSECTS" not in upper and "ST_WITHIN" not in upper and "ST_DWITHIN" not in upper:
+            reasons.append(
+                "기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다."
+            )
+    if (
+        any(k in q for k in ("안에", "내부", "안쪽", "경계 안"))
+        and "건물" in q
+        and not place_buffer
+    ):
         if "ST_INTERSECTS" not in upper:
             reasons.append(
                 'Dong containment requires ST_Intersects with "BND_ADM_DONG_PG".'

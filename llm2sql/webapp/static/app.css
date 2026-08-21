@@ -222,6 +222,46 @@ body {
   color: #ffd7cc;
 }
 
+.result-table-wrap {
+  margin-top: 12px;
+  overflow-x: auto;
+  white-space: normal;
+}
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.result-table th,
+.result-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.result-table th:first-child,
+.result-table td:first-child {
+  text-align: left;
+}
+
+.result-table th:not(:first-child),
+.result-table td:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.result-table tbody tr.peak td {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.result-table tfoot td {
+  font-weight: 650;
+  border-top: 1px solid rgba(46, 196, 182, 0.45);
+  border-bottom: 0;
+}
+
 .meta {
   margin-top: 10px;
   padding-top: 10px;

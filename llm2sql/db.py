@@ -55,6 +55,9 @@ def ensure_limit(sql: str, default_limit: int = 100) -> str:
         r"\bgroup\s+by\b", lower
     ):
         return body + ";"
+    # 연도·면적 구간 등 GROUP BY 집계는 전체 버킷이 필요함
+    if re.search(r"\bgroup\s+by\b", lower):
+        return body + ";"
     return f"{body}\nLIMIT {default_limit};"
 
 

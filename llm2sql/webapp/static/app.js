@@ -69,6 +69,7 @@
           <span class="status-text">질문 분석 중…</span>
         </div>
         <div class="answer" hidden></div>
+        <div class="result-table-wrap" hidden></div>
         <div class="chart-wrap" hidden><canvas></canvas></div>
         <div class="meta" hidden></div>
         <pre class="sql-block" hidden></pre>
@@ -82,6 +83,7 @@
       status: row.querySelector(".status"),
       statusText: row.querySelector(".status-text"),
       answer: row.querySelector(".answer"),
+      tableWrap: row.querySelector(".result-table-wrap"),
       chartWrap: row.querySelector(".chart-wrap"),
       chartCanvas: row.querySelector(".chart-wrap canvas"),
       meta: row.querySelector(".meta"),
@@ -209,10 +211,145 @@
     if (cursor) cursor.remove();
   }
 
-  function finishBot(shell, text, { error = false } = {}) {
+  function parsePipeRow(line) {
+    const trimmed = String(line || "").trim();
+    if (!trimmed.startsWith("|")) return null;
+    return trimmed
+      .replace(/^\||\|$/g, "")
+      .split("|")
+      .map((cell) => cell.trim());
+  }
+
+  function isPipeSeparator(line) {
+    const cells = parsePipeRow(line);
+    return Boolean(
+      cells &&
+        cells.length &&
+        cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, "")))
+    );
+  }
+
+  function splitMarkdownTables(text) {
+    const raw = String(text || "").replace(/\r\n/g, "\n");
+    const lines = raw.split("\n");
+    const tables = [];
+    const kept = [];
+    for (let i = 0; i < lines.length; i += 1) {
+      const header = parsePipeRow(lines[i]);
+      const sep = i + 1 < lines.length && isPipeSeparator(lines[i + 1]);
+      if (!header || !sep) {
+        kept.push(lines[i]);
+        continue;
+      }
+      const rows = [];
+      let j = i + 2;
+      while (j < lines.length) {
+        const cells = parsePipeRow(lines[j]);
+        if (!cells) break;
+        rows.push(cells);
+        j += 1;
+      }
+      tables.push({ headers: header, rows });
+      i = j - 1;
+    }
+    const prose = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    return { prose, tables };
+  }
+
+  function tableFromMarkdown(parsed) {
+    if (!parsed?.headers || parsed.headers.length < 2) return null;
+    const body = [];
+    let total = 0;
+    let peak = null;
+    for (const cells of parsed.rows || []) {
+      if (!cells.length || cells[0] === "합계") continue;
+      const n = Number(String(cells[1] || "").replace(/,/g, ""));
+      const pct = parseFloat(String(cells[2] || "").replace(/%/g, ""));
+      const row = {
+        range: cells[0],
+        n: Number.isFinite(n) ? n : 0,
+        pct: Number.isFinite(pct) ? pct : 0,
+      };
+      body.push(row);
+      total += row.n;
+      if (!peak || row.n > peak.n) peak = row;
+    }
+    if (!body.length) return null;
+    return {
+      range_header: parsed.headers[0],
+      count_header: parsed.headers[1],
+      share_header: parsed.headers[2] || "비율",
+      rows: body,
+      total,
+      peak,
+    };
+  }
+
+  function proseWithoutMarkdownTable(text) {
+    return splitMarkdownTables(text).prose;
+  }
+
+  function renderResultTable(shell, table) {
+    if (!shell?.tableWrap || !table || !Array.isArray(table.rows)) return;
+    const wrap = shell.tableWrap;
+    wrap.hidden = false;
+    wrap.innerHTML = "";
+    const el = document.createElement("table");
+    el.className = "result-table";
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+    for (const key of ["range_header", "count_header", "share_header"]) {
+      const th = document.createElement("th");
+      th.textContent =
+        table[key] ||
+        { range_header: "구간", count_header: "동 수", share_header: "비율" }[
+          key
+        ];
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    el.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    const peakRange = table.peak && table.peak.range;
+    for (const row of table.rows) {
+      const tr = document.createElement("tr");
+      if (peakRange && row.range === peakRange) tr.className = "peak";
+      const c1 = document.createElement("td");
+      c1.textContent = String(row.range ?? "");
+      const c2 = document.createElement("td");
+      c2.textContent = Number(row.n || 0).toLocaleString("ko-KR");
+      const c3 = document.createElement("td");
+      const pct = Number(row.pct);
+      c3.textContent = Number.isFinite(pct) ? `${pct}%` : "";
+      tr.append(c1, c2, c3);
+      tbody.appendChild(tr);
+    }
+    el.appendChild(tbody);
+    const tfoot = document.createElement("tfoot");
+    const fr = document.createElement("tr");
+    const f1 = document.createElement("td");
+    f1.textContent = "합계";
+    const f2 = document.createElement("td");
+    f2.textContent = Number(table.total || 0).toLocaleString("ko-KR");
+    const f3 = document.createElement("td");
+    f3.textContent = "100%";
+    fr.append(f1, f2, f3);
+    tfoot.appendChild(fr);
+    el.appendChild(tfoot);
+    wrap.appendChild(el);
+  }
+
+  function finishBot(shell, text, { error = false, table = null } = {}) {
     hideLoading(shell);
     shell.answer.hidden = false;
-    shell.answer.textContent = text;
+    const parsed = splitMarkdownTables(text);
+    const shown = parsed.prose || (table ? "" : String(text || ""));
+    shell.answer.textContent = shown;
+    const resolved =
+      table && Array.isArray(table.rows) && table.rows.length
+        ? table
+        : parsed.tables.map(tableFromMarkdown).find(Boolean) || null;
+    if (resolved) renderResultTable(shell, resolved);
     if (error) shell.bubble.classList.add("error");
   }
 
@@ -261,7 +398,7 @@
       const result = evt.result || {};
       const finalAnswer = result.answer || state.streamed || "(답변 없음)";
 
-      finishBot(shell, finalAnswer, { error: !result.ok });
+      finishBot(shell, finalAnswer, { error: !result.ok, table: result.table });
 
       const chips = [];
       if (result.route) chips.push(`route: ${result.route}`);

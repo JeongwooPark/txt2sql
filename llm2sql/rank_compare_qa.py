@@ -9,6 +9,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from llm2sql.answer import (
+    _fmt_area,
     _fmt_number,
     _row_floors,
     _row_height,
@@ -238,10 +239,13 @@ def _prose_rank_compare(
             lead = f"{place}에서 지상층이 가장 많은 건물은 {who}입니다"
         else:
             lead = f"{place}에서 {metric_name}이 가장 큰 건물은 {who}입니다"
+        metric_shown = f"{_fmt_number(w.get('metric_value'))}{unit}"
+        if unit == "㎡":
+            metric_shown = _fmt_area(w.get("metric_value"), question)
         parts.append(
-            f"{lead}. {metric_name} {_fmt_number(w.get('metric_value'))}{unit}, "
+            f"{lead}. {metric_name} {metric_shown}, "
             f"위치 {w.get('address')}, 용도 {w.get('usage') or '—'}, "
-            f"연면적 {_fmt_number(w.get('floor_area_m2'))}㎡, "
+            f"연면적 {_fmt_area(w.get('floor_area_m2'), question)}, "
             f"높이 {_fmt_number(w.get('height_m'))}m, "
             f"지상 {_fmt_number(w.get('floors'))}층입니다."
         )
@@ -257,10 +261,20 @@ def _prose_rank_compare(
             winner = a if av >= bv else b
             loser = b if av >= bv else a
             adj = "높습니다" if metric_name == "높이" else "큽니다"
+            win_m = (
+                _fmt_area(winner.get("metric_value"), question)
+                if unit == "㎡"
+                else f"{_fmt_number(winner.get('metric_value'))}{unit}"
+            )
+            lose_m = (
+                _fmt_area(loser.get("metric_value"), question)
+                if unit == "㎡"
+                else f"{_fmt_number(loser.get('metric_value'))}{unit}"
+            )
             parts.append(
                 f"비교하면 {winner.get('place')} 쪽이 "
-                f"{_fmt_number(winner.get('metric_value'))}{unit}로 더 {adj} "
-                f"({loser.get('place')} {_fmt_number(loser.get('metric_value'))}{unit})."
+                f"{win_m}로 더 {adj} "
+                f"({loser.get('place')} {lose_m})."
             )
     if "아파트" in question:
         parts.append("아파트는 공동주택 용도로 집계했습니다.")

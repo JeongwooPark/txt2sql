@@ -135,6 +135,126 @@ GT_CASES: list[dict[str, Any]] = [
         "expect_tables_any": ["AL_D010"],
         "tags": ["attr", "count", "usage"],
     },
+    {
+        "id": "gt11_haeundae_height_le",
+        "question": "해운대구에서 건물 높이가 50미터 이하인 건물은 몇 개야?",
+        "expected": 31941,
+        "gold_sql": (
+            'SELECT COUNT(*)::int AS v FROM "AL_D010_26_20250704" '
+            'WHERE "A4" LIKE \'%해운대구%\' AND "A16" <= 50'
+        ),
+        "expect_tables_any": ["AL_D010"],
+        "expect_sql_all": ["A16", "<= 50"],
+        "tags": ["attr", "count", "height", "threshold"],
+    },
+    {
+        "id": "gt12_haeundae_height_lt",
+        "question": "해운대구에서 건물 높이가 50미터 미만인 건물은 몇 개야?",
+        "expected": 31939,
+        "gold_sql": (
+            'SELECT COUNT(*)::int AS v FROM "AL_D010_26_20250704" '
+            'WHERE "A4" LIKE \'%해운대구%\' AND "A16" < 50'
+        ),
+        "expect_tables_any": ["AL_D010"],
+        "expect_sql_all": ["A16", "< 50"],
+        "tags": ["attr", "count", "height", "threshold"],
+    },
+    {
+        "id": "gt13_haeundae_height_gt",
+        "question": "해운대구에서 건물 높이가 50미터 초과인 건물은 몇 개야?",
+        "expected": 803,
+        "gold_sql": (
+            'SELECT COUNT(*)::int AS v FROM "AL_D010_26_20250704" '
+            'WHERE "A4" LIKE \'%해운대구%\' AND "A16" > 50'
+        ),
+        "expect_tables_any": ["AL_D010"],
+        "expect_sql_all": ["A16", "> 50"],
+        "tags": ["attr", "count", "height", "threshold"],
+    },
+    {
+        "id": "gt14_geumjeong_floors_le",
+        "question": "금정구에서 지상층이 10층 이하인 건물은 몇 개야?",
+        "expected": 38325,
+        "gold_sql": (
+            'SELECT COUNT(*)::int AS v FROM "AL_D010_26_20250704" '
+            'WHERE "A4" LIKE \'%금정구%\' AND "A26" <= 10'
+        ),
+        "expect_tables_any": ["AL_D010", "AL_D198_26410"],
+        "expect_sql_all": ["A26", "<= 10"],
+        "tags": ["attr", "count", "floors", "threshold"],
+    },
+    {
+        "id": "gt15_geumjeong_floors_lt",
+        "question": "금정구에서 지상층이 10층 미만인 건물은 몇 개야?",
+        "expected": 38248,
+        "gold_sql": (
+            'SELECT COUNT(*)::int AS v FROM "AL_D010_26_20250704" '
+            'WHERE "A4" LIKE \'%금정구%\' AND "A26" < 10'
+        ),
+        "expect_tables_any": ["AL_D010", "AL_D198_26410"],
+        "expect_sql_all": ["A26", "< 10"],
+        "tags": ["attr", "count", "floors", "threshold"],
+    },
+    {
+        "id": "gt16_geumjeong_floors_gt",
+        "question": "금정구에서 지상층이 10층 초과인 건물은 몇 개야?",
+        "expected": 469,
+        "gold_sql": (
+            'SELECT COUNT(*)::int AS v FROM "AL_D010_26_20250704" '
+            'WHERE "A4" LIKE \'%금정구%\' AND "A26" > 10'
+        ),
+        "expect_tables_any": ["AL_D010", "AL_D198_26410"],
+        "expect_sql_all": ["A26", "> 10"],
+        "tags": ["attr", "count", "floors", "threshold"],
+    },
+    {
+        "id": "gt17_geumjeong_area_ge",
+        "question": "금정구에서 연면적 2000 이상인 건물 수는?",
+        "expected": 1068,
+        "gold_sql": (
+            'SELECT COUNT(*)::int AS v FROM "AL_D010_26_20250704" '
+            'WHERE "A4" LIKE \'%금정구%\' AND "A14" >= 2000'
+        ),
+        "expect_tables_any": ["AL_D010"],
+        "expect_sql_all": ["A14", ">= 2000"],
+        "tags": ["attr", "count", "area", "threshold"],
+    },
+    {
+        "id": "gt18_geumjeong_area_le",
+        "question": "금정구에서 연면적 2000 이하인 건물 수는?",
+        "expected": 37726,
+        "gold_sql": (
+            'SELECT COUNT(*)::int AS v FROM "AL_D010_26_20250704" '
+            'WHERE "A4" LIKE \'%금정구%\' AND "A14" <= 2000'
+        ),
+        "expect_tables_any": ["AL_D010"],
+        "expect_sql_all": ["A14", "<= 2000"],
+        "tags": ["attr", "count", "area", "threshold"],
+    },
+    {
+        "id": "gt19_geumjeong_area_lt",
+        "question": "금정구에서 연면적 2000 미만인 건물 수는?",
+        "expected": 37726,
+        "gold_sql": (
+            'SELECT COUNT(*)::int AS v FROM "AL_D010_26_20250704" '
+            'WHERE "A4" LIKE \'%금정구%\' AND "A14" < 2000'
+        ),
+        "expect_tables_any": ["AL_D010"],
+        "expect_sql_all": ["A14", "< 2000"],
+        "tags": ["attr", "count", "area", "threshold"],
+    },
+    {
+        "id": "gt20_geumjeong_area_gt",
+        "question": "금정구에서 연면적 2000 초과인 건물 수는?",
+        "expected": 1068,
+        "gold_sql": (
+            'SELECT COUNT(*)::int AS v FROM "AL_D010_26_20250704" '
+            'WHERE "A4" LIKE \'%금정구%\' AND "A14" > 2000'
+        ),
+        "expect_tables_any": ["AL_D010"],
+        "expect_sql_all": ["A14", "> 2000"],
+        "tags": ["attr", "count", "area", "threshold"],
+    },
 ]
 
 

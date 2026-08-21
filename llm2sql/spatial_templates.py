@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
-from llm2sql.domain import extract_place
+import re
+
+from llm2sql.domain import extract_place, place_a4_predicate
+
+_D010 = "AL_D010_26_20250704"
+_BND = "BND_ADM_DONG_PG"
+_BAS = "TL_KODIS_BAS_26_202507"
+_LIST_COLS = (
+    'b."A0", b."A4", b."A5", b."A9", b."A12", b."A14", b."A16", b."A24", b."A26"'
+)
+_BAS_COLS = 't."BAS_ID", t."SIG_KOR_NM", t."BAS_AR"'
+_BND_COLS = 'd."ADM_CD", d."ADM_NM"'
 
 
 def extract_place_token(question: str) -> str | None:
@@ -10,13 +21,382 @@ def extract_place_token(question: str) -> str | None:
     return extract_place(question)
 
 
-def building_in_dong_count_sql(place: str) -> str:
+def admin_dong_name_predicate(place: str, alias: str = "d") -> str:
+    """법정동 구서동 → 행정동 구서1동/구서2동. 구서1동은 해당 행정동만."""
+    safe = place.replace("'", "''")
+    col = f'{alias}."ADM_NM"' if alias else '"ADM_NM"'
+    if re.fullmatch(r"[가-힣]+\d+동", safe):
+        return f"{col} = '{safe}'"
+    stem = safe[:-1] if safe.endswith("동") else safe
+    return f"({col} = '{safe}' OR {col} ~ '^{stem}[0-9]+동$')"
+
+
+def admin_dong_where(place: str, alias: str = "d") -> str:
+    """부산(ADM_CD 21*) 행정동만. 전국 동명 중복(온천1동 등) 방지."""
+    return (
+        f"{admin_dong_name_predicate(place, alias)} "
+        f"AND {alias}.\"ADM_CD\" LIKE '21%'"
+    )
+
+
+def _prefix_a_cols(frag: str, alias: str) -> str:
+    if not alias:
+        return frag
+    return re.sub(r'(?<!\.)"A(\d+)"', rf'{alias}."A\1"', frag)
+
+
+def building_scope(
+    place: str | None,
+    gu: str | None,
+) -> tuple[str, str, str, str]:
+    """건물 질의 범위. (kind, FROM, WHERE, 컬럼접두어).
+
+    kind: admin=행정경계, a4=법정동 주소, gu=구군, none=장소 없음.
+    """
+    from llm2sql.gazetteer import is_legal_dong, is_locality, uses_admin_boundary
+
+    if place and uses_admin_boundary(place):
+        frm = (
+            f'"{_D010}" b\n'
+            f'JOIN "{_BND}" d\n'
+            "  ON ST_Intersects(b.geometry, d.geometry)"
+        )
+        where = [admin_dong_where(place)]
+        if gu:
+            where.append(f'b."A4" LIKE \'%{gu}%\'')
+        return "admin", frm, " AND ".join(where), "b."
+    if place and is_legal_dong(place):
+        pred = place_a4_predicate(place)
+        if gu:
+            pred = f"({pred}) AND \"A4\" LIKE '%{gu}%'"
+        return "a4", f'"{_D010}"', pred, ""
+    if gu:
+        return "gu", f'"{_D010}"', f'"A4" LIKE \'%{gu}%\'', ""
+    if place and is_locality(place):
+        return "a4", f'"{_D010}"', place_a4_predicate(place), ""
+    if place:
+        return "a4", f'"{_D010}"', place_a4_predicate(place), ""
+    return "none", f'"{_D010}"', "TRUE", ""
+
+
+def scoped_count_sql(
+    place: str | None,
+    gu: str | None,
+    extra: list[str] | None = None,
+) -> tuple[str, str]:
+    """(kind, COUNT SQL)."""
+    kind, frm, where, prefix = building_scope(place, gu)
+    parts = [where] if where and where != "TRUE" else []
+    for item in extra or []:
+        parts.append(_prefix_a_cols(item, prefix.rstrip(".")))
+    where_sql = " AND ".join(p for p in parts if p) or "TRUE"
+    sql = f"SELECT COUNT(*) AS cnt\nFROM {frm}\nWHERE {where_sql};"
+    return kind, sql
+
+
+def scoped_list_sql(
+    place: str | None,
+    gu: str | None,
+    extra: list[str] | None = None,
+    *,
+    order_col: str = "A14",
+    limit: int = 100,
+) -> tuple[str, str]:
+    kind, frm, where, prefix = building_scope(place, gu)
+    parts = [where] if where and where != "TRUE" else []
+    for item in extra or []:
+        parts.append(_prefix_a_cols(item, prefix.rstrip(".")))
+    where_sql = " AND ".join(p for p in parts if p) or "TRUE"
+    p = prefix
+    sql = (
+        f"SELECT {p}\"A0\", {p}\"A4\", {p}\"A5\", {p}\"A9\", {p}\"A12\", "
+        f"{p}\"A14\", {p}\"A16\", {p}\"A24\", {p}\"A26\",\n"
+        "       COUNT(*) OVER() AS total_n\n"
+        f"FROM {frm}\n"
+        f"WHERE {where_sql}\n"
+        f'ORDER BY {p}"{order_col}" DESC NULLS LAST\n'
+        f"LIMIT {limit};"
+    )
+    return kind, sql
+
+
+def building_in_dong_count_sql(place: str, extra: str = "") -> str:
+    extra_sql = f" AND {extra}" if extra else ""
     return (
         'SELECT COUNT(*) AS cnt\n'
-        'FROM "AL_D010_26_20250704" b\n'
-        'JOIN "BND_ADM_DONG_PG" d\n'
+        f'FROM "{_D010}" b\n'
+        f'JOIN "{_BND}" d\n'
         "  ON ST_Intersects(b.geometry, d.geometry)\n"
-        f'WHERE d."ADM_NM" LIKE \'%{place}%\';'
+        f"WHERE {admin_dong_where(place)}{extra_sql};"
+    )
+
+
+def building_in_dong_list_sql(place: str, *, limit: int = 50) -> str:
+    return (
+        f"SELECT {_LIST_COLS}\n"
+        f'FROM "{_D010}" b\n'
+        f'JOIN "{_BND}" d\n'
+        "  ON ST_Intersects(b.geometry, d.geometry)\n"
+        f"WHERE {admin_dong_where(place)}\n"
+        'ORDER BY b."A14" DESC NULLS LAST\n'
+        f"LIMIT {limit};"
+    )
+
+
+def _place_buffer_zone(place: str) -> str:
+    pred = admin_dong_where(place)
+    return (
+        "(\n"
+        "  SELECT ST_Union(d.geometry) AS geom\n"
+        f'  FROM "{_BND}" d\n'
+        f"  WHERE {pred}\n"
+        ") z"
+    )
+
+
+def place_buffer_count_sql(
+    place: str,
+    meters: str,
+    expand_deg: str,
+    *,
+    exterior: bool = False,
+) -> str:
+    extra = "\n  AND NOT ST_Intersects(b.geometry, z.geom)" if exterior else ""
+    return (
+        "SELECT COUNT(*) AS cnt\n"
+        f'FROM "{_D010}" b\n'
+        f"CROSS JOIN {_place_buffer_zone(place)}\n"
+        "WHERE z.geom IS NOT NULL\n"
+        f"  AND b.geometry && ST_Expand(z.geom, {expand_deg})\n"
+        "  AND ST_DWithin(\n"
+        "    b.geometry::geography,\n"
+        "    z.geom::geography,\n"
+        f"    {meters}\n"
+        f"  ){extra};"
+    )
+
+
+def place_buffer_list_sql(
+    place: str,
+    meters: str,
+    expand_deg: str,
+    *,
+    limit: int = 50,
+    exterior: bool = False,
+) -> str:
+    extra = "\n  AND NOT ST_Intersects(b.geometry, z.geom)" if exterior else ""
+    return (
+        f"SELECT {_LIST_COLS}\n"
+        f'FROM "{_D010}" b\n'
+        f"CROSS JOIN {_place_buffer_zone(place)}\n"
+        "WHERE z.geom IS NOT NULL\n"
+        f"  AND b.geometry && ST_Expand(z.geom, {expand_deg})\n"
+        "  AND ST_DWithin(\n"
+        "    b.geometry::geography,\n"
+        "    z.geom::geography,\n"
+        f"    {meters}\n"
+        f"  ){extra}\n"
+        "ORDER BY ST_Distance(b.geometry::geography, z.geom::geography),\n"
+        '  b."A14" DESC NULLS LAST\n'
+        f"LIMIT {limit};"
+    )
+
+
+def _bas_scope(gu: str | None, bas_id: str | None, alias: str = "t") -> str:
+    if bas_id:
+        safe = bas_id.replace("'", "''")
+        return f'{alias}."BAS_ID" = \'{safe}\''
+    if gu:
+        safe = gu.replace("'", "''")
+        return f'{alias}."SIG_KOR_NM" = \'{safe}\''
+    return "TRUE"
+
+
+def building_bas_count_sql(gu: str | None = None, bas_id: str | None = None) -> str:
+    return (
+        'SELECT COUNT(DISTINCT b."A0") AS cnt\n'
+        f'FROM "{_D010}" b\n'
+        f'JOIN "{_BAS}" t\n'
+        "  ON b.geometry && t.geometry\n"
+        " AND ST_Intersects(b.geometry, t.geometry)\n"
+        f"WHERE {_bas_scope(gu, bas_id)};"
+    )
+
+
+def building_bas_list_sql(
+    gu: str | None = None,
+    bas_id: str | None = None,
+    *,
+    limit: int = 50,
+) -> str:
+    return (
+        f"SELECT DISTINCT ON (b.\"A0\") {_LIST_COLS}\n"
+        f'FROM "{_D010}" b\n'
+        f'JOIN "{_BAS}" t\n'
+        "  ON b.geometry && t.geometry\n"
+        " AND ST_Intersects(b.geometry, t.geometry)\n"
+        f"WHERE {_bas_scope(gu, bas_id)}\n"
+        'ORDER BY b."A0", b."A14" DESC NULLS LAST\n'
+        f"LIMIT {limit};"
+    )
+
+
+def _join_op(op: str) -> str:
+    if op == "within":
+        return "ST_Within(t.geometry, d.geometry)"
+    if op == "touches":
+        # 기초구역·행정동은 격자 체계가 달라 Touches만으로는 0건인 경우가 많다.
+        # 인접 = 맞닿거나, 걸치되 동 안에 완전히 들어가지 않는 구역.
+        return (
+            "(ST_Touches(t.geometry, d.geometry) OR "
+            "(ST_Intersects(t.geometry, d.geometry) "
+            "AND NOT ST_Within(t.geometry, d.geometry)))"
+        )
+    if op == "contains":
+        return "ST_Contains(d.geometry, t.geometry)"
+    return "ST_Intersects(t.geometry, d.geometry)"
+
+
+def bas_dong_count_sql(place: str, op: str = "intersects") -> str:
+    return (
+        'SELECT COUNT(DISTINCT t."BAS_ID") AS cnt\n'
+        f'FROM "{_BAS}" t\n'
+        f'JOIN "{_BND}" d\n'
+        f"  ON t.geometry && d.geometry AND {_join_op(op)}\n"
+        f"WHERE {admin_dong_where(place)};"
+    )
+
+
+def bas_dong_list_sql(place: str, op: str = "intersects", *, limit: int = 50) -> str:
+    return (
+        f"SELECT DISTINCT {_BAS_COLS}\n"
+        f'FROM "{_BAS}" t\n'
+        f'JOIN "{_BND}" d\n'
+        f"  ON t.geometry && d.geometry AND {_join_op(op)}\n"
+        f"WHERE {admin_dong_where(place)}\n"
+        'ORDER BY t."BAS_AR" DESC NULLS LAST\n'
+        f"LIMIT {limit};"
+    )
+
+
+def bas_dong_buffer_count_sql(place: str, meters: str, expand_deg: str) -> str:
+    return (
+        'SELECT COUNT(DISTINCT t."BAS_ID") AS cnt\n'
+        f'FROM "{_BAS}" t\n'
+        f"CROSS JOIN {_place_buffer_zone(place)}\n"
+        "WHERE z.geom IS NOT NULL\n"
+        f"  AND t.geometry && ST_Expand(z.geom, {expand_deg})\n"
+        "  AND ST_DWithin(\n"
+        "    t.geometry::geography,\n"
+        "    z.geom::geography,\n"
+        f"    {meters}\n"
+        "  );"
+    )
+
+
+def bas_dong_nearest_sql(place: str) -> str:
+    return (
+        f"SELECT {_BAS_COLS},\n"
+        "  ST_Distance(t.geometry::geography, z.geom::geography) AS dist_m\n"
+        f'FROM "{_BAS}" t\n'
+        f"CROSS JOIN {_place_buffer_zone(place)}\n"
+        "WHERE z.geom IS NOT NULL\n"
+        "ORDER BY t.geometry <-> z.geom\n"
+        "LIMIT 1;"
+    )
+
+
+def dong_neighbor_sql(place: str, *, limit: int = 50) -> str:
+    return (
+        f"SELECT DISTINCT {_BND_COLS}\n"
+        f'FROM "{_BND}" a\n'
+        f'JOIN "{_BND}" d\n'
+        "  ON a.geometry && d.geometry\n"
+        " AND ST_Intersects(a.geometry, d.geometry)\n"
+        " AND a.\"ADM_CD\" <> d.\"ADM_CD\"\n"
+        f"WHERE {admin_dong_where(place, 'a')}\n"
+        "  AND d.\"ADM_CD\" LIKE '21%'\n"
+        'ORDER BY d."ADM_NM"\n'
+        f"LIMIT {limit};"
+    )
+
+
+def bas_gu_bnd_intersect_count_sql(gu: str) -> str:
+    """구 기초구역 ∩ 부산 센서스 행정동."""
+    safe = gu.replace("'", "''")
+    return (
+        'SELECT COUNT(DISTINCT t."BAS_ID") AS cnt\n'
+        f'FROM "{_BAS}" t\n'
+        f'JOIN "{_BND}" d\n'
+        "  ON t.geometry && d.geometry\n"
+        " AND ST_Intersects(t.geometry, d.geometry)\n"
+        f"WHERE t.\"SIG_KOR_NM\" = '{safe}'\n"
+        "  AND d.\"ADM_CD\" LIKE '21%';"
+    )
+
+
+def legal_dong_admin_share_sql(
+    legal_dong: str,
+    admin_dongs: list[str],
+    *,
+    usage: str | None = None,
+) -> str:
+    """법정동(A4) 건물을 행정동 경계로 나눠 건수·비율을 구한다."""
+    a4 = place_a4_predicate(legal_dong)
+    usage_sql = ""
+    if usage:
+        safe_u = usage.replace("'", "''")
+        if usage == "공공용시설":
+            usage_sql = " AND (b.\"A9\" = '공공용시설' OR b.\"A9\" ILIKE '%공공%')"
+        else:
+            usage_sql = f' AND b."A9" = \'{safe_u}\''
+    if admin_dongs:
+        ins = ", ".join("'" + n.replace("'", "''") + "'" for n in admin_dongs)
+        admin_pred = f'd."ADM_NM" IN ({ins})'
+    else:
+        admin_pred = admin_dong_name_predicate(legal_dong, "d")
+    return (
+        "WITH bldg AS (\n"
+        '  SELECT b."A0", b.geometry\n'
+        f'  FROM "{_D010}" b\n'
+        f"  WHERE {a4}{usage_sql}\n"
+        "),\n"
+        "assigned AS (\n"
+        '  SELECT DISTINCT ON (b."A0")\n'
+        '    b."A0",\n'
+        '    d."ADM_NM" AS admin_dong\n'
+        "  FROM bldg b\n"
+        f'  JOIN "{_BND}" d\n'
+        "    ON b.geometry && d.geometry\n"
+        "   AND ST_Intersects(b.geometry, d.geometry)\n"
+        f"  WHERE {admin_pred}\n"
+        "    AND d.\"ADM_CD\" LIKE '21%'\n"
+        '  ORDER BY b."A0",\n'
+        "    ST_Area(ST_Intersection(b.geometry, d.geometry)) DESC NULLS LAST\n"
+        ")\n"
+        "SELECT COALESCE(a.admin_dong, '미분류') AS admin_dong,\n"
+        "       COUNT(*) AS n,\n"
+        "       ROUND(\n"
+        "         100.0 * COUNT(*) / NULLIF((SELECT COUNT(*) FROM bldg), 0),\n"
+        "         1\n"
+        "       ) AS pct\n"
+        "FROM bldg b\n"
+        'LEFT JOIN assigned a ON a."A0" = b."A0"\n'
+        "GROUP BY 1\n"
+        "ORDER BY CASE WHEN COALESCE(a.admin_dong, '미분류') = '미분류' "
+        "THEN 1 ELSE 0 END,\n"
+        "         1;"
+    )
+
+
+def legal_dong_admin_members_sql(place: str) -> str:
+    """법정동(연산동)에 대응하는 부산 행정동(연산1동…) 목록."""
+    where = admin_dong_where(place, "d")
+    return (
+        'SELECT d."ADM_CD" AS adm_cd, d."ADM_NM" AS admin_dong\n'
+        f'FROM "{_BND}" d\n'
+        f"WHERE {where}\n"
+        'ORDER BY d."ADM_NM";'
     )
 
 
@@ -25,5 +405,8 @@ def spatial_fewshot(place: str | None) -> str:
     return (
         "Required pattern example:\n"
         f"{building_in_dong_count_sql(sample)}\n"
+        "Place buffer (boundary + N meters) uses ST_DWithin geography "
+        "against ST_Union of matching BND_ADM_DONG_PG polygons.\n"
+        "Building ∩ 기초구역 → join TL_KODIS_BAS_26_202507 with ST_Intersects.\n"
         "Adapt table/columns only if needed; keep ST_Intersects and boundary join."
     )

@@ -209,13 +209,33 @@ def is_metadata_question(question: str) -> bool:
         )
     ):
         return False
+    from llm2sql.spatial_router import _looks_like_admin_members
+
+    if _looks_like_admin_members(q):
+        return False
     # 지역 건물 용도 분포/설명은 스키마 메타가 아님 ("동래구 건물의 주요 용도들을 설명하라")
     if _is_place_usage_overview(q):
         return False
     # 특정 건물명 조회는 메타가 아님
-    from llm2sql.domain import looks_like_building_name_lookup
+    from llm2sql.domain import (
+        extract_special_land,
+        extract_structure,
+        looks_like_building_name_lookup,
+    )
 
     if looks_like_building_name_lookup(q):
+        return False
+    from llm2sql.d198_attrs import is_d198_attr_question
+    from llm2sql.catalog_attrs import is_catalog_attr_question
+
+    if is_d198_attr_question(q):
+        return False
+    if is_catalog_attr_question(q):
+        return False
+    # 장소+건축 구조/특수지(산지)는 스키마 설명이 아님
+    if (extract_structure(q) or extract_special_land(q)) and (
+        re.search(r"[가-힣0-9]{1,12}동", q) or re.search(r"[가-힣]{1,6}구", q)
+    ):
         return False
     # 「지번은?」「주소는?」처럼 짧은 속성 질문은 스키마 메타가 아님
     if re.fullmatch(
@@ -285,7 +305,11 @@ def is_metadata_question(question: str) -> bool:
     ):
         return False
     if any(k in q for k in _META_HINTS):
-        return True
+        if not ("구조" in q and "구조물" in q and "스키마" not in q and "테이블" not in q and "컬럼" not in q):
+            return True
+        # 「구조물」만 있고 데이터 구조가 아니면 메타 힌트에서 제외하고 계속 판별
+        if any(k in q for k in _META_HINTS if k != "구조"):
+            return True
     # "A4는?", "법정동명이 뭐야" 류
     if _COL_TOKEN.search(q) and any(
         k in q for k in ("뭐", "무엇", "의미", "뜻", "설명", "컬럼", "속성", "필드")
@@ -472,9 +496,30 @@ def _answer_catalog_count(conn: psycopg.Connection) -> MetaAnswer:
 
 
 def _asks_table_desc(q: str) -> bool:
-    return any(
-        k in q
-        for k in (
+    if "구조물" in q and not any(
+        k in q for k in ("스키마", "테이블", "컬럼", "칼럼", "데이터셋", "속성")
+    ):
+        keys = (
+            "테이블",
+            "데이터셋",
+            "자료",
+            "설명",
+            "스키마",
+            "속성",
+            "컬럼",
+            "칼럼",
+            "필드",
+            "뭐야",
+            "무엇",
+            "들어있는",
+            "담긴",
+            "내용",
+            "포함",
+            "요약",
+            "개요",
+        )
+    else:
+        keys = (
             "테이블",
             "데이터셋",
             "자료",
@@ -494,7 +539,7 @@ def _asks_table_desc(q: str) -> bool:
             "요약",
             "개요",
         )
-    )
+    return any(k in q for k in keys)
 
 
 def _extract_column_tokens(q: str) -> list[str]:

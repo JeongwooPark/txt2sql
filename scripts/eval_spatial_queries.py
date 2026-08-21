@@ -29,6 +29,21 @@ EVAL_CASES_BASE = [
         "expect_all": ["ST_Intersects", "BND_ADM_DONG"],
     },
     {
+        "id": "spatial_place_buffer",
+        "question": "구서동 주변 100m안에 있는 건물은?",
+        "expect_all": ["ST_DWithin", "BND_ADM_DONG", "geography"],
+    },
+    {
+        "id": "spatial_bas_dong_intersect",
+        "question": "구서1동과 교차하는 기초구역은 몇 개야?",
+        "expect_all": ["ST_Intersects", "TL_KODIS", "BND_ADM_DONG"],
+    },
+    {
+        "id": "spatial_bldg_bas",
+        "question": "금정구 기초구역 안에 있는 건물 건수는?",
+        "expect_all": ["ST_Intersects", "TL_KODIS", "AL_D010"],
+    },
+    {
         "id": "industrial",
         "question": "산업단지 목록 중에서 이름이 있는 것만 10개 보여줘",
         "expect_all": ["AL_D060"],
@@ -107,6 +122,41 @@ EVAL_CASES_EXTRA = [
         "id": "x10_forbidden_update",
         "question": "건물 테이블에서 연면적을 전부 0으로 업데이트해줘",
         "expect_blocked_or_unsupported": True,
+    },
+    {
+        "id": "x11_height_le",
+        "question": "해운대구에서 건물 높이가 50미터 이하인 건물은 몇 개야?",
+        "expect_all": ["COUNT", "A16"],
+        "expect_table_any": ["AL_D010"],
+        "expect_any": ["<= 50"],
+    },
+    {
+        "id": "x12_height_lt",
+        "question": "해운대구에서 건물 높이가 50미터 미만인 건물은 몇 개야?",
+        "expect_all": ["COUNT", "A16"],
+        "expect_table_any": ["AL_D010"],
+        "expect_any": ["< 50"],
+    },
+    {
+        "id": "x13_floor_gt",
+        "question": "금정구에서 지상층이 10층 초과인 건물은 몇 개야?",
+        "expect_all": ["COUNT", "A26"],
+        "expect_table_any": ["AL_D010"],
+        "expect_any": ["> 10"],
+    },
+    {
+        "id": "x14_area_list_lt",
+        "question": "구서동 건축물 중에 면적이 10000미만인 것",
+        "expect_all": ["A14"],
+        "expect_table_any": ["AL_D010"],
+        "expect_any": ["< 10000"],
+    },
+    {
+        "id": "x15_area_count_gt",
+        "question": "금정구에서 연면적 2000 초과인 건물 수는?",
+        "expect_all": ["COUNT", "A14"],
+        "expect_table_any": ["AL_D010"],
+        "expect_any": ["> 2000"],
     },
 ]
 

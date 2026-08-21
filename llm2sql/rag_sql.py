@@ -20,7 +20,7 @@ from llm2sql.sql_fix import load_name_maps, rewrite_display_names
 from llm2sql.sql_generator import build_few_shot_for_question, generate_sql
 from llm2sql.sql_validator import diagnose_sql, validate_sql_preexec
 
-_SPATIAL_INTENT = ("안에", "내부", "속하는", "교차", "버퍼", "거리", "근처", "이내")
+_SPATIAL_INTENT = ("안에", "내부", "속하는", "교차", "버퍼", "거리", "근처", "이내", "주변", "반경")
 
 
 def _emit(progress: ProgressTracker | None, stage: str, message: str, **extra: Any) -> None:
