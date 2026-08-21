@@ -25,10 +25,18 @@ class AskResult:
     chart_spec: dict[str, Any] | None = None
     chart: dict[str, Any] | None = None
     table: dict[str, Any] | None = None
+    map: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
-        for key in ("ambiguous_terms", "diagnostics", "chart_spec", "chart", "table"):
+        for key in (
+            "ambiguous_terms",
+            "diagnostics",
+            "chart_spec",
+            "chart",
+            "table",
+            "map",
+        ):
             if data.get(key) is None:
                 data.pop(key, None)
         if not data.get("chart_offer"):

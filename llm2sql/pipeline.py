@@ -152,6 +152,52 @@ def _payload(
     return out
 
 
+def _with_map(
+    result: dict[str, Any],
+    settings: Settings,
+    question: str,
+    session_id: str | None,
+    progress: ProgressTracker | None = None,
+) -> dict[str, Any]:
+    """채팅 성공 후 지도 레이어를 붙인다. 실패해도 답변은 유지한다."""
+    if not result.get("ok"):
+        return result
+    try:
+        from llm2sql.map_publish import publish_query_layer
+
+        mapped = publish_query_layer(
+            settings,
+            question=question,
+            sql=result.get("sql"),
+            route=result.get("route"),
+            ok=bool(result.get("ok")),
+            session_id=session_id,
+        )
+        if mapped:
+            result = dict(result)
+            result["map"] = mapped
+            if progress is not None:
+                if mapped.get("available"):
+                    progress.emit(
+                        "map",
+                        f"지도 레이어 {mapped.get('layer')} ({mapped.get('feature_count', 0)}건)",
+                    )
+                else:
+                    progress.emit("map", mapped.get("error") or "지도 발행 실패")
+    except Exception as exc:
+        result = dict(result)
+        result["map"] = {
+            "available": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        if progress is not None:
+            progress.emit("map", "지도 발행 중 오류 (채팅은 유지)")
+    if progress is not None:
+        result = dict(result)
+        result["steps"] = progress.steps
+    return result
+
+
 def _qa_ok(obj: Any, **extra: Any) -> dict[str, Any]:
     rows = getattr(obj, "rows", None)
     if rows is None:
@@ -294,6 +340,7 @@ def ask(
     on_progress: ProgressCallback | None = None,
     on_token: TokenCallback | None = None,
     session: SessionContext | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     """일회성 질의 (호환 API). 연결을 열고 닫는다.
 
@@ -307,6 +354,7 @@ def ask(
         on_progress=on_progress,
         on_token=on_token,
         session=session,
+        session_id=session_id,
     )
 
 
@@ -661,17 +709,25 @@ def run_ask(
     on_progress: ProgressCallback | None = None,
     on_token: TokenCallback | None = None,
     session: SessionContext | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     """핵심 파이프라인. conn/ollama_client가 있으면 재사용."""
     progress = ProgressTracker(on_step=on_progress)
     progress.emit("start", f"질문 수신: {question.strip()}")
+
+    def finish(payload: dict[str, Any], q: str | None = None) -> dict[str, Any]:
+        payload = dict(payload)
+        payload["steps"] = progress.steps
+        return _with_map(
+            payload, settings, q or question, session_id, progress
+        )
 
     if session is not None:
         question, early = _rewrite_session_question(
             question, session, progress, on_token
         )
         if early is not None:
-            return early
+            return finish(early)
 
     listed = _try_list_attr_followup(
         question,
@@ -688,7 +744,7 @@ def run_ask(
             session.update_from_result(question, listed)
             if keep_full:
                 session.last_full_question = keep_full
-        return listed
+        return finish(listed)
 
     grained = _try_year_grain_followup(
         question,
@@ -705,16 +761,16 @@ def run_ask(
             session.update_from_result(question, grained)
             if keep_full:
                 session.last_full_question = keep_full
-        return attach_chart_offer(grained, question=question)
+        return finish(attach_chart_offer(grained, question=question))
 
     chart = _try_chart_turn(question, session, progress, on_token)
     if chart is not None:
-        return chart
+        return finish(chart)
 
     # 안내·범위 외는 의도분류 LLM보다 먼저 (지연·오분류 방지)
     guide_early = try_guide(question)
     if guide_early is not None:
-        return _guide_result(guide_early, progress, on_token)
+        return finish(_guide_result(guide_early, progress, on_token))
 
     preferred = None
     followup_now = session is not None and is_followup_question(question, session)
@@ -722,7 +778,7 @@ def run_ask(
         preferred = _classify_intent(question, settings, progress, ollama_client)
     preferred, guide = _try_guide_turn(question, preferred, progress, on_token)
     if guide is not None:
-        return guide
+        return finish(guide)
 
     effective = _expand_followup_question(question, session)
     if effective != question.strip():
@@ -777,7 +833,7 @@ def run_ask(
         ).startswith(("followup_", "d198_year_stats", "d198_value_bins")):
             session.clear_focus()
         session.update_from_result(effective, result)
-    return result
+    return finish(result, effective)
 
 
 def _try_preferred_intent(

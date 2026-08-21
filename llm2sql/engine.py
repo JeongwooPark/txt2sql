@@ -45,6 +45,7 @@ class Llm2SqlEngine:
         question: str,
         *,
         session: SessionContext | None = None,
+        session_id: str | None = None,
         on_progress: ProgressCallback | None = None,
         on_token: TokenCallback | None = None,
     ) -> AskResult:
@@ -60,6 +61,7 @@ class Llm2SqlEngine:
             on_progress=on_progress,
             on_token=on_token,
             session=session,
+            session_id=session_id,
         )
         return AskResult.from_dict(result)
 

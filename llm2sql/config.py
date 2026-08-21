@@ -44,6 +44,16 @@ class Settings:
     intent_confidence_threshold: float = 0.55
     # baseline | optimized — 규칙 SQL early 디스패치 (벤치 후 optimized 기본)
     route_dispatch_mode: str = "optimized"
+    # GeoServer (지도 시각화). URL이 비어 있으면 맵 발행을 건너뛴다.
+    geoserver_url: str = ""
+    geoserver_user: str = ""
+    geoserver_password: str = ""
+    geoserver_workspace: str = "korDB"
+    geoserver_datastore: str = "llm2sql_map"
+    map_schema: str = "llm2sql_map"
+    map_max_features: int = 2000
+    map_wfs_max_features: int = 5000
+    map_retention_hours: int = 24
 
     def with_overrides(self, **kwargs: object) -> Settings:
         return replace(self, **kwargs)
@@ -107,6 +117,61 @@ class Settings:
             ),
             route_dispatch_mode=_route_mode(
                 _pick(data, "route_dispatch_mode", "ROUTE_DISPATCH_MODE")
+            ),
+            geoserver_url=str(
+                _pick(data, "geoserver_url", "GEOSERVER_URL", default="")
+            ).strip().rstrip("/"),
+            geoserver_user=str(
+                _pick(data, "geoserver_user", "GEOSERVER_USER", default="")
+            ).strip(),
+            geoserver_password=str(
+                _pick(
+                    data,
+                    "geoserver_password",
+                    "GEOSERVER_PASSWORD",
+                    default="",
+                )
+            ),
+            geoserver_workspace=str(
+                _pick(
+                    data,
+                    "geoserver_workspace",
+                    "GEOSERVER_WORKSPACE",
+                    default="korDB",
+                )
+            ).strip()
+            or "korDB",
+            geoserver_datastore=str(
+                _pick(
+                    data,
+                    "geoserver_datastore",
+                    "GEOSERVER_DATASTORE",
+                    default="llm2sql_map",
+                )
+            ).strip()
+            or "llm2sql_map",
+            map_schema=str(
+                _pick(data, "map_schema", "MAP_SCHEMA", default="llm2sql_map")
+            ).strip()
+            or "llm2sql_map",
+            map_max_features=int(
+                _pick(data, "map_max_features", "MAP_MAX_FEATURES", default=2000)
+            ),
+            map_wfs_max_features=int(
+                _pick(
+                    data,
+                    "map_wfs_max_features",
+                    "MAP_WFS_MAX_FEATURES",
+                    default=5000,
+                )
+            ),
+            map_retention_hours=int(
+                _pick(
+                    data,
+                    "map_retention_hours",
+                    "MAP_RETENTION_HOURS",
+                    default=24,
+                )
             ),
         )
 

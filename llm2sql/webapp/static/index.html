@@ -10,65 +10,184 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/app.css?v=4" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/ol@7.5.2/ol.css"
+    />
+    <link rel="stylesheet" href="/static/app.css?v=6" />
   </head>
   <body>
-    <div class="app">
-      <header class="topbar">
-        <div class="brand">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <div>
-            <h1>llm2sql</h1>
-            <p>부산 GIS 자연어 조회</p>
-          </div>
-        </div>
-        <button type="button" id="new-chat" class="ghost-btn">새 대화</button>
-      </header>
+    <div class="workspace">
+      <aside class="layer-pane" aria-label="레이어">
+        <h2 class="pane-title">레이어</h2>
 
-      <main id="messages" class="messages" aria-live="polite">
-        <div class="welcome">
-          <h2>무엇을 찾아볼까요?</h2>
-          <p>
-            건물 건수·순위·특징, 메타데이터 설명, 후속 질문까지 대화로
-            이어집니다.
-          </p>
-          <div class="suggestions" id="suggestions">
-            <button type="button" data-q="기능 알려줘">기능 알려줘</button>
-            <button type="button" data-q="해운대구 건물 몇 채야?">
-              해운대구 건물 몇 채야?
-            </button>
-            <button type="button" data-q="구서동에서 건물면적이 가장 큰 아파트는?">
-              구서동에서 건물면적이 가장 큰 아파트는?
-            </button>
-            <button type="button" data-q="구서동 아파트의 특징은?">
-              구서동 아파트의 특징은?
-            </button>
+        <section class="layer-section output">
+          <h3>출력 레이어</h3>
+          <div id="output-layers-list" class="layer-list"></div>
+        </section>
+
+        <section class="layer-section kordb">
+          <h3>KorDB 레이어</h3>
+          <div id="kordb-layers-list" class="layer-list">
+            <p class="layer-empty">불러오는 중…</p>
           </div>
-        </div>
+        </section>
+
+        <section class="layer-section analysis">
+          <h3>분석결과 레이어</h3>
+          <div id="analysis-layers-list" class="layer-list">
+            <p class="layer-empty">질의 결과가 여기 쌓입니다.</p>
+          </div>
+        </section>
+
+        <section class="layer-section background">
+          <h3>배경지도</h3>
+          <div id="background-layers-list" class="layer-list"></div>
+        </section>
+
+        <section class="layer-section style">
+          <h3>스타일</h3>
+          <label class="field-label" for="rendering-mode-select">렌더링 방식</label>
+          <select id="rendering-mode-select" class="field-select">
+            <option value="wms" selected>WMS (서버 렌더링)</option>
+            <option value="wfs">WFS (벡터)</option>
+          </select>
+          <label class="field-label" for="theme-select">테마</label>
+          <select id="theme-select" class="field-select">
+            <option value="default">기본</option>
+            <option value="colorful">컬러풀</option>
+            <option value="earth">지구본</option>
+            <option value="modern">모던</option>
+          </select>
+          <button type="button" id="apply-theme-btn" class="pane-btn">테마 적용</button>
+          <button type="button" id="style-editor-btn" class="pane-btn ghost">스타일 편집</button>
+        </section>
+      </aside>
+
+      <main class="map-pane">
+        <div id="map" role="application" aria-label="지도"></div>
+        <div id="click-info" class="click-info">맵을 클릭하여 속성을 확인하세요</div>
+        <div id="map-banner" class="map-banner" hidden></div>
       </main>
 
-      <footer class="composer">
-        <form id="chat-form" autocomplete="off">
-          <label class="sr-only" for="question">질문</label>
-          <textarea
-            id="question"
-            rows="1"
-            placeholder="예: 수영구에서 높이가 가장 높은 건물은?"
-            maxlength="2000"
-          ></textarea>
-          <button type="submit" id="send" aria-label="전송">
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M3.4 20.6 21 12 3.4 3.4 3 10.2 15 12 3 13.8z"
-              />
-            </svg>
-          </button>
-        </form>
-        <p class="hint">Enter 전송 · Shift+Enter 줄바꿈</p>
-      </footer>
+      <div
+        id="chat-resize"
+        class="resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="채팅 너비 조절"
+      ></div>
+
+      <section class="chat-pane">
+        <div class="app">
+          <header class="topbar">
+            <div class="brand">
+              <span class="brand-mark" aria-hidden="true"></span>
+              <div>
+                <h1>llm2sql</h1>
+                <p>부산 GIS 자연어 조회</p>
+              </div>
+            </div>
+            <button type="button" id="new-chat" class="ghost-btn">새 대화</button>
+          </header>
+
+          <div id="messages" class="messages" aria-live="polite">
+            <div class="welcome">
+              <h2>무엇을 찾아볼까요?</h2>
+              <p>
+                건물 건수·순위·특징을 물으면 답변과 함께 지도에 표시합니다.
+              </p>
+              <div class="suggestions" id="suggestions">
+                <button type="button" data-q="기능 알려줘">기능 알려줘</button>
+                <button type="button" data-q="해운대구 건물 몇 채야?">
+                  해운대구 건물 몇 채야?
+                </button>
+                <button type="button" data-q="구서동에서 건물면적이 가장 큰 아파트는?">
+                  구서동에서 건물면적이 가장 큰 아파트는?
+                </button>
+                <button type="button" data-q="구서동 아파트의 특징은?">
+                  구서동 아파트의 특징은?
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <footer class="composer">
+            <form id="chat-form" autocomplete="off">
+              <label class="sr-only" for="question">질문</label>
+              <textarea
+                id="question"
+                rows="1"
+                placeholder="예: 수영구에서 높이가 가장 높은 건물은?"
+                maxlength="2000"
+              ></textarea>
+              <button type="submit" id="send" aria-label="전송">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M3.4 20.6 21 12 3.4 3.4 3 10.2 15 12 3 13.8z"
+                  />
+                </svg>
+              </button>
+            </form>
+            <p class="hint">Enter 전송 · Shift+Enter 줄바꿈</p>
+          </footer>
+        </div>
+      </section>
     </div>
+
+    <div id="attr-modal" class="modal" hidden>
+      <div class="modal-card">
+        <header class="modal-head">
+          <h3 id="attr-modal-title">속성 정보</h3>
+          <button type="button" class="icon-btn" data-close-modal>&times;</button>
+        </header>
+        <div id="attr-modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <div id="table-modal" class="modal" hidden>
+      <div class="modal-card wide">
+        <header class="modal-head">
+          <h3 id="table-modal-title">속성 테이블</h3>
+          <button type="button" class="icon-btn" data-close-modal>&times;</button>
+        </header>
+        <div class="modal-toolbar">
+          <label>
+            행 수
+            <select id="table-limit">
+              <option value="10">10</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+          <button type="button" id="table-prev" class="pane-btn ghost">이전</button>
+          <span id="table-page-info">0 / 0</span>
+          <button type="button" id="table-next" class="pane-btn ghost">다음</button>
+        </div>
+        <div id="table-modal-body" class="modal-body table-scroll"></div>
+      </div>
+    </div>
+
+    <div id="style-modal" class="modal" hidden>
+      <div class="modal-card">
+        <header class="modal-head">
+          <h3>스타일 편집</h3>
+          <button type="button" class="icon-btn" data-close-modal>&times;</button>
+        </header>
+        <div class="modal-body style-form">
+          <label>채우기 <input type="color" id="style-fill" value="#ffcccc" /></label>
+          <label>선 <input type="color" id="style-stroke" value="#ff4d4d" /></label>
+          <label>두께 <input type="number" id="style-width" min="0.5" max="8" step="0.5" value="2" /></label>
+          <label>투명도 <input type="range" id="style-opacity" min="0.2" max="1" step="0.05" value="0.8" /></label>
+          <button type="button" id="style-apply-btn" class="pane-btn">선택한 분석 레이어에 적용</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/dist/ol.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
-    <script src="/static/app.js?v=5"></script>
+    <script type="module" src="/static/js/map/main.js?v=6"></script>
+    <script src="/static/app.js?v=6"></script>
   </body>
 </html>

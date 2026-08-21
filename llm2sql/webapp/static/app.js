@@ -111,6 +111,7 @@
       clarify: "확인 필요",
       meta: "메타 설명",
       profile: "특징 요약",
+      map: "지도 발행",
       error: "오류 처리",
     };
     return message || map[stage] || stage;
@@ -415,6 +416,14 @@
       if (result.sql) {
         shell.sql.hidden = false;
         shell.sql.textContent = result.sql;
+      }
+
+      if (window.Llm2SqlMap) {
+        if (result.map && result.map.available) {
+          window.Llm2SqlMap.addAnalysisLayer(result.map);
+        } else if (result.map && result.map.error) {
+          window.Llm2SqlMap.showBanner(result.map.error);
+        }
       }
 
       if (
