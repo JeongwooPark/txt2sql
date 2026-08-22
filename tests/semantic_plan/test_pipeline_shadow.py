@@ -11,14 +11,16 @@ def test_default_mode_is_shadow() -> None:
     assert settings.semantic_plan_min_contract_coverage == 1.0
 
 
-def test_partial_or_not_executed() -> None:
+def test_complete_or_is_ready() -> None:
     settings = Settings(database_url="postgresql://x:x@localhost/x")
     plan = generate_semantic_plan(
         "연제구 공동주택 또는 단독주택 건물 수",
         settings,
         allow_llm=False,
     )
-    assert plan.requires_clarification is True
+    assert plan.requires_clarification is False
+    assert plan.predicate is not None
+    assert plan.predicate.op == "or"
 
 
 def test_write_sql_still_blocked() -> None:

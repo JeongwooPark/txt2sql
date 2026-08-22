@@ -4,16 +4,18 @@ from llm2sql.query_understanding.gate import accept_heuristic_plan
 from llm2sql.semantic_plan.generator import generate_semantic_plan, try_heuristic_plan
 
 
-def test_gate_rejects_or_and_field_compare() -> None:
+def test_gate_accepts_complete_or_and_field_compare() -> None:
     or_q = "연제구 공동주택 또는 단독주택 건물 수"
     plan = try_heuristic_plan(or_q)
     assert plan is not None
-    assert accept_heuristic_plan(extract_contract(or_q), plan) is False
+    assert plan.predicate is not None and plan.predicate.op == "or"
+    assert accept_heuristic_plan(extract_contract(or_q), plan) is True
 
     cmp_q = "남구에서 건축면적이 연면적보다 큰 건물"
     cmp_plan = try_heuristic_plan(cmp_q)
-    if cmp_plan is not None:
-        assert accept_heuristic_plan(extract_contract(cmp_q), cmp_plan) is False
+    assert cmp_plan is not None
+    assert any(item.value_field == "gross_floor_area_m2" for item in cmp_plan.filters)
+    assert accept_heuristic_plan(extract_contract(cmp_q), cmp_plan) is True
 
 
 def test_gate_rejects_avg_when_sum_requested() -> None:
@@ -25,10 +27,10 @@ def test_gate_rejects_avg_when_sum_requested() -> None:
     assert accept_heuristic_plan(extract_contract(q), plan) is True
 
 
-def test_incomplete_heuristic_does_not_execute_when_llm_disabled() -> None:
+def test_incomplete_or_does_not_execute_when_llm_disabled() -> None:
     settings = Settings(database_url="postgresql://x:x@localhost/x")
     plan = generate_semantic_plan(
-        "연제구 공동주택 또는 단독주택 건물 수",
+        "연제구 공동주택 또는 건물 수",
         settings,
         allow_llm=False,
     )

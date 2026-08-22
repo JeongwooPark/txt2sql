@@ -185,10 +185,14 @@ def _extract_order(question: str) -> list[Span]:
     found: list[Span] = []
     for text in ops.SORT_ASC:
         for span in find_all(question, re.escape(text), "order"):
+            if question[: span.start].rstrip().endswith("보다"):
+                continue
             span.value = "asc"
             found.append(span)
     for text in ops.SORT_DESC:
         for span in find_all(question, re.escape(text), "order"):
+            if question[: span.start].rstrip().endswith("보다"):
+                continue
             span.value = "desc"
             found.append(span)
     return dedupe_nested(found)
@@ -222,7 +226,7 @@ def _extract_comparisons(question: str) -> list[Span]:
         for match in re.finditer(pattern, question):
             left = match.groupdict().get("left")
             right = match.groupdict().get("right")
-            rel = "gt" if "큰" in match.group(0) or "높" in match.group(0) else "lt"
+            rel = "lt" if any(k in match.group(0) for k in ("작", "낮")) else "gt"
             found.append(
                 Span(
                     kind="comparison",

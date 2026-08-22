@@ -300,16 +300,10 @@ def seed_cases() -> list[GoldPlanCase]:
             gold_plan=_plan(
                 query_kind="count",
                 scope=_place("기장군"),
-                predicate={
-                    "op": "or",
-                    "args": [
-                        {"field": "usage", "operator": "eq", "value": "공동주택"},
-                        {"field": "usage", "operator": "eq", "value": "단독주택"},
-                    ],
-                },
+                filters=[{"field": "usage", "operator": "eq", "value": "공동주택", "value2": None, "unit": None}],
             ),
-            notes="아파트는 공동주택 정규화. 연립주택도 공동주택 계열이면 후속 catalog에서 조정",
-            verification="혹은 = OR",
+            notes="아파트·연립주택은 공동주택 동의어로 정규화한다",
+            verification="혹은 = 동의어 붕괴 후 공동주택 COUNT",
         ),
         GoldPlanCase(
             id="K18",

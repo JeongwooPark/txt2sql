@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from llm2sql.domain import USAGE_ALIASES, extract_usages
 from llm2sql.query_understanding.contract import QueryContract
 from llm2sql.semantic_plan.models import SemanticQueryPlan
 
@@ -20,12 +21,16 @@ def accept_heuristic_plan(contract: QueryContract, plan: SemanticQueryPlan) -> b
     ):
         return False
     if any(span.kind == "or" for span in contract.boolean_ops):
-        return False
+        if not _or_bound(contract.question, plan):
+            return False
     if any(span.kind == "not" for span in contract.boolean_ops):
         if not any(item.operator == "neq" for item in plan.filters):
             return False
+        if plan.predicate is None or plan.predicate.op != "not":
+            return False
     if contract.comparisons:
-        return False
+        if not any(item.value_field for item in plan.filters):
+            return False
     if contract.ranges:
         if not any(item.operator == "between" for item in plan.filters):
             return False
@@ -58,3 +63,18 @@ def accept_heuristic_plan(contract: QueryContract, plan: SemanticQueryPlan) -> b
         if plan.scope is None or plan.scope.place is None:
             return False
     return True
+
+
+def _or_bound(question: str, plan: SemanticQueryPlan) -> bool:
+    if plan.predicate is not None and plan.predicate.op == "or" and len(plan.predicate.args or []) >= 2:
+        return True
+    aliases = [alias for alias in USAGE_ALIASES if alias in question]
+    mapped = list(dict.fromkeys(USAGE_ALIASES[alias] for alias in aliases))
+    usages = extract_usages(question)
+    if len(aliases) >= 2 and len(mapped) == 1:
+        return any(item.field == "usage" and item.value == mapped[0] for item in plan.filters) or (
+            plan.predicate is not None and plan.predicate.op == "cmp"
+        )
+    if len(usages) < 2:
+        return False
+    return False
