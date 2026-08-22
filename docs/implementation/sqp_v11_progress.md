@@ -9,6 +9,7 @@
 | 04 | DONE | heuristic coverage gate, 합계/NOT/between/ASC | 60 passed | Router 회귀 0 | `fix(plan): [STEP-04] gate heuristic plans on full semantic coverage` | 없음 | STEP-05 |
 | 05 | DONE | Predicate AST, v1→v1.1 migration | 63 passed | v1 회귀 0 | `feat(plan): [STEP-05] add semantic plan v1.1 predicate AST` | 없음 | STEP-06 |
 | 06 | DONE | Ollama JSON schema format, parse→v1.1 | 66 passed | - | `feat(plan): [STEP-06] enforce structured plan output and normalization` | Ollama live는 mock과 분리 | STEP-07 |
+| 07 | DONE | predicate 재귀 compiler, field compare, HAVING | 69 passed | injection 차단 | `feat(compiler): [STEP-07] compile predicate AST deterministically` | 없음 | STEP-08 |
 
 ## STEP-00
 

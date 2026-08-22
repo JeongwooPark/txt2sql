@@ -14,8 +14,10 @@ from llm2sql.semantic_plan.catalog import (
     get_entity,
     get_field,
 )
+from llm2sql.semantic_plan.migrate import validate_predicate
 from llm2sql.semantic_plan.models import (
     FilterSpec,
+    PredicateSpec,
     SemanticCompileError,
     SemanticQueryPlan,
     UnknownSemanticFieldError,
@@ -41,6 +43,7 @@ class CompiledSemanticQuery:
     semantic_plan: dict
     uses_boundary: bool = False
     extra: dict = field(default_factory=dict)
+    params: list[object] = field(default_factory=list)
 
 
 def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
@@ -82,10 +85,22 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
             where.append(_a4_place_sql(alias, name))
 
     height_used = False
-    for spec in plan.filters:
-        clause, used_height = _filter_sql(alias, plan.entity, spec)
+    params: list[object] = []
+    if plan.predicate is not None:
+        validate_predicate(plan.predicate)
+        clause, used_height, pred_params = _predicate_sql(alias, plan.entity, plan.predicate)
         where.append(clause)
         height_used = height_used or used_height
+        params.extend(pred_params)
+    else:
+        for spec in plan.filters:
+            clause, used_height = _filter_sql(alias, plan.entity, spec)
+            where.append(clause)
+            height_used = height_used or used_height
+            if spec.value is not None:
+                params.append(spec.value)
+            if spec.value2 is not None:
+                params.append(spec.value2)
 
     if plan.query_kind in {"rank", "list"} and any(
         item.field == "height_m" for item in plan.order_by
@@ -100,6 +115,11 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
         from_sql = from_sql + "\n" + "\n".join(joins)
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
     group_sql = _group_sql(alias, plan)
+    having_sql = ""
+    if plan.having and plan.having.predicate:
+        having_clause, _, having_params = _predicate_sql(alias, plan.entity, plan.having.predicate)
+        having_sql = f"HAVING {having_clause}"
+        params.extend(having_params)
     order_sql = _order_sql(alias, plan)
     limit_sql = f"LIMIT {int(plan.limit)}" if plan.limit else ""
 
@@ -108,6 +128,8 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
         parts.append(where_sql)
     if group_sql:
         parts.append(group_sql)
+    if having_sql:
+        parts.append(having_sql)
     if order_sql:
         parts.append(order_sql)
     if limit_sql:
@@ -115,12 +137,17 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
     sql = "\n".join(parts) + ";"
 
     _assert_safe_sql(sql)
+    extra = dict(plan.model_dump().get("extra") or {})
+    if plan.spatial_relations:
+        extra.setdefault("distinct_policy", "identity_if_spatial_join")
     return CompiledSemanticQuery(
         sql=sql,
         tables=tables,
         route=f"semantic_plan_{plan.query_kind}",
         semantic_plan=plan.model_dump(),
         uses_boundary=uses_boundary,
+        extra=extra,
+        params=params,
     )
 
 
@@ -208,6 +235,69 @@ def _order_sql(alias: str, plan: SemanticQueryPlan) -> str:
     return "ORDER BY " + ", ".join(bits)
 
 
+def _operand_sql(alias: str, entity: str, operand) -> tuple[str, bool, list[object]]:
+    from llm2sql.semantic_plan.models import OperandSpec
+
+    if operand is None:
+        raise SemanticCompileError("missing operand")
+    if operand.kind == "field":
+        if not operand.field:
+            raise SemanticCompileError("field operand missing name")
+        field = get_field(entity, operand.field)
+        col = _col(alias, field.column)
+        expr = f"{col}::float8" if field.data_type == "number" else col
+        return expr, operand.field == "height_m", []
+    field_type = "number" if isinstance(operand.value, (int, float)) else "text"
+    lit = _literal(operand.value, field_type)
+    return lit, False, [operand.value]
+
+
+def _predicate_sql(alias: str, entity: str, pred: PredicateSpec) -> tuple[str, bool, list[object]]:
+    if pred.op == "and":
+        parts = [_predicate_sql(alias, entity, child) for child in (pred.args or [])]
+        sql = "(" + " AND ".join(item[0] for item in parts) + ")"
+        return sql, any(item[1] for item in parts), [p for item in parts for p in item[2]]
+    if pred.op == "or":
+        parts = [_predicate_sql(alias, entity, child) for child in (pred.args or [])]
+        sql = "(" + " OR ".join(item[0] for item in parts) + ")"
+        return sql, any(item[1] for item in parts), [p for item in parts for p in item[2]]
+    if pred.op == "not":
+        if not pred.args:
+            raise SemanticCompileError("not predicate missing args")
+        inner, height_used, params = _predicate_sql(alias, entity, pred.args[0])
+        return f"(NOT {inner})", height_used, params
+    if pred.op != "cmp" or pred.operator is None:
+        raise SemanticCompileError(f"unsupported predicate op: {pred.op}")
+    if pred.operator in {"is_null", "is_not_null"}:
+        left, height_used, params = _operand_sql(alias, entity, pred.left)
+        sql = f"{left} IS NULL" if pred.operator == "is_null" else f"{left} IS NOT NULL"
+        return sql, height_used, params
+    if pred.operator == "between":
+        left, height_used, params = _operand_sql(alias, entity, pred.left)
+        low = _literal(pred.right.value if pred.right else None, "number")
+        # between as two bounds lives in migrate; keep safety
+        return f"{left} >= {low}", height_used, params
+    if pred.operator == "in":
+        left, height_used, params = _operand_sql(alias, entity, pred.left)
+        values = pred.right.value if pred.right else []
+        if not isinstance(values, (list, tuple)):
+            values = [values]
+        lits = ", ".join(_literal(v, "text") for v in values)
+        params.extend(list(values))
+        return f"{left} IN ({lits})", height_used, params
+    left_sql, h1, p1 = _operand_sql(alias, entity, pred.left)
+    right_sql, h2, p2 = _operand_sql(alias, entity, pred.right)
+    op = _OPS.get(pred.operator)
+    if op is None:
+        if pred.operator == "neq":
+            op = "<>"
+        elif pred.operator == "contains":
+            return f"{left_sql} ILIKE {_literal('%' + str(pred.right.value if pred.right else '') + '%', 'text')}", h1 or h2, p1 + p2
+        else:
+            raise SemanticCompileError(f"unknown operator: {pred.operator}")
+    return f"{left_sql} {op} {right_sql}", h1 or h2, p1 + p2
+
+
 def _filter_sql(alias: str, entity: str, spec: FilterSpec) -> tuple[str, bool]:
     try:
         field = get_field(entity, spec.field)
@@ -235,13 +325,23 @@ def _filter_sql(alias: str, entity: str, spec: FilterSpec) -> tuple[str, bool]:
         right = _literal(spec.value2, field.data_type)
         expr = f"{col}::float8" if field.data_type == "number" else col
         return f"{expr} BETWEEN {left} AND {right}", height_used
-    op = _OPS.get(spec.operator)
-    if op is None:
-        raise SemanticCompileError(f"unknown operator: {spec.operator}")
+    if spec.value_field:
+        other = get_field(entity, spec.value_field)
+        left = f"{col}::float8" if field.data_type == "number" else col
+        right = _col(alias, other.column)
+        if other.data_type == "number":
+            right = f"{right}::float8"
+        op = _OPS.get(spec.operator)
+        if op is None:
+            raise SemanticCompileError(f"unknown operator: {spec.operator}")
+        return f"{left} {op} {right}", height_used
     if spec.field == "structure" and spec.operator == "eq" and isinstance(spec.value, str):
         mapped = STRUCTURE_ALIASES.get(spec.value)
         if mapped:
             return f"{col} ILIKE {_literal(mapped, 'text')}", height_used
+    op = _OPS.get(spec.operator)
+    if op is None:
+        raise SemanticCompileError(f"unknown operator: {spec.operator}")
     expr = f"{col}::float8" if field.data_type == "number" else col
     return f"{expr} {op} {_literal(spec.value, field.data_type)}", height_used
 
