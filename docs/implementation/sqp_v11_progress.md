@@ -8,6 +8,7 @@
 | 03 | DONE | query_understanding contract/span | 56 passed | - | `feat(contract): [STEP-03] parse Korean semantic contract and spans` | 없음 | STEP-04 |
 | 04 | DONE | heuristic coverage gate, 합계/NOT/between/ASC | 60 passed | Router 회귀 0 | `fix(plan): [STEP-04] gate heuristic plans on full semantic coverage` | 없음 | STEP-05 |
 | 05 | DONE | Predicate AST, v1→v1.1 migration | 63 passed | v1 회귀 0 | `feat(plan): [STEP-05] add semantic plan v1.1 predicate AST` | 없음 | STEP-06 |
+| 06 | DONE | Ollama JSON schema format, parse→v1.1 | 66 passed | - | `feat(plan): [STEP-06] enforce structured plan output and normalization` | Ollama live는 mock과 분리 | STEP-07 |
 
 ## STEP-00
 

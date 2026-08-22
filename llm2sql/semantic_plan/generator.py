@@ -21,9 +21,11 @@ from llm2sql.domain import (
     extract_usage,
     looks_like_age_question,
 )
+from llm2sql.llm import chat
 from llm2sql.query_understanding.contract import extract_contract
 from llm2sql.query_understanding.gate import accept_heuristic_plan
 from llm2sql.query_understanding.operators import AGG_MAP
+from llm2sql.semantic_plan.migrate import migrate_plan_v11
 from llm2sql.semantic_plan.models import (
     AggregationSpec,
     FilterSpec,
@@ -173,9 +175,10 @@ def parse_plan_json(text: str) -> SemanticQueryPlan:
     if _PHYSICAL_LEAK.search(payload):
         raise SemanticPlanGenerationError("physical identifier or SQL leaked into plan")
     try:
-        return SemanticQueryPlan.model_validate_json(payload)
+        plan = SemanticQueryPlan.model_validate_json(payload)
     except Exception as exc:
         raise SemanticPlanGenerationError(f"invalid plan json: {exc}") from exc
+    return migrate_plan_v11(plan)
 
 
 def try_heuristic_plan(question: str, hints: dict[str, Any] | None = None) -> SemanticQueryPlan | None:
@@ -379,13 +382,14 @@ def _generate_with_llm(
 ) -> SemanticQueryPlan:
     messages = build_messages(question, hints=hints)
     retries = max(0, int(settings.semantic_plan_max_retries))
+    schema = SemanticQueryPlan.model_json_schema()
     raw = chat(
         model=settings.ollama_model,
         messages=messages,
         host=settings.ollama_host if ollama_client is None else None,
         client=ollama_client,
         temperature=0.0,
-        response_format="json",
+        response_format=schema,
     )
     try:
         return parse_plan_json(raw)
@@ -408,7 +412,7 @@ def _generate_with_llm(
             host=settings.ollama_host if ollama_client is None else None,
             client=ollama_client,
             temperature=0.0,
-            response_format="json",
+            response_format=schema,
         )
         return parse_plan_json(repaired)
 
