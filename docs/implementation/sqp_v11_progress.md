@@ -13,6 +13,7 @@
 | 08 | DONE | contract verifier, slot confidence | 72 passed | slot 미달 시 실행 금지 | `feat(verifier): [STEP-08] verify contract coverage and slot confidence` | 없음 | STEP-09 |
 | 09 | DONE | shadow 기본값, config flags, pipeline trace | 75 passed | gold exact 2/30, gate NOT_PASSED, shadow 유지 | `feat(pipeline): [STEP-09] integrate sqp v1.1 in shadow mode` | Phase1 gold gate 미달, 태그 보류 | STEP-10 |
 | 10-14 | DONE | semantic_catalog, linking, join edges, eval_schema_linking | 77 passed | holdout Recall gate NOT_PASSED (목표 미완화) | `feat(catalog): [STEP-10] externalize semantic catalog and source bindings` | labeled holdout 부재 | STEP-15 |
+| 15-18 | DONE | Plan-SQL sqlglot 동등성, result shape, hard-query selector | 81 passed | silent-error fixture 탐지 4/4, Phase3 unit gate PASSED | `feat(sql-verifier): [STEP-15] verify plan and SQL AST equivalence` | live gold 미달로 hybrid 금지 | STEP-19 |
 
 ## STEP-00
 
@@ -28,3 +29,13 @@
   - URL hash `48864f80687e` (비밀정보 미저장)
   - catalog tables present (name snapshot only)
 - 사용자 untracked 스크립트는 원 작업트리에 보존, 본 브랜치에 포함하지 않음
+
+## STEP-15~18
+
+- 목표: Plan predicate tree ↔ SQL WHERE 동등성, result shape, hard-query 후보 선택
+- 구현: `sql_equivalence.py`, `result_shape.py`, `selector.py`, runner에서 compile 후 검증
+- 0건 결과는 list에서 정상, count shape 불일치는 Q03. 조건 완화 없음
+- simple Router 질의는 `should_enumerate_candidates`가 False
+- `uv run pytest tests/semantic_plan tests/semantic_catalog tests/query_understanding tests/evaluation -q` 81 passed
+- Phase 3 unit fixture 탐지율 1.0 → 태그 `sqp-v11-phase-3`
+- hybrid 승격은 STEP-24에서만 판단

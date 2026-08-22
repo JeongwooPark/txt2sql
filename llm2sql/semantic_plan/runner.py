@@ -110,6 +110,17 @@ def run_semantic_plan(
         return _fallback("compile_failed", str(exc), semantic_plan=checked.plan)
 
     emit("plan_compile", "Semantic Plan → SQL 컴파일 완료", sql=compiled.sql)
+    from llm2sql.semantic_plan.sql_equivalence import verify_plan_sql_equivalence
+
+    eq_errors = verify_plan_sql_equivalence(checked.plan, compiled.sql)
+    if eq_errors:
+        emit("plan_fallback", f"Plan-SQL 의미 불일치: {eq_errors}")
+        return _fallback(
+            "sql_semantic_mismatch",
+            ",".join(eq_errors),
+            semantic_plan=checked.plan,
+            sql=compiled.sql,
+        )
     try:
         assert_readonly_sql(compiled.sql)
     except ValueError as exc:
@@ -156,6 +167,12 @@ def run_semantic_plan(
             semantic_plan=checked.plan,
             sql=compiled.sql,
         )
+
+    from llm2sql.semantic_plan.result_shape import diagnose_result_shape
+
+    shape_errors = diagnose_result_shape(checked.plan, list(rows or []))
+    if shape_errors and rows:
+        emit("plan_validate", f"result shape warnings {shape_errors}")
 
     warnings = checked.warnings
     if not rows and warnings:

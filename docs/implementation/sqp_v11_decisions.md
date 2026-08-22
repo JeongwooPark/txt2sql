@@ -26,3 +26,10 @@
 - 맥락: 작업지시서는 `scripts/eval_*.py`를 요구하지만 단위 테스트가 필요함
 - 결정: 비교·taxonomy·jsonl IO는 패키지에 두고 `scripts/eval_plan.py`, `scripts/eval_nl2sql.py`, `scripts/compare_runs.py`는 CLI
 - SQL 토큰 존재는 정답 조건이 아님. smoke 30/100은 `status=draft` candidate만 import
+
+## ADR-0005 Plan-SQL 동등성은 sqlglot 연산자 트리로 검사한다
+
+- 상태: accepted
+- 맥락: SQL 문자열 토큰 존재는 정답이 아님. AND/OR 반전·NOT 누락·집계 변경을 실행 전에 막아야 함
+- 결정: 기존 `sql_validator.py` domain diagnose는 유지하고, `sqlglot` WHERE boolean tree와 Plan predicate ops를 비교한다
+- 결과: 완전 논리 정규화(CNF)는 하지 않고 OR/NOT/집계/ORDER/LIMIT 누락을 탐지한다

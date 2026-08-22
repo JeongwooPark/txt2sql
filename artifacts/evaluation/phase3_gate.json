@@ -1,0 +1,15 @@
+{
+  "silent_error_fixtures": {
+    "P04_or_missing": true,
+    "P04_not_missing": true,
+    "P05_aggregate_changed": true,
+    "P06_order_or_limit": true
+  },
+  "detection_rate": 1.0,
+  "zero_rows_relaxed": false,
+  "simple_router_llm_calls": 0,
+  "hard_query_candidates_only": true,
+  "unit_tests_passed": 81,
+  "gate_passed": true,
+  "note": "Unit fixture detection is 100%. Live SQL/result-hash gold remains Phase 1 incomplete; no hybrid promotion."
+}
