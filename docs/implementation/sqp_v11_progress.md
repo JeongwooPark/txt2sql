@@ -6,6 +6,7 @@
 | 01 | DONE | evaluation 패키지, eval CLI, candidate jsonl | `uv run pytest tests/evaluation tests/semantic_plan -q` 47 passed | unit 47/0/0 | `test(benchmark): [STEP-01] add semantic accuracy evaluation harness` | nl2sql live는 DB 필요 시 ENV_BLOCKED 경로 존재 | STEP-02 |
 | 02 | DONE | verified gold 30 + heuristic baseline 실패 기록 | `uv run pytest tests/evaluation tests/semantic_plan -q` 50 passed | heuristic 0/30, 단위 50/0/0 | `test(semantic): [STEP-02] freeze known Korean semantic error cases` | 없음 | STEP-03 |
 | 03 | DONE | query_understanding contract/span | 56 passed | - | `feat(contract): [STEP-03] parse Korean semantic contract and spans` | 없음 | STEP-04 |
+| 04 | DONE | heuristic coverage gate, 합계/NOT/between/ASC | 60 passed | Router 회귀 0 | `fix(plan): [STEP-04] gate heuristic plans on full semantic coverage` | 없음 | STEP-05 |
 
 ## STEP-00
 

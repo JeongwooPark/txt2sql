@@ -21,7 +21,9 @@ from llm2sql.domain import (
     extract_usage,
     looks_like_age_question,
 )
-from llm2sql.llm import chat
+from llm2sql.query_understanding.contract import extract_contract
+from llm2sql.query_understanding.gate import accept_heuristic_plan
+from llm2sql.query_understanding.operators import AGG_MAP
 from llm2sql.semantic_plan.models import (
     AggregationSpec,
     FilterSpec,
@@ -116,7 +118,11 @@ def extract_plan_hints(question: str) -> dict[str, Any]:
                 "value": converted.canonical,
                 "unit": "m2" if schema_unit in {"㎡", "m2"} else ("m" if schema_unit == "m" else "floor"),
             }
-        )
+            )
+    between = _extract_between(q)
+    if between:
+        numerics = [item for item in numerics if item["field"] != between["field"]]
+        numerics.append(between)
     if not any(item["field"] == "ground_floors" for item in numerics):
         floor_m = re.search(r"(\d+)\s*층\s*(이상|이하|초과|미만|넘는)", q)
         if floor_m:
@@ -210,8 +216,12 @@ def try_heuristic_plan(question: str, hints: dict[str, Any] | None = None) -> Se
 
     query_kind = _guess_kind(q)
     filters: list[FilterSpec] = []
-    if hints.get("usage"):
+    if hints.get("usage") and not any(k in q for k in ("제외", "아닌", "빼고", "이외")):
         filters.append(FilterSpec(field="usage", operator="eq", value=hints["usage"]))
+    elif any(k in q for k in ("제외", "아닌", "빼고", "이외")):
+        usage_not = hints.get("usage")
+        if usage_not:
+            filters.append(FilterSpec(field="usage", operator="neq", value=usage_not))
     if hints.get("structure"):
         filters.append(
             FilterSpec(field="structure", operator="contains", value=hints["structure"])
@@ -222,6 +232,7 @@ def try_heuristic_plan(question: str, hints: dict[str, Any] | None = None) -> Se
                 field=item["field"],
                 operator=item["operator"],
                 value=item["value"],
+                value2=item.get("value2"),
                 unit=item.get("unit"),
             )
         )
@@ -261,7 +272,8 @@ def try_heuristic_plan(question: str, hints: dict[str, Any] | None = None) -> Se
 
     if query_kind == "rank":
         metric = _rank_metric(q)
-        order_by = [OrderSpec(field=metric, direction="desc", nulls="last")]
+        direction = "asc" if any(k in q for k in ("낮은", "작은", "오래된")) else "desc"
+        order_by = [OrderSpec(field=metric, direction=direction, nulls="last")]
         select = ["name", "legal_dong", "lot_address", metric]
         if limit is None:
             limit = 10
@@ -271,17 +283,33 @@ def try_heuristic_plan(question: str, hints: dict[str, Any] | None = None) -> Se
             limit = 100
     elif query_kind == "aggregate":
         metric = _rank_metric(q)
+        function = _aggregate_function(q)
         aggregations = [
-            AggregationSpec(function="avg", field=metric, alias=f"avg_{metric}")
+            AggregationSpec(function=function, field=metric, alias=f"{function}_{metric}")
         ]
+        if any(k in q for k in ("용도별",)):
+            query_kind = "aggregate"
+            group_by = ["usage"]
     elif query_kind == "distribution":
-        group_field = "usage"
-        if any(k in q for k in ("층수별", "층별")):
-            group_field = "ground_floors"
-        group_by = [group_field]
-        aggregations = [AggregationSpec(function="count", field=None, alias="n")]
-        if limit is None:
-            limit = 100
+        if any(k in q for k in ("평균", "합계", "총합", "최대", "최소")):
+            metric = _rank_metric(q)
+            function = _aggregate_function(q)
+            group_field = "usage"
+            if any(k in q for k in ("층수별", "층별")):
+                group_field = "ground_floors"
+            query_kind = "aggregate"
+            group_by = [group_field]
+            aggregations = [
+                AggregationSpec(function=function, field=metric, alias=f"{function}_{metric}")
+            ]
+        else:
+            group_field = "usage"
+            if any(k in q for k in ("층수별", "층별")):
+                group_field = "ground_floors"
+            group_by = [group_field]
+            aggregations = [AggregationSpec(function="count", field=None, alias="n")]
+            if limit is None:
+                limit = 100
 
     return SemanticQueryPlan(
         query_kind=query_kind,
@@ -310,14 +338,11 @@ def generate_semantic_plan(
     allow_llm: bool = True,
 ) -> SemanticQueryPlan:
     hints = extract_plan_hints(question)
+    contract = extract_contract(question)
     heuristic = try_heuristic_plan(question, hints)
-    if heuristic is not None and (
-        heuristic.requires_clarification
-        or (
-            heuristic.unsupported_reason is None
-            and (heuristic.scope is not None or heuristic.filters)
-        )
-    ):
+    if heuristic is not None and heuristic.requires_clarification:
+        return heuristic
+    if heuristic is not None and accept_heuristic_plan(contract, heuristic):
         return heuristic
     last_error: Exception | None = None
     if allow_llm:
@@ -330,8 +355,16 @@ def generate_semantic_plan(
             )
         except SemanticPlanGenerationError as exc:
             last_error = exc
-    if heuristic is not None:
+    if heuristic is not None and heuristic.requires_clarification:
         return heuristic
+    if not allow_llm or last_error is not None:
+        return SemanticQueryPlan(
+            query_kind="list",
+            entity="building",
+            requires_clarification=True,
+            ambiguities=["질문을 완전히 해석하지 못해 확인이 필요합니다"],
+            assumptions=["heuristic_incomplete"],
+        )
     if last_error is not None:
         raise last_error
     raise SemanticPlanGenerationError("plan generation failed")
@@ -406,6 +439,31 @@ def _extract_distance_m(question: str) -> float | None:
     if converted is None:
         return None
     return float(converted.canonical)
+
+
+def _aggregate_function(question: str) -> str:
+    for text, fn in AGG_MAP.items():
+        if text in question:
+            return fn
+    return "avg"
+
+
+def _extract_between(question: str) -> dict[str, Any] | None:
+    from llm2sql.query_understanding.contract import extract_contract
+
+    contract = extract_contract(question)
+    if not contract.ranges:
+        return None
+    span = contract.ranges[0]
+    field = span.meta.get("field") or "height_m"
+    unit = "m2" if field.endswith("m2") else "m"
+    return {
+        "field": field,
+        "operator": "between",
+        "value": span.meta.get("low"),
+        "value2": span.meta.get("high"),
+        "unit": unit,
+    }
 
 
 def _guess_kind(question: str) -> str:
