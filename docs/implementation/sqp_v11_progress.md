@@ -12,6 +12,7 @@
 | 07 | DONE | predicate 재귀 compiler, field compare, HAVING | 69 passed | injection 차단 | `feat(compiler): [STEP-07] compile predicate AST deterministically` | 없음 | STEP-08 |
 | 08 | DONE | contract verifier, slot confidence | 72 passed | slot 미달 시 실행 금지 | `feat(verifier): [STEP-08] verify contract coverage and slot confidence` | 없음 | STEP-09 |
 | 09 | DONE | shadow 기본값, config flags, pipeline trace | 75 passed | gold exact 2/30, gate NOT_PASSED, shadow 유지 | `feat(pipeline): [STEP-09] integrate sqp v1.1 in shadow mode` | Phase1 gold gate 미달, 태그 보류 | STEP-10 |
+| 10-14 | DONE | semantic_catalog, linking, join edges, eval_schema_linking | 77 passed | holdout Recall gate NOT_PASSED (목표 미완화) | `feat(catalog): [STEP-10] externalize semantic catalog and source bindings` | labeled holdout 부재 | STEP-15 |
 
 ## STEP-00
 

@@ -1,0 +1,84 @@
+"""table / column / value 계층 검색. 모호하면 clarify 신호를 낸다."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from llm2sql.semantic_catalog.registry import VALUE_PROFILES
+from llm2sql.semantic_plan.catalog import FIELDS_BY_ENTITY
+
+
+@dataclass(frozen=True)
+class LinkHit:
+    kind: str
+    key: str
+    score: float
+    binding: str
+
+
+@dataclass(frozen=True)
+class LinkResult:
+    hits: tuple[LinkHit, ...]
+    clarify: bool
+    margin: float
+
+
+def _score(query: str, text: str) -> float:
+    q = query.replace(" ", "")
+    t = text.replace(" ", "")
+    if q == t:
+        return 1.0
+    if t in q or q in t:
+        return 0.8
+    return 0.0
+
+
+def retrieve_tables(question: str, *, top_k: int = 10) -> LinkResult:
+    mapping = {
+        "building": ("건물", "아파트", "주택", "건축물"),
+        "admin_area": ("행정동", "구", "동"),
+        "basic_zone": ("기초구역",),
+        "industrial_complex": ("산업단지", "산단"),
+    }
+    hits = []
+    for key, aliases in mapping.items():
+        score = max((_score(question, alias) for alias in aliases), default=0.0)
+        if score:
+            hits.append(LinkHit("table", key, score, key))
+    hits.sort(key=lambda item: item.score, reverse=True)
+    return _pack(hits[:top_k])
+
+
+def retrieve_columns(question: str, *, top_k: int = 20) -> LinkResult:
+    hits = []
+    for entity_fields in FIELDS_BY_ENTITY.values():
+        for key, field in entity_fields.items():
+            score = max(_score(question, field.label), _score(question, key))
+            if score:
+                hits.append(LinkHit("column", key, score, f"{field.table}.{field.column}"))
+    hits.sort(key=lambda item: item.score, reverse=True)
+    return _pack(hits[:top_k])
+
+
+def retrieve_values(question: str, *, top_k: int = 10) -> LinkResult:
+    hits = []
+    for profile in VALUE_PROFILES:
+        texts = (profile.canonical, *profile.synonyms)
+        score = max(_score(question, text) for text in texts)
+        if score:
+            binding = f"{profile.table}.{profile.column}={profile.canonical}"
+            hits.append(LinkHit("value", profile.canonical, score, binding))
+    hits.sort(key=lambda item: item.score, reverse=True)
+    packed = _pack(hits[:top_k])
+    if packed.margin < 0.15 and len(packed.hits) >= 2:
+        return LinkResult(packed.hits, True, packed.margin)
+    return packed
+
+
+def _pack(hits: list[LinkHit]) -> LinkResult:
+    if not hits:
+        return LinkResult((), False, 1.0)
+    if len(hits) == 1:
+        return LinkResult(tuple(hits), False, 1.0)
+    margin = hits[0].score - hits[1].score
+    return LinkResult(tuple(hits), False, margin)
