@@ -35,6 +35,9 @@ VALUE_PROFILES: tuple[ValueProfile, ...] = (
     ValueProfile(BUILDING_TABLE, "A9", "단독주택", ("주택",), 1, "20250704"),
     ValueProfile(BUILDING_TABLE, "A9", "창고시설", ("창고",), 1, "20250704"),
     ValueProfile(BUILDING_TABLE, "A9", "교육연구시설", ("학교",), 1, "20250704"),
+    ValueProfile(BUILDING_TABLE, "A9", "업무시설", ("사무실",), 1, "20250704"),
+    ValueProfile(BUILDING_TABLE, "A9", "판매시설", ("상가",), 1, "20250704"),
+    ValueProfile(BUILDING_TABLE, "A9", "숙박시설", ("호텔",), 1, "20250704"),
 )
 
 

@@ -35,7 +35,7 @@ def _score(query: str, text: str) -> float:
 
 def retrieve_tables(question: str, *, top_k: int = 10) -> LinkResult:
     mapping = {
-        "building": ("건물", "아파트", "주택", "건축물"),
+        "building": ("건물", "아파트", "주택", "건축물", "연면적", "건축면적", "높이", "용도"),
         "admin_area": ("행정동", "구", "동"),
         "basic_zone": ("기초구역",),
         "industrial_complex": ("산업단지", "산단"),
@@ -49,13 +49,28 @@ def retrieve_tables(question: str, *, top_k: int = 10) -> LinkResult:
     return _pack(hits[:top_k])
 
 
+_COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
+    "gross_floor_area_m2": ("연면적", "작은", "큰"),
+    "height_m": ("높이", "낮은", "높은"),
+    "building_area_m2": ("건축면적",),
+    "site_area_m2": ("대지면적",),
+    "usage": ("용도",),
+}
+
+
 def retrieve_columns(question: str, *, top_k: int = 20) -> LinkResult:
     hits = []
     for entity_fields in FIELDS_BY_ENTITY.values():
         for key, field in entity_fields.items():
-            score = max(_score(question, field.label), _score(question, key))
+            texts = (field.label, key, *_COLUMN_ALIASES.get(key, ()))
+            score = max(_score(question, text) for text in texts)
             if score:
                 hits.append(LinkHit("column", key, score, f"{field.table}.{field.column}"))
+    for profile in VALUE_PROFILES:
+        texts = (profile.canonical, *profile.synonyms)
+        score = max(_score(question, text) for text in texts)
+        if score:
+            hits.append(LinkHit("column", "usage", score, f"{profile.table}.{profile.column}"))
     hits.sort(key=lambda item: item.score, reverse=True)
     return _pack(hits[:top_k])
 

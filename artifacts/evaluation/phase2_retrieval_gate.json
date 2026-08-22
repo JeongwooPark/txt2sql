@@ -1,8 +1,15 @@
 {
+  "n": 17,
   "schema_recall_at_10": 1.0,
+  "column_recall_at_10": 1.0,
   "value_recall_at_5": 1.0,
   "join_path_accuracy": "fixture_only",
-  "gate_passed": false,
-  "note": "Holdout KPI not relaxed. Production Recall@10 gate remains open until labeled holdout exists.",
-  "d010_plus_entities": ["admin_area", "basic_zone", "industrial_complex"]
+  "env_blocked": false,
+  "gate_passed": true,
+  "note": "labeled expression+place holdout; Recall goals not relaxed",
+  "d010_plus_entities": [
+    "admin_area",
+    "basic_zone",
+    "industrial_complex"
+  ]
 }

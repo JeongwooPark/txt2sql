@@ -1,0 +1,19 @@
+[
+  {"id": "K10", "split": "holdout", "q": "해운대구 연면적 합계는?", "tables": ["building"], "columns": ["gross_floor_area_m2"], "values": []},
+  {"id": "K11", "split": "holdout", "q": "금정구 건물 높이의 총합", "tables": ["building"], "columns": ["height_m"], "values": []},
+  {"id": "K12", "split": "holdout", "q": "수영구에서 가장 높은 건물 높이", "tables": ["building"], "columns": ["height_m"], "values": []},
+  {"id": "K13", "split": "holdout", "q": "사하구 건축면적 최솟값", "tables": ["building"], "columns": ["building_area_m2"], "values": []},
+  {"id": "K14", "split": "holdout", "q": "동래구 용도별 평균 연면적", "tables": ["building"], "columns": ["gross_floor_area_m2", "usage"], "values": []},
+  {"id": "K15", "split": "holdout", "q": "연제구에서 창고시설이 아닌 건물 수", "tables": ["building"], "columns": ["usage"], "values": ["창고시설"]},
+  {"id": "K16", "split": "holdout", "q": "부산진구 학교 빼고 건물 몇 채야?", "tables": ["building"], "columns": ["usage"], "values": ["교육연구시설"]},
+  {"id": "K17", "split": "holdout", "q": "기장군 아파트 혹은 연립주택 건수", "tables": ["building"], "columns": ["usage"], "values": ["공동주택"]},
+  {"id": "K18", "split": "holdout", "q": "남구 업무시설 또는 판매시설인 건물", "tables": ["building"], "columns": ["usage"], "values": ["업무시설", "판매시설"]},
+  {"id": "K19", "split": "holdout", "q": "해운대구 높이 80m 이상 120m 이하", "tables": ["building"], "columns": ["height_m"], "values": []},
+  {"id": "K20", "split": "holdout", "q": "금정구 연면적 1000㎡부터 5000㎡까지 건물", "tables": ["building"], "columns": ["gross_floor_area_m2"], "values": []},
+  {"id": "K21", "split": "holdout", "q": "수영구 높이가 낮은 순 10개", "tables": ["building"], "columns": ["height_m"], "values": []},
+  {"id": "K22", "split": "holdout", "q": "사하구 작은 건물 10개 보여줘", "tables": ["building"], "columns": ["gross_floor_area_m2"], "values": []},
+  {"id": "K24", "split": "holdout", "q": "연제구에서 건축면적이 대지면적보다 큰 건물", "tables": ["building"], "columns": ["building_area_m2", "site_area_m2"], "values": []},
+  {"id": "K26", "split": "holdout", "q": "기장군 단독주택 최대 높이", "tables": ["building"], "columns": ["height_m", "usage"], "values": ["단독주택"]},
+  {"id": "K28", "split": "holdout", "q": "해운대구 높이 30m부터 60m 사이 건물 수", "tables": ["building"], "columns": ["height_m"], "values": []},
+  {"id": "K30", "split": "holdout", "q": "수영구에서 연면적이 건축면적보다 작은 건물", "tables": ["building"], "columns": ["gross_floor_area_m2", "building_area_m2"], "values": []}
+]

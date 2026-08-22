@@ -26,13 +26,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fixtures", type=Path, default=None)
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
-    fixtures = []
-    if args.fixtures and args.fixtures.exists():
-        fixtures = json.loads(args.fixtures.read_text(encoding="utf-8"))
+    default_holdout = ROOT / "benchmarks" / "korean_postgis_v1" / "linking_holdout.json"
+    path = args.fixtures or default_holdout
+    if path.exists():
+        fixtures = json.loads(path.read_text(encoding="utf-8"))
     else:
         fixtures = [
             {"q": "해운대구 공동주택 높이", "tables": ["building"], "columns": ["height_m"], "values": ["공동주택"]},
         ]
+    fixtures = [item for item in fixtures if item.get("split", "holdout") == "holdout"]
     table_scores = []
     col_scores = []
     val_scores = []
@@ -43,21 +45,28 @@ def main(argv: list[str] | None = None) -> int:
         table_scores.append(recall_at_k(item.get("tables") or [], tables, 10))
         col_scores.append(recall_at_k(item.get("columns") or [], cols, 10))
         val_scores.append(recall_at_k(item.get("values") or [], vals, 5))
+    n = len(fixtures)
+    schema = sum(table_scores) / n if n else 0.0
+    columns = sum(col_scores) / n if n else 0.0
+    values = sum(val_scores) / n if n else 0.0
+    gate = n >= 10 and schema >= 1.0 and values >= 1.0 and columns >= 1.0
     summary = {
-        "n": len(fixtures),
-        "schema_recall_at_10": sum(table_scores) / len(table_scores) if table_scores else 0,
-        "column_recall_at_10": sum(col_scores) / len(col_scores) if col_scores else 0,
-        "value_recall_at_5": sum(val_scores) / len(val_scores) if val_scores else 0,
+        "n": n,
+        "schema_recall_at_10": schema,
+        "column_recall_at_10": columns,
+        "value_recall_at_5": values,
+        "join_path_accuracy": "fixture_only",
         "env_blocked": False,
-        "gate_passed": False,
-        "note": "fixture recall only; production holdout gate deferred",
+        "gate_passed": gate,
+        "note": "labeled expression+place holdout; Recall goals not relaxed",
+        "d010_plus_entities": ["admin_area", "basic_zone", "industrial_complex"],
     }
     text = json.dumps(summary, ensure_ascii=False, indent=2)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(text, encoding="utf-8")
+        args.out.write_text(text + "\n", encoding="utf-8")
     print(text)
-    return 0
+    return 0 if gate else 1
 
 
 if __name__ == "__main__":
