@@ -24,3 +24,8 @@ demo_case_*
 benchmark_baseline_results.json
 scripts/_out_*.json
 
+# evaluation raw traces (summaries are committed)
+artifacts/evaluation/raw/
+artifacts/evaluation/*.log
+artifacts/evaluation/*_full.jsonl
+
