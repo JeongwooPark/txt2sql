@@ -19,3 +19,10 @@
 - 맥락: `to_regclass('public.AL_D010_26_20250704')`는 소문자 fold 때문에 false를 반환할 수 있음
 - 결정: `pg_class.relname` 실측 목록을 snapshot 식별자로 사용
 - 식별자: `public.AL_D010_26_20250704`, `public.BND_ADM_DONG_PG`, `public.TL_KODIS_BAS_26_202507`, `public.AL_D060_00_20250804`
+
+## ADR-0004 평가 로직은 `llm2sql.evaluation`에 두고 스크립트는 CLI만 담당한다
+
+- 상태: accepted
+- 맥락: 작업지시서는 `scripts/eval_*.py`를 요구하지만 단위 테스트가 필요함
+- 결정: 비교·taxonomy·jsonl IO는 패키지에 두고 `scripts/eval_plan.py`, `scripts/eval_nl2sql.py`, `scripts/compare_runs.py`는 CLI
+- SQL 토큰 존재는 정답 조건이 아님. smoke 30/100은 `status=draft` candidate만 import

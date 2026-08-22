@@ -1,0 +1,11 @@
+{
+  "schema": "semantic_catalog_snapshot",
+  "version": "0.2.2-baseline",
+  "tables": [
+    "public.AL_D010_26_20250704",
+    "public.AL_D060_00_20250804",
+    "public.BND_ADM_DONG_PG",
+    "public.TL_KODIS_BAS_26_202507"
+  ],
+  "note": "Name snapshot only. No row samples or credentials."
+}
