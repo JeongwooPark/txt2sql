@@ -155,7 +155,7 @@ wheels = [
 
 [[package]]
 name = "llm2sql"
-version = "1.4.0"
+version = "0.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
