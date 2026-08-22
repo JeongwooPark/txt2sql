@@ -6,7 +6,7 @@ Gold is `gold Plan + result hash + clarify`. Execution success is not accuracy.
 |---|---|---|
 | `train.jsonl` | training / few-shot pool | filled from STEP-02 |
 | `dev.jsonl` | development | filled from STEP-02 |
-| `test.jsonl` | official verified eval | filled from STEP-02 |
+| `test.jsonl` | official verified eval | **30 spec-seed verified cases (K01–K30)** |
 | `adversarial.jsonl` | paraphrase / trap cases | STEP-02+ |
 | `conversation.jsonl` | multi-turn | Phase 4 |
 | `candidate_compound30.jsonl` | imported smoke 30 | **draft only** |

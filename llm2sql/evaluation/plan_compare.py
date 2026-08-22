@@ -28,8 +28,16 @@ def _filter_key(item: dict[str, Any]) -> tuple:
         str(item.get("operator") or ""),
         json_cell(item.get("value")),
         json_cell(item.get("value2")),
+        json_cell(item.get("value_field")),
         str(item.get("unit") or ""),
     )
+
+
+def _predicate_op(data: dict[str, Any]) -> str | None:
+    pred = data.get("predicate")
+    if isinstance(pred, dict):
+        return str(pred.get("op") or "") or None
+    return None
 
 
 def canonicalize_plan(plan: SemanticQueryPlan | dict[str, Any]) -> dict[str, Any]:
@@ -54,6 +62,8 @@ def canonicalize_plan(plan: SemanticQueryPlan | dict[str, Any]) -> dict[str, Any
         "limit": data.get("limit"),
         "spatial_relations": list(data.get("spatial_relations") or []),
         "requires_clarification": bool(data.get("requires_clarification")),
+        "predicate": data.get("predicate"),
+        "predicate_op": _predicate_op(data),
     }
 
 
@@ -97,6 +107,14 @@ def classify_plan_errors(
             errors.append("P03")
         else:
             errors.append("P03")
+
+    gold_pred_op = gold_c.get("predicate_op")
+    pred_pred_op = pred_c.get("predicate_op")
+    if gold_pred_op in {"or", "not"} and gold_pred_op != pred_pred_op:
+        errors.append("P04")
+    if gold_c.get("predicate") and gold_c.get("predicate") != pred_c.get("predicate"):
+        if gold_pred_op in {"or", "not"}:
+            errors.append("P04")
 
     if gold_c["aggregations"] or gold_c["query_kind"] == "aggregate":
         if (

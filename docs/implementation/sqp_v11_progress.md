@@ -4,6 +4,7 @@
 |---|---|---|---|---|---|---|---|
 | 00 | DONE | 실행 계획·진행기록·baseline JSON·gitignore | `uv run pytest tests/semantic_plan -q` 37 passed | unit 37/0/0 | `chore(plan): [STEP-00] record sqp v1.1 baseline and execution context` | 없음 | STEP-01 |
 | 01 | DONE | evaluation 패키지, eval CLI, candidate jsonl | `uv run pytest tests/evaluation tests/semantic_plan -q` 47 passed | unit 47/0/0 | `test(benchmark): [STEP-01] add semantic accuracy evaluation harness` | nl2sql live는 DB 필요 시 ENV_BLOCKED 경로 존재 | STEP-02 |
+| 02 | DONE | verified gold 30 + heuristic baseline 실패 기록 | `uv run pytest tests/evaluation tests/semantic_plan -q` 50 passed | heuristic 0/30, 단위 50/0/0 | `test(semantic): [STEP-02] freeze known Korean semantic error cases` | 없음 | STEP-03 |
 
 ## STEP-00
 
