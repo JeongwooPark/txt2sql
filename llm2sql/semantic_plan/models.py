@@ -10,7 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 QueryKind = Literal["count", "list", "rank", "aggregate", "distribution"]
-EntityName = Literal["building", "admin_area", "basic_zone"]
+EntityName = Literal["building", "admin_area", "basic_zone", "industrial_complex"]
 FilterOperator = Literal[
     "eq",
     "neq",
@@ -20,10 +20,13 @@ FilterOperator = Literal[
     "lte",
     "contains",
     "in",
+    "not_in",
     "between",
     "is_null",
     "is_not_null",
 ]
+PredicateOp = Literal["and", "or", "not", "cmp"]
+OperandKind = Literal["field", "literal"]
 SpatialRelationName = Literal[
     "within",
     "intersects",
@@ -80,6 +83,67 @@ class FilterSpec(BaseModel):
     value: Any | None = None
     value2: Any | None = None
     unit: str | None = None
+    value_field: str | None = None
+
+
+class OperandSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: OperandKind
+    field: str | None = None
+    value: Any | None = None
+    unit: str | None = None
+
+
+class PredicateSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: PredicateOp
+    args: list[PredicateSpec] | None = None
+    operator: FilterOperator | None = None
+    left: OperandSpec | None = None
+    right: OperandSpec | None = None
+
+
+class ProjectionSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    alias: str | None = None
+
+
+class HavingSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    predicate: PredicateSpec
+
+
+class JoinSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    edge_id: str
+    extra: dict[str, Any] | None = None
+
+
+class PlanEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    span_start: int | None = None
+    span_end: int | None = None
+    source: str = "heuristic"
+    note: str = ""
+
+
+class PlanConfidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entity: float = 0.0
+    scope: float = 0.0
+    fields: float = 0.0
+    predicates: float = 0.0
+    aggregation: float = 0.0
+    spatial: float = 0.0
+    overall: float = 0.0
 
 
 class AggregationSpec(BaseModel):
@@ -118,16 +182,20 @@ class SpatialRelationSpec(BaseModel):
 class SemanticQueryPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal["1.0"] = "1.0"
+    version: Literal["1.0", "1.1"] = "1.0"
     query_kind: QueryKind
     entity: EntityName
 
     scope: ScopeSpec | None = None
 
     filters: list[FilterSpec] = Field(default_factory=list)
+    predicate: PredicateSpec | None = None
     select: list[str] = Field(default_factory=list)
+    projections: list[ProjectionSpec] = Field(default_factory=list)
     aggregations: list[AggregationSpec] = Field(default_factory=list)
     group_by: list[str] = Field(default_factory=list)
+    having: HavingSpec | None = None
+    joins: list[JoinSpec] = Field(default_factory=list)
     order_by: list[OrderSpec] = Field(default_factory=list)
     limit: int | None = Field(default=None, ge=1, le=1000)
 
@@ -139,6 +207,8 @@ class SemanticQueryPlan(BaseModel):
 
     unsupported_reason: str | None = None
     model_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    evidence: list[PlanEvidence] = Field(default_factory=list)
+    slot_confidence: PlanConfidence | None = None
 
 
 class PlanValidationResult:
@@ -158,3 +228,9 @@ class PlanValidationResult:
         self.errors = errors
         self.warnings = warnings
         self.plan = plan
+
+
+PredicateSpec.model_rebuild()
+HavingSpec.model_rebuild()
+SemanticQueryPlan.model_rebuild()
+SemanticQueryPlanV11 = SemanticQueryPlan
