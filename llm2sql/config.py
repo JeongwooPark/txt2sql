@@ -28,8 +28,8 @@ def _route_mode(raw: object) -> str:
 
 
 def _semantic_plan_mode(raw: object) -> str:
-    mode = str(raw or "shadow").strip().lower()
-    return mode if mode in {"off", "shadow", "hybrid"} else "shadow"
+    mode = str(raw or "hybrid").strip().lower()
+    return mode if mode in {"off", "shadow", "hybrid"} else "hybrid"
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,7 @@ class Settings:
     map_retention_hours: int = 24
     map_max_analysis_layers: int = 8
     # off | shadow | hybrid — 규칙 라우터 미적중 시 Semantic Query Plan
-    semantic_plan_mode: str = "shadow"
+    semantic_plan_mode: str = "hybrid"
     semantic_plan_version: str = "1.1"
     semantic_plan_max_retries: int = 1
     semantic_plan_min_quality: float = 0.85
@@ -206,7 +206,7 @@ class Settings:
                 )
             ),
             semantic_plan_mode=_semantic_plan_mode(
-                _pick(data, "semantic_plan_mode", "SEMANTIC_PLAN_MODE", default="shadow")
+                _pick(data, "semantic_plan_mode", "SEMANTIC_PLAN_MODE", default="hybrid")
             ),
             semantic_plan_version=str(
                 _pick(

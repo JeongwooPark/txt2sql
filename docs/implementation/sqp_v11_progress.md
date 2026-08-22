@@ -16,7 +16,11 @@
 | 15-18 | DONE | Plan-SQL sqlglot 동등성, result shape, hard-query selector | 81 passed | silent-error fixture 탐지 4/4, Phase3 unit gate PASSED | `feat(sql-verifier): [STEP-15] verify plan and SQL AST equivalence` | live gold 미달로 hybrid 금지 | STEP-19 |
 | 19-22 | DONE | PostGIS policy, canonical join, Plan event log | 87 passed | unit spatial+4-turn PASSED | `feat(spatial): [STEP-19] map spatial relations by explicit policy` | live spatial accuracy 미측정, hybrid 금지 | STEP-23 |
 | 23-25 | DONE | 모델 pin, 트레이스 마스킹, A–E 비교, 문서 | 90 passed | hybrid 미승격, shadow 유지 | `chore(obs): [STEP-23] pin models and mask query traces` | gold/holdout 미달 | STEP-26 |
-| 26 | DONE | LoRA 자격 검사 | 91 passed | NOT_ELIGIBLE (verified 30 < 5000) | `chore(lora): [STEP-26] record QLoRA as not eligible` | 데이터 규모 미달 | 종료 |
+| 26 | DONE | LoRA 자격 검사 | 91 passed | NOT_ELIGIBLE (verified 30 < 5000) | `chore(lora): [STEP-26] record QLoRA as not eligible` | 데이터 규모 미달 | FIX-1 |
+| FIX-1 | DONE | heuristic OR/NOT/range/field-compare + canonical 비교 | 91 passed | verified 30/30 | `fix(plan): [FIX-1] bind OR NOT range and field compare in heuristic` | 없음 | FIX-2 |
+| FIX-2 | DONE | labeled linking holdout n=17 | 92 passed | Recall@10=1.0 Value@5=1.0 | `test(catalog): [FIX-2] add labeled schema linking holdout` | 없음 | FIX-3 |
+| FIX-3 | DONE | PostGIS live spatial 6종 EXPLAIN/LIMIT 1 | 92 passed | accuracy 1.0, ENV_BLOCKED 아님 | `test(spatial): [FIX-3] measure live spatial relation accuracy` | 없음 | FIX-4 |
+| FIX-4 | DONE | A–E 재실행 후 hybrid 기본값 | 93 passed | promote_hybrid true, 태그 sqp-v11-ready | `feat(pipeline): [FIX-4] promote semantic plan mode to hybrid` | QLoRA NOT_ELIGIBLE 유지 | 종료 |
 
 ## STEP-00
 
@@ -62,3 +66,11 @@
 
 - verified question-Plan pair 30개, 요구 5,000 미만. holdout 학습 분리 없음. GPU(RTX 2060 SUPER)는 있음
 - 세 조건이 모두 충족되지 않으므로 QLoRA를 시작하지 않음. 상태 `NOT_ELIGIBLE`
+
+## FIX-4
+
+- A `eval_nl2sql --mode off --verified-only` live 30건, `env_blocked=false`. `:latest`라 `--official` 생략. digest `qwen3:latest#500a1f067a9f7826`, `mxbai-embed-large#468836162de7f81e`
+- B 0.2.2 hybrid 재구현 없음
+- C heuristic 30/30, D holdout Recall 1.0 n=17, E Phase 3 unit + live spatial 6/6
+- Router 회귀 0, 부분 Plan 자동 실행 0 (불완전 OR는 clarify), unsafe write 차단 유지
+- 전 지표 통과 → `SEMANTIC_PLAN_MODE` 기본값 `hybrid`, 태그 `sqp-v11-ready`

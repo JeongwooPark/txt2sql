@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from llm2sql.config import Settings
 from llm2sql.evaluation.harness import evaluate_case
 from llm2sql.evaluation.jsonl import load_jsonl
 from llm2sql.evaluation.schema import EvalSummary, GoldPlanCase
@@ -91,6 +92,12 @@ def main(argv: list[str] | None = None) -> int:
         },
     )
     payload = {"summary": summary.model_dump(), "items": items}
+    all_ok = bool(cases) and summary.failed == 0
+    payload["phase1_gate"] = "PASSED" if all_ok else "NOT_PASSED"
+    payload["gate_passed"] = all_ok
+    payload["semantic_plan_mode_default"] = Settings(
+        database_url="postgresql://x:x@localhost/x"
+    ).semantic_plan_mode
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

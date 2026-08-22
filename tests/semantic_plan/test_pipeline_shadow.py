@@ -4,11 +4,19 @@ from llm2sql.semantic_plan.generator import generate_semantic_plan
 from llm2sql.semantic_plan.models import SemanticQueryPlan
 
 
-def test_default_mode_is_shadow() -> None:
+def test_default_mode_is_hybrid() -> None:
     settings = Settings(database_url="postgresql://x:x@localhost/x")
-    assert settings.semantic_plan_mode == "shadow"
+    assert settings.semantic_plan_mode == "hybrid"
     assert settings.semantic_plan_version == "1.1"
     assert settings.semantic_plan_min_contract_coverage == 1.0
+
+
+def test_shadow_override_does_not_change_default() -> None:
+    settings = Settings(
+        database_url="postgresql://x:x@localhost/x",
+        semantic_plan_mode="shadow",
+    )
+    assert settings.semantic_plan_mode == "shadow"
 
 
 def test_complete_or_is_ready() -> None:

@@ -113,18 +113,35 @@ def main(argv: list[str] | None = None) -> int:
     try:
         for case in cases:
             t0 = time.perf_counter()
-            result = engine.ask(case.question, include_map=False)
+            result = None
+            error = None
+            try:
+                result = engine.ask(case.question, include_map=False)
+            except Exception as exc:  # noqa: BLE001
+                error = f"{type(exc).__name__}: {exc}"
             ms = int((time.perf_counter() - t0) * 1000)
-            extra = result.extra or {}
-            plan = extra.get("semantic_plan")
+            extra = (
+                result.semantic_plan
+                if result is not None and isinstance(result.semantic_plan, dict)
+                else {}
+            )
+            plan = extra or None
+            clarify = bool(extra.get("requires_clarification")) if extra else False
+            route = result.route if result is not None else None
+            if route == "semantic_plan_clarify":
+                clarify = True
             scored = evaluate_case(
                 case,
                 predicted_plan=plan,
-                predicted_route=result.route,
-                predicted_rows=list(result.rows or []),
-                predicted_clarify=bool(extra.get("needs_clarification")),
-                sql_executed=bool(result.sql),
+                predicted_route=route,
+                predicted_rows=list((result.rows if result is not None else None) or []),
+                predicted_clarify=clarify,
+                sql_executed=bool(result.sql) if result is not None else False,
                 latency_ms=ms,
+            )
+            print(
+                f"{case.id} pass={scored.pass_} route={route} ms={ms} {error or ''}".strip(),
+                flush=True,
             )
             items.append(scored.model_dump(by_alias=True))
             errors.update(scored.error_codes)
@@ -143,7 +160,32 @@ def main(argv: list[str] | None = None) -> int:
         metrics={"semantic_accuracy": passed / len(cases) if cases else 0.0},
         env_blocked=False,
     )
-    payload = {"summary": summary.model_dump(), "items": items}
+    digests = {}
+    try:
+        import urllib.request
+
+        host = settings.ollama_host.rstrip("/")
+        tags = json.loads(urllib.request.urlopen(f"{host}/api/tags", timeout=5).read())
+        digests = {
+            str(item.get("name") or ""): str(item.get("digest") or "")[:16]
+            for item in tags.get("models") or []
+        }
+    except Exception:  # noqa: BLE001
+        digests = {}
+    payload = {
+        "summary": summary.model_dump(),
+        "items": items,
+        "official": args.official,
+        "models": {
+            "plan": settings.planner_model(),
+            "embed": settings.ollama_embed_model,
+            "plan_digest": digests.get(settings.planner_model())
+            or digests.get(f"{settings.planner_model()}:latest"),
+            "embed_digest": digests.get(settings.ollama_embed_model)
+            or digests.get(f"{settings.ollama_embed_model}:latest"),
+            "note": ":latest tag in use; official flag omitted; digests recorded from ollama /api/tags",
+        },
+    }
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

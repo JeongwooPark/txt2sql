@@ -2,7 +2,7 @@
 
 > 대상: `JeongwooPark/llm2sql`  
 > 도입 버전: **0.2.2**  
-> 기본값: `SEMANTIC_PLAN_MODE=shadow` (v1.1). `hybrid`는 승격 gate 통과 전까지 금지. `off`이면 0.2.1과 동일 동작.
+> 기본값: `SEMANTIC_PLAN_MODE=hybrid` (v1.1). `shadow`는 생성만, `off`이면 0.2.1과 동일 동작.
 
 원안은 Router 미적중 이후 LLM이 물리 SQL을 직접 쓰던 구간에 **Semantic Query Plan(SQP)** 을 끼워, LLM은 canonical JSON만 만들고 SQL은 Python compiler가 확정적으로 생성하게 하는 것이다. 이 문서는 그 원안을 **0.2.2에서 실제로 넣는 MVP**로 줄인 명세다.
 
@@ -34,10 +34,8 @@
        ├─ 적중 → 기존 SQL
        └─ 미적중
             ├─ SEMANTIC_PLAN_MODE=off     → RAG+LLM SQL (0.2.1과 동일)
-            ├─ shadow                     → SQP 생성·검증·컴파일만, 결과는 RAG (현재 기본)
-            └─ hybrid                     → SQP 실행 (gate 통과 시에만 기본값 후보)
-                                             ├─ 성공 / clarify → 답변
-                                             └─ 실패·미지원 → RAG+LLM SQL
+            ├─ shadow                     → SQP 생성·검증·컴파일만, 결과는 RAG
+            └─ hybrid                     → SQP 실행 (현재 기본). 실패·미지원 → RAG+LLM SQL
 ```
 
 삽입 위치는 `pipeline._ask_inner()` 의 `라우트 미매칭 → RAG+LLM` 직전이다. `run_rag_sql()` 은 삭제하지 않는다.
@@ -156,14 +154,14 @@ Hint는 validator가 다시 검사한다. LLM 출력에 `SELECT`, `A16`, `AL_D01
 
 | 변수 | 기본 | 의미 |
 |------|------|------|
-| `SEMANTIC_PLAN_MODE` | `off` | `off` / `shadow` / `hybrid` |
+| `SEMANTIC_PLAN_MODE` | `hybrid` | `off` / `shadow` / `hybrid` |
 | `SEMANTIC_PLAN_MAX_RETRIES` | `1` | JSON repair 횟수 |
 | `SEMANTIC_PLAN_MIN_QUALITY` | `0.85` | 미만이면 fallback |
 | `SEMANTIC_PLAN_DEBUG` | `false` | `plan_quality` 등 디버그 필드 |
 
 `planner_first`(Router보다 SQP 우선)는 구현하지 않는다.
 
-권장 순서: `off` → `shadow`로 SQL 비교 → 회귀 없으면 `.env` 에서 `hybrid`.
+권장 운영: 기본 `hybrid`. 관측만 하면 `shadow`, 장애 시 `off`.
 
 ---
 

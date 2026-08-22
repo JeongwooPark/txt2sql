@@ -9,7 +9,7 @@
   "zero_rows_relaxed": false,
   "simple_router_llm_calls": 0,
   "hard_query_candidates_only": true,
-  "unit_tests_passed": 81,
+  "unit_tests_passed": 92,
   "gate_passed": true,
-  "note": "Unit fixture detection is 100%. Live SQL/result-hash gold remains Phase 1 incomplete; no hybrid promotion."
+  "note": "Unit fixture detection is 100%. Zero-row results were not relaxed."
 }

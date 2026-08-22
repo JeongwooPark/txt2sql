@@ -41,8 +41,9 @@
 - 결정: Plan에는 PostGIS 함수 문자열을 넣지 않고 `spatial_policy.py`가 관계명→함수를 고른다. 장소 scope의 기존 boundary JOIN은 건물 footprint 겹침 관례로 ST_Intersects를 유지한다
 - join은 generic SQL이 아니라 `building_in_admin` 등 edge_id만 허용한다
 
-## ADR-0007 공식 벤치는 :latest를 쓰지 않고 hybrid 기본값은 올리지 않는다
+## ADR-0007 공식 벤치는 :latest를 쓰지 않는다. hybrid 기본값은 gate 통과 후에만 올린다
 
-- 상태: accepted
+- 상태: accepted (FIX-4에서 기본값 갱신)
 - 결정: planner/embed 역할 pin과 digest를 설정으로 둔다. 트레이스는 URL·비밀번호를 마스킹한다
-- STEP-24 A–E에서 Phase 1 gold·Phase 2 holdout이 미달이므로 `SEMANTIC_PLAN_MODE` 기본값은 `shadow`로 남긴다
+- STEP-24 A–E에서는 Phase 1 gold·Phase 2 holdout 미달로 `shadow`를 유지했다
+- FIX-4에서 Phase 1 30/30, holdout Recall 1.0, live spatial 6/6, A `ENV_BLOCKED` 아님을 확인한 뒤 기본값을 `hybrid`로 올렸다

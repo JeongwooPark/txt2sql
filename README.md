@@ -139,7 +139,7 @@ uv run python scripts/refresh_schema_catalog.py   # 스키마 임베딩 갱신 �
 | `MAP_WFS_MAX_FEATURES` | 이보다 많으면 WFS 대신 WMS | `5000` |
 | `MAP_RETENTION_HOURS` | `temp_*` 레이어 TTL | `24` |
 | `MAP_MAX_ANALYSIS_LAYERS` | 세션당 분석결과 레이어 상한 | `8` |
-| `SEMANTIC_PLAN_MODE` | 라우터 미적중 시 SQP `off` / `shadow` / `hybrid` | `shadow` |
+| `SEMANTIC_PLAN_MODE` | 라우터 미적중 시 SQP `off` / `shadow` / `hybrid` | `hybrid` |
 | `SEMANTIC_PLAN_VERSION` | Plan 스키마 버전 | `1.1` |
 | `SEMANTIC_PLAN_MAX_RETRIES` | Plan JSON repair 횟수 | `1` |
 | `SEMANTIC_PLAN_MIN_QUALITY` | 이 점수 미만이면 RAG로 fallback | `0.85` |
@@ -583,7 +583,7 @@ llm2sql/
 ## 0.2.2 변경 요약
 
 - **Semantic Query Plan (SQP)**: 규칙 라우터 미적중 질의에 canonical JSON Plan → deterministic SELECT. LLM이 물리 SQL을 직접 쓰지 않음
-- **기본 shadow**: `SEMANTIC_PLAN_MODE` 기본값은 `shadow`. 사용자 답에는 SQP SQL을 넣지 않는다. `hybrid` 승격은 Phase gate 전부 통과 후에만 (`docs/implementation/sqp_v11_rollout_report.md`)
+- **기본 hybrid**: `SEMANTIC_PLAN_MODE` 기본값은 `hybrid`. 라우터 미적중이면 SQP SQL을 실행하고, 실패·clarify·품질 미달이면 RAG로 내려간다. `shadow`는 `.env`로 명시한다 (`docs/implementation/sqp_v11_rollout_report.md`)
 - **의미 게이트**: 부분 Plan 자동 실행 금지, Plan-SQL 동등성, 공간 관계는 `spatial_policy.py`가 함수를 고른다
 - **후속**: BasePlan + event log (`undo_last` / `reset_to_base`). 기존 Plan delta API는 유지
 - **롤백**: `SEMANTIC_PLAN_MODE=off`. 절차는 `docs/implementation/sqp_v11_rollback.md`
