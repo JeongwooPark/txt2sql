@@ -38,6 +38,9 @@ Station/POI coordinates are unsupported: requires_clarification=true.
 
 Do not invent fields.
 Do not invent units.
+Station/POI names without coordinates require clarification; do not guess lon/lat.
+Plan joins must use catalog edge_id only (building_in_admin, building_in_basic_zone, building_in_industrial).
+Spatial relations: within/covered_by, intersects, touches, buffer, nearest, overlap_ratio. Never emit PostGIS function names.
 Do not invent places.
 
 Return JSON only.

@@ -18,3 +18,13 @@ def test_value_margin_can_clarify() -> None:
     values = retrieve_values("아파트")
     assert values.hits
     assert values.hits[0].binding.endswith("공동주택")
+
+
+def test_poi_without_canonical_name_clarifies() -> None:
+    from llm2sql.semantic_catalog.linking import retrieve_poi
+
+    unclear = retrieve_poi("역 근처 아파트")
+    assert unclear.clarify is True
+    exact = retrieve_poi("부산역")
+    assert exact.clarify is False
+    assert exact.hits[0].key == "부산역"

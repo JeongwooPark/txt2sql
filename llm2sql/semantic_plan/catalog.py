@@ -9,6 +9,7 @@ from llm2sql.semantic_plan.models import UnknownSemanticFieldError
 BUILDING_TABLE = "AL_D010_26_20250704"
 ADMIN_TABLE = "BND_ADM_DONG_PG"
 BASIC_ZONE_TABLE = "TL_KODIS_BAS_26_202507"
+INDUSTRIAL_TABLE = "AL_D060_00_20250804"
 
 _TEXT_OPS = ("eq", "neq", "contains", "in", "is_null", "is_not_null")
 _NUM_OPS = ("eq", "neq", "gt", "gte", "lt", "lte", "between", "is_null", "is_not_null")
@@ -188,7 +189,9 @@ FIELDS_BY_ENTITY: dict[str, dict[str, SemanticField]] = {
     "basic_zone": BASIC_ZONE_FIELDS,
 }
 
-ALLOWED_TABLES = frozenset({BUILDING_TABLE, ADMIN_TABLE, BASIC_ZONE_TABLE})
+ALLOWED_TABLES = frozenset(
+    {BUILDING_TABLE, ADMIN_TABLE, BASIC_ZONE_TABLE, INDUSTRIAL_TABLE}
+)
 ALLOWED_COLUMNS = frozenset(
     field.column
     for fields in FIELDS_BY_ENTITY.values()
@@ -243,7 +246,7 @@ def catalog_prompt_text(*, entity: str = "building") -> str:
         [
             "",
             "supported operators: eq, neq, gt, gte, lt, lte, contains, in, between",
-            "supported spatial relations: within, intersects, within_distance, outside_distance",
+            "supported spatial relations: covered_by, within, intersects, touches, buffer, nearest, overlap_ratio, within_distance, outside_distance",
             "supported query_kind: count, list, rank, aggregate, distribution",
             "spatial_mode auto: 구/법정동은 주소 속성, 행정전용 동은 경계",
             "spatial_mode boundary: 행정 경계 containment (안에/내부)",

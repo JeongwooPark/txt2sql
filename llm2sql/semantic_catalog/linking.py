@@ -75,6 +75,37 @@ def retrieve_values(question: str, *, top_k: int = 10) -> LinkResult:
     return packed
 
 
+_POI_NAMES = (
+    "부산역",
+    "센텀시티역",
+    "구서역",
+    "서면역",
+    "해운대역",
+    "사상역",
+    "부전역",
+)
+
+
+def retrieve_poi(question: str, *, top_k: int = 5) -> LinkResult:
+    cleaned = question.replace("기초구역", "").replace("구역", "")
+    if not any(token in cleaned for token in ("역", "터미널", "정류장")):
+        return LinkResult((), False, 1.0)
+    hits = []
+    for name in _POI_NAMES:
+        score = _score(question, name)
+        if score:
+            hits.append(LinkHit("poi", name, score, name))
+    if not hits and any(token in cleaned for token in ("역", "터미널", "정류장")):
+        return LinkResult((), True, 0.0)
+    hits.sort(key=lambda item: item.score, reverse=True)
+    packed = _pack(hits[:top_k])
+    if packed.margin < 0.15 and len(packed.hits) >= 2:
+        return LinkResult(packed.hits, True, packed.margin)
+    if packed.hits and packed.hits[0].score < 1.0:
+        return LinkResult(packed.hits, True, packed.margin)
+    return packed
+
+
 def _pack(hits: list[LinkHit]) -> LinkResult:
     if not hits:
         return LinkResult((), False, 1.0)

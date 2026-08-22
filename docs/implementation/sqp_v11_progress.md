@@ -14,6 +14,7 @@
 | 09 | DONE | shadow 기본값, config flags, pipeline trace | 75 passed | gold exact 2/30, gate NOT_PASSED, shadow 유지 | `feat(pipeline): [STEP-09] integrate sqp v1.1 in shadow mode` | Phase1 gold gate 미달, 태그 보류 | STEP-10 |
 | 10-14 | DONE | semantic_catalog, linking, join edges, eval_schema_linking | 77 passed | holdout Recall gate NOT_PASSED (목표 미완화) | `feat(catalog): [STEP-10] externalize semantic catalog and source bindings` | labeled holdout 부재 | STEP-15 |
 | 15-18 | DONE | Plan-SQL sqlglot 동등성, result shape, hard-query selector | 81 passed | silent-error fixture 탐지 4/4, Phase3 unit gate PASSED | `feat(sql-verifier): [STEP-15] verify plan and SQL AST equivalence` | live gold 미달로 hybrid 금지 | STEP-19 |
+| 19-22 | DONE | PostGIS policy, canonical join, Plan event log | 87 passed | unit spatial+4-turn PASSED | `feat(spatial): [STEP-19] map spatial relations by explicit policy` | live spatial accuracy 미측정, hybrid 금지 | STEP-23 |
 
 ## STEP-00
 
@@ -38,4 +39,13 @@
 - simple Router 질의는 `should_enumerate_candidates`가 False
 - `uv run pytest tests/semantic_plan tests/semantic_catalog tests/query_understanding tests/evaluation -q` 81 passed
 - Phase 3 unit fixture 탐지율 1.0 → 태그 `sqp-v11-phase-3`
+- hybrid 승격은 STEP-24에서만 판단
+
+## STEP-19~22
+
+- 목표: within을 ST_Intersects로 일괄 번역하지 않음, canonical join edge, BasePlan+event follow-up
+- `spatial_policy.py`: within/covered_by→ST_CoveredBy, intersects, touches, buffer, nearest, overlap_ratio
+- Plan.joins는 catalog edge_id만. POI 모호하면 clarify
+- followup event: add/replace/remove/negate_filter, change_scope/order/limit, undo_last, reset_to_base. PlanDelta는 migration 유지
+- 87 passed. 태그 `sqp-v11-phase-4`
 - hybrid 승격은 STEP-24에서만 판단

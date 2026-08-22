@@ -11,6 +11,8 @@ from llm2sql.semantic_plan.catalog import (
     ADMIN_TABLE,
     ALLOWED_COLUMNS,
     ALLOWED_TABLES,
+    BASIC_ZONE_TABLE,
+    INDUSTRIAL_TABLE,
     get_entity,
     get_field,
 )
@@ -60,11 +62,16 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
     spatial_mode = plan.scope.spatial_mode if plan.scope else "auto"
 
     spatial_places: set[str] = set()
+    spatial_order: list[str] = []
+    spatial_limit: list[int] = []
     if plan.spatial_relations:
         spatial_boundary, spatial_places = _apply_spatial_relations(
-            alias, plan, tables, joins, where
+            alias, plan, tables, joins, where, spatial_order, spatial_limit
         )
         uses_boundary = uses_boundary or spatial_boundary
+
+    if plan.joins:
+        _apply_canonical_joins(alias, plan, tables, joins, where)
 
     if place and place.name.strip() and place.name.strip() not in spatial_places:
         name = place.name.strip()
@@ -121,7 +128,12 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
         having_sql = f"HAVING {having_clause}"
         params.extend(having_params)
     order_sql = _order_sql(alias, plan)
+    if spatial_order:
+        extra_order = ", ".join(spatial_order)
+        order_sql = f"{order_sql}, {extra_order}" if order_sql else f"ORDER BY {extra_order}"
     limit_sql = f"LIMIT {int(plan.limit)}" if plan.limit else ""
+    if not limit_sql and spatial_limit:
+        limit_sql = f"LIMIT {int(spatial_limit[0])}"
 
     parts = [select_sql, from_sql]
     if where_sql:
@@ -352,19 +364,24 @@ def _apply_spatial_relations(
     tables: list[str],
     joins: list[str],
     where: list[str],
+    spatial_order: list[str],
+    spatial_limit: list[int],
 ) -> tuple[bool, set[str]]:
-    """spatial_relations → JOIN/WHERE. 물리 함수명은 compiler만 고른다."""
+    """spatial_relations → JOIN/WHERE. 물리 함수명은 compiler 정책만 고른다."""
+    from llm2sql.semantic_plan.spatial_policy import resolve_spatial_policy
+
     uses_boundary = False
     used_places: set[str] = set()
     admin_alias_used = False
     for index, rel in enumerate(plan.spatial_relations):
+        policy = resolve_spatial_policy(rel.relation)
         target = rel.target
         place_name = (
             target.place.name.strip() if target.place and target.place.name else None
         )
-        if rel.relation in {"within", "intersects"}:
+        if policy.kind == "predicate":
             if not place_name:
-                raise SemanticCompileError("within/intersects requires a place target")
+                raise SemanticCompileError(f"{rel.relation} requires a place target")
             used_places.add(place_name)
             d_alias = "a" if not admin_alias_used else f"a{index}"
             admin_alias_used = True
@@ -372,13 +389,13 @@ def _apply_spatial_relations(
                 tables.append(ADMIN_TABLE)
             joins.append(
                 f"JOIN {_ident(ADMIN_TABLE, physical=True)} {d_alias} "
-                f"ON ST_Intersects({alias}.geometry, {d_alias}.geometry)"
+                f"ON {policy.postgis_fn}({alias}.geometry, {d_alias}.geometry)"
             )
             where.append(_admin_name_sql(d_alias, place_name))
             where.append(f"{d_alias}.\"ADM_CD\" LIKE '21%'")
             uses_boundary = True
             continue
-        if rel.relation in {"within_distance", "outside_distance"}:
+        if policy.kind in {"distance", "distance_outside"}:
             if rel.distance_m is None or rel.distance_m <= 0:
                 raise SemanticCompileError("distance_m must be > 0")
             meters = sql_number(float(rel.distance_m))
@@ -404,7 +421,7 @@ def _apply_spatial_relations(
                     f"{z_alias}.geom::geography, "
                     f"{meters})"
                 )
-                if rel.relation == "outside_distance":
+                if policy.kind == "distance_outside":
                     where.append(
                         f"NOT ST_Intersects({alias}.geometry, {z_alias}.geom)"
                     )
@@ -422,8 +439,97 @@ def _apply_spatial_relations(
                 )
                 continue
             raise SemanticCompileError("within_distance needs a place or lon/lat")
+        if policy.kind == "nearest":
+            if not place_name:
+                raise SemanticCompileError("nearest requires a place target")
+            used_places.add(place_name)
+            z_alias = "z" if index == 0 else f"z{index}"
+            if ADMIN_TABLE not in tables:
+                tables.append(ADMIN_TABLE)
+            pred = f"{_admin_name_sql('d', place_name)} AND d.\"ADM_CD\" LIKE '21%'"
+            joins.append(
+                "CROSS JOIN (\n"
+                "  SELECT ST_Union(d.geometry) AS geom\n"
+                f"  FROM {_ident(ADMIN_TABLE, physical=True)} d\n"
+                f"  WHERE {pred}\n"
+                f") {z_alias}"
+            )
+            where.append(f"{z_alias}.geom IS NOT NULL")
+            spatial_order.append(f"ST_Distance({alias}.geometry, {z_alias}.geom)")
+            if plan.limit is None:
+                spatial_limit.append(10)
+            uses_boundary = True
+            continue
+        if policy.kind == "ratio":
+            if not place_name:
+                raise SemanticCompileError("overlap_ratio requires a place target")
+            used_places.add(place_name)
+            d_alias = "a" if not admin_alias_used else f"a{index}"
+            admin_alias_used = True
+            if ADMIN_TABLE not in tables:
+                tables.append(ADMIN_TABLE)
+            ratio = rel.min_ratio if rel.min_ratio is not None else 0.5
+            joins.append(
+                f"JOIN {_ident(ADMIN_TABLE, physical=True)} {d_alias} "
+                f"ON ST_Intersects({alias}.geometry, {d_alias}.geometry)"
+            )
+            where.append(_admin_name_sql(d_alias, place_name))
+            where.append(f"{d_alias}.\"ADM_CD\" LIKE '21%'")
+            where.append(
+                "ST_Area(ST_Intersection("
+                f"{alias}.geometry, {d_alias}.geometry)) "
+                f"/ NULLIF(ST_Area({alias}.geometry), 0) >= {sql_number(float(ratio))}"
+            )
+            uses_boundary = True
+            continue
         raise SemanticCompileError(f"unsupported spatial relation: {rel.relation}")
     return uses_boundary, used_places
+
+
+def _apply_canonical_joins(
+    alias: str,
+    plan: SemanticQueryPlan,
+    tables: list[str],
+    joins: list[str],
+    where: list[str],
+) -> None:
+    from llm2sql.semantic_catalog.registry import get_edge
+
+    sql_pat = re.compile(r"(?i)\b(select|insert|update|delete|st_[a-z]+)\b")
+    for spec in plan.joins:
+        extra = spec.extra or {}
+        if sql_pat.search(str(extra)):
+            raise SemanticCompileError("join extra cannot contain SQL")
+        try:
+            edge = get_edge(spec.edge_id)
+        except KeyError as exc:
+            raise SemanticCompileError(f"unknown join edge: {spec.edge_id}") from exc
+        if edge.edge_id == "building_in_admin":
+            if ADMIN_TABLE not in tables:
+                tables.append(ADMIN_TABLE)
+            if not any(ADMIN_TABLE in item for item in joins):
+                joins.append(
+                    f"JOIN {_ident(ADMIN_TABLE, physical=True)} adm "
+                    f"ON ST_Intersects({alias}.geometry, adm.geometry)"
+                )
+        elif edge.edge_id == "building_in_basic_zone":
+            if BASIC_ZONE_TABLE not in tables:
+                tables.append(BASIC_ZONE_TABLE)
+            if not any(BASIC_ZONE_TABLE in item for item in joins):
+                joins.append(
+                    f"JOIN {_ident(BASIC_ZONE_TABLE, physical=True)} bas "
+                    f"ON ST_Intersects({alias}.geometry, bas.geometry)"
+                )
+        elif edge.edge_id == "building_in_industrial":
+            if INDUSTRIAL_TABLE not in tables:
+                tables.append(INDUSTRIAL_TABLE)
+            if not any(INDUSTRIAL_TABLE in item for item in joins):
+                joins.append(
+                    f"JOIN {_ident(INDUSTRIAL_TABLE, physical=True)} ind "
+                    f"ON ST_Intersects({alias}.geometry, ind.geometry)"
+                )
+        else:
+            raise SemanticCompileError(f"uncompiled join edge: {edge.edge_id}")
 
 
 def _a4_place_sql(alias: str, place: str) -> str:

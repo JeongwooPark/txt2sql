@@ -1,4 +1,5 @@
 from llm2sql.semantic_plan.followup import (
+    apply_followup_history,
     apply_plan_delta,
     is_semantic_plan_followup,
     parse_followup_delta,
@@ -82,3 +83,32 @@ def test_followup_from_router_d010_sql() -> None:
     session.last_full_question = "해운대구 아파트 중 연면적이 큰 20개 보여줘"
     assert is_semantic_plan_followup("그중 높이 80m 이상만", session)
     assert is_semantic_plan_followup("10개만 보여줘", session)
+
+
+def test_event_log_four_turn_and_undo() -> None:
+    base = _base_plan()
+    step1 = apply_followup_history("그중 100m 이상만", base, [])
+    assert step1 is not None
+    plan1, events1 = step1
+    assert any(item.field == "height_m" for item in plan1.filters)
+
+    step2 = apply_followup_history("높이 순으로 바꿔", base, events1)
+    assert step2 is not None
+    plan2, events2 = step2
+    assert plan2.order_by and plan2.order_by[0].field == "height_m"
+
+    step3 = apply_followup_history("10개만 보여줘", base, events2)
+    assert step3 is not None
+    plan3, events3 = step3
+    assert plan3.limit == 10
+
+    undone = apply_followup_history("직전 취소", base, events3)
+    assert undone is not None
+    plan4, events4 = undone
+    assert plan4.limit == 20
+    assert len(events4) == len(events3) - 1
+
+    reset = apply_followup_history("처음부터", base, events4)
+    assert reset is not None
+    assert reset[0].filters == base.filters
+    assert reset[0].limit == base.limit

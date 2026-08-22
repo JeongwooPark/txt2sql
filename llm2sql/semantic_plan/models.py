@@ -33,6 +33,10 @@ SpatialRelationName = Literal[
     "within_distance",
     "outside_distance",
     "touches",
+    "covered_by",
+    "buffer",
+    "nearest",
+    "overlap_ratio",
 ]
 AggregateFunction = Literal["count", "avg", "sum", "min", "max", "median"]
 PlaceKind = Literal[
@@ -177,6 +181,7 @@ class SpatialRelationSpec(BaseModel):
     relation: SpatialRelationName
     target: SpatialTargetSpec
     distance_m: float | None = None
+    min_ratio: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class SemanticQueryPlan(BaseModel):

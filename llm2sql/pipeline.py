@@ -81,6 +81,7 @@ from llm2sql.router_lexicon import map_unknown_to_router
 from llm2sql.session import SessionContext
 from llm2sql.semantic_plan import run_semantic_plan
 from llm2sql.semantic_plan.followup import (
+    apply_followup_history,
     is_semantic_plan_followup,
     merge_followup_plan,
 )
@@ -1043,8 +1044,18 @@ def _ask_inner(
             if heur is not None and not heur.requires_clarification:
                 base_plan = heur.model_dump()
         if base_plan:
-            merged = merge_followup_plan(question, base_plan)
+            history = apply_followup_history(
+                question,
+                base_plan,
+                session.last_plan_events,
+                base_override=session.last_plan_base,
+            )
+            merged = history[0] if history is not None else merge_followup_plan(
+                question, base_plan
+            )
             if merged is not None:
+                if history is not None:
+                    session.last_plan_events = [item.model_dump() for item in history[1]]
                 progress.emit("route", "Semantic Plan 후속 delta")
                 semantic = run_semantic_plan(
                     question,

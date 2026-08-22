@@ -22,7 +22,19 @@ _MAX_AGG = 4
 _MAX_ORDER = 3
 _MAX_LIMIT = 1000
 _V1_ENTITIES = frozenset({"building"})
-_V1_SPATIAL = frozenset({"within", "intersects", "within_distance", "outside_distance"})
+_V1_SPATIAL = frozenset(
+    {
+        "within",
+        "intersects",
+        "within_distance",
+        "outside_distance",
+        "touches",
+        "covered_by",
+        "buffer",
+        "nearest",
+        "overlap_ratio",
+    }
+)
 
 
 def validate_semantic_plan(
@@ -146,7 +158,7 @@ def validate_semantic_plan(
     for rel in plan.spatial_relations:
         if rel.relation not in _V1_SPATIAL:
             return _fallback(plan, f"unsupported spatial relation: {rel.relation}", 0.4)
-        if rel.relation in {"within_distance", "outside_distance"}:
+        if rel.relation in {"within_distance", "outside_distance", "buffer"}:
             if rel.distance_m is None or rel.distance_m <= 0:
                 return _fallback(plan, "distance_m must be > 0", score - 0.4)
         target = rel.target
@@ -157,9 +169,45 @@ def validate_semantic_plan(
                 return _fallback(plan, "longitude/latitude both required", score - 0.4)
             if not (-180 <= lon <= 180 and -90 <= lat <= 90):
                 return _fallback(plan, "invalid lon/lat range", score - 0.4)
-        elif rel.relation in {"within", "intersects", "within_distance", "outside_distance"}:
+        elif rel.relation in {
+            "within",
+            "intersects",
+            "within_distance",
+            "outside_distance",
+            "touches",
+            "covered_by",
+            "buffer",
+            "nearest",
+            "overlap_ratio",
+        }:
             if target.place is None or not (target.place.name or "").strip():
                 return _fallback(plan, "spatial relation needs a place or lon/lat", score - 0.4)
+
+    from llm2sql.semantic_catalog.registry import allowed_edges
+
+    for join in plan.joins:
+        if join.edge_id not in allowed_edges():
+            return _fallback(plan, f"unknown join edge: {join.edge_id}", 0.3)
+        if re.search(r"(?i)\b(select|insert|update|st_[a-z]+)\b", str(join.extra or {})):
+            return _fallback(plan, "join extra cannot contain SQL", 0.2)
+
+    from llm2sql.semantic_catalog.linking import retrieve_poi
+
+    poi = retrieve_poi(question)
+    if poi.clarify:
+        clarified = plan.model_copy(
+            update={
+                "requires_clarification": True,
+                "ambiguities": list(plan.ambiguities) + ["ambiguous_poi"],
+            }
+        )
+        return PlanValidationResult(
+            status="clarify",
+            score=score - 0.4,
+            errors=["ambiguous_poi"],
+            warnings=warnings,
+            plan=clarified,
+        )
 
     if len(plan.filters) > _MAX_FILTERS:
         return _fallback(plan, "too many filters", score - 0.2)
@@ -177,7 +225,7 @@ def validate_semantic_plan(
     tracked = [
         item
         for item in plan.assumptions
-        if item not in {"heuristic_plan", "plan_followup_delta"}
+        if item not in {"heuristic_plan", "plan_followup_delta", "plan_followup_event"}
     ]
     if tracked:
         score -= 0.1 * min(len(tracked), 3)

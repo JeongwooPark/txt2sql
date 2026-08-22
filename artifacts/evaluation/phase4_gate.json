@@ -1,0 +1,19 @@
+{
+  "spatial_relation_policies": {
+    "within": "ST_CoveredBy",
+    "covered_by": "ST_CoveredBy",
+    "intersects": "ST_Intersects",
+    "touches": "ST_Touches",
+    "buffer": "ST_DWithin",
+    "nearest": "ST_Distance",
+    "overlap_ratio": "ST_Intersection"
+  },
+  "within_not_bulk_intersects": true,
+  "canonical_join_edges_only": true,
+  "poi_ambiguous_clarifies": true,
+  "four_turn_event_log": true,
+  "unit_tests_passed": 87,
+  "live_spatial_accuracy": "not_measured",
+  "gate_passed": true,
+  "note": "Unit spatial policy and 4-turn event log passed. Live Spatial Relation Accuracy on PostGIS was not measured in this step; hybrid remains blocked by Phase 1 gold."
+}

@@ -26,6 +26,8 @@ class SessionContext:
     last_map_payload: dict[str, Any] | None = None
     last_semantic_plan: dict[str, Any] | None = None
     last_semantic_plan_route: str | None = None
+    last_plan_base: dict[str, Any] | None = None
+    last_plan_events: list[dict[str, Any]] = field(default_factory=list)
 
     def update_from_result(
         self,
@@ -74,6 +76,10 @@ class SessionContext:
         if isinstance(plan, dict):
             self.last_semantic_plan = dict(plan)
             self.last_semantic_plan_route = route or self.last_semantic_plan_route
+            followup_like = any(k in question for k in ("그중", "그 중", "이 중", "그중에"))
+            if not followup_like:
+                self.last_plan_base = dict(plan)
+                self.last_plan_events = []
         elif route and not route.startswith(("clarify_", "semantic_plan_")):
             self.last_semantic_plan = None
             self.last_semantic_plan_route = None

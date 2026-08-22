@@ -6,7 +6,7 @@ LLM 없이 add_filter / change_sort / change_limit / add_select 를 처리한다
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -50,7 +50,8 @@ def is_semantic_plan_followup(question: str, session: SessionContext | None) -> 
     if route.startswith(("clarify", "chart_help", "guide")):
         return False
     delta = parse_followup_delta(q)
-    if delta is None:
+    events = parse_followup_events(q)
+    if delta is None and not events:
         return False
     if has_anaphora(q) or any(k in q for k in ("그중", "그 중", "이 중", "그중에")):
         return True
@@ -181,16 +182,178 @@ def apply_plan_delta(base: SemanticQueryPlan, delta: PlanDelta) -> SemanticQuery
     return SemanticQueryPlan.model_validate(data)
 
 
+PlanEventOp = Literal[
+    "add_filter",
+    "replace_filter",
+    "remove_filter",
+    "negate_filter",
+    "change_scope",
+    "change_order",
+    "change_limit",
+    "add_select",
+    "change_kind",
+    "undo_last",
+    "reset_to_base",
+]
+
+
+class PlanEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: PlanEventOp
+    filter: FilterSpec | None = None
+    field: str | None = None
+    order_by: list[OrderSpec] | None = None
+    limit: int | None = Field(default=None, ge=1, le=1000)
+    scope: ScopeSpec | None = None
+    select: list[str] = Field(default_factory=list)
+    kind: QueryKind | None = None
+
+
+def parse_followup_events(question: str) -> list[PlanEvent]:
+    q = question.strip()
+    if not q:
+        return []
+    if any(k in q for k in ("처음부터", "초기화", "원래대로")):
+        return [PlanEvent(op="reset_to_base")]
+    if any(k in q for k in ("방금 취소", "직전 취소", "되돌려", "직전을 취소")):
+        return [PlanEvent(op="undo_last")]
+    hints = extract_plan_hints(q)
+    events: list[PlanEvent] = []
+    if any(k in q for k in ("제외", "빼고", "아닌", "이외")) and hints.get("usage"):
+        events.append(
+            PlanEvent(
+                op="negate_filter",
+                filter=FilterSpec(field="usage", operator="eq", value=hints["usage"]),
+            )
+        )
+    elif hints.get("usage") and any(k in q for k in ("바꿔", "대신", "으로 해")):
+        events.append(
+            PlanEvent(
+                op="replace_filter",
+                filter=FilterSpec(field="usage", operator="eq", value=hints["usage"]),
+            )
+        )
+    delta = parse_followup_delta(q)
+    if delta is not None:
+        skip_usage_add = any(ev.op in {"negate_filter", "replace_filter"} for ev in events)
+        for spec in delta.add_filters:
+            if skip_usage_add and spec.field == "usage":
+                continue
+            events.append(PlanEvent(op="add_filter", filter=spec))
+        if delta.change_sort is not None:
+            events.append(PlanEvent(op="change_order", order_by=delta.change_sort))
+        if delta.change_limit is not None:
+            events.append(PlanEvent(op="change_limit", limit=delta.change_limit))
+        if delta.add_select:
+            events.append(PlanEvent(op="add_select", select=delta.add_select))
+        if delta.change_scope is not None:
+            events.append(PlanEvent(op="change_scope", scope=delta.change_scope))
+        if delta.change_kind is not None:
+            events.append(PlanEvent(op="change_kind", kind=delta.change_kind))
+    if any(k in q for k in ("그 조건 빼", "필터 제거", "조건 제거")):
+        field = "usage" if "용도" in q else None
+        if field:
+            events.append(PlanEvent(op="remove_filter", field=field))
+    return events
+
+
+def apply_plan_events(base: SemanticQueryPlan, events: list[PlanEvent]) -> SemanticQueryPlan:
+    plan = base
+    for event in events:
+        if event.op in {"undo_last", "reset_to_base"}:
+            continue
+        plan = _apply_one_event(plan, event)
+    assumptions = list(plan.assumptions or [])
+    if events and "plan_followup_event" not in assumptions:
+        assumptions.append("plan_followup_event")
+    return plan.model_copy(update={"assumptions": assumptions})
+
+
+def _apply_one_event(plan: SemanticQueryPlan, event: PlanEvent) -> SemanticQueryPlan:
+    if event.op == "add_filter" and event.filter is not None:
+        delta = PlanDelta(add_filters=[event.filter])
+        return apply_plan_delta(plan, delta)
+    if event.op == "replace_filter" and event.filter is not None:
+        data = plan.model_dump()
+        filters = [item for item in plan.filters if item.field != event.filter.field]
+        filters.append(event.filter)
+        data["filters"] = [item.model_dump() for item in filters]
+        return SemanticQueryPlan.model_validate(data)
+    if event.op == "remove_filter":
+        field = event.field or (event.filter.field if event.filter else None)
+        data = plan.model_dump()
+        data["filters"] = [
+            item.model_dump() for item in plan.filters if field and item.field != field
+        ]
+        return SemanticQueryPlan.model_validate(data)
+    if event.op == "negate_filter" and event.filter is not None:
+        data = plan.model_dump()
+        rest = [
+            item
+            for item in plan.filters
+            if not (item.field == event.filter.field and item.value == event.filter.value)
+        ]
+        negated = event.filter.model_copy(
+            update={"operator": "neq" if event.filter.operator == "eq" else "eq"}
+        )
+        rest.append(negated)
+        data["filters"] = [item.model_dump() for item in rest]
+        return SemanticQueryPlan.model_validate(data)
+    if event.op == "change_order" and event.order_by is not None:
+        return apply_plan_delta(plan, PlanDelta(change_sort=event.order_by))
+    if event.op == "change_limit" and event.limit is not None:
+        return apply_plan_delta(plan, PlanDelta(change_limit=event.limit))
+    if event.op == "change_scope" and event.scope is not None:
+        return apply_plan_delta(plan, PlanDelta(change_scope=event.scope))
+    if event.op == "add_select" and event.select:
+        return apply_plan_delta(plan, PlanDelta(add_select=event.select))
+    if event.op == "change_kind" and event.kind is not None:
+        return apply_plan_delta(plan, PlanDelta(change_kind=event.kind))
+    return plan
+
+
+def apply_followup_history(
+    question: str,
+    base: SemanticQueryPlan | dict[str, Any],
+    prior_events: list[PlanEvent | dict[str, Any]] | None = None,
+    *,
+    base_override: SemanticQueryPlan | dict[str, Any] | None = None,
+) -> tuple[SemanticQueryPlan, list[PlanEvent]] | None:
+    new_events = parse_followup_events(question)
+    if not new_events:
+        return None
+    root = base_override if base_override is not None else base
+    plan = (
+        root
+        if isinstance(root, SemanticQueryPlan)
+        else SemanticQueryPlan.model_validate(root)
+    )
+    combined: list[PlanEvent] = []
+    for item in prior_events or []:
+        combined.append(item if isinstance(item, PlanEvent) else PlanEvent.model_validate(item))
+    for event in new_events:
+        if event.op == "undo_last":
+            if combined:
+                combined.pop()
+            continue
+        if event.op == "reset_to_base":
+            combined = []
+            continue
+        combined.append(event)
+    return apply_plan_events(plan, combined), combined
+
+
 def merge_followup_plan(
     question: str,
     base: SemanticQueryPlan | dict[str, Any],
 ) -> SemanticQueryPlan | None:
-    delta = parse_followup_delta(question)
-    if delta is None:
-        return None
     plan = (
         base
         if isinstance(base, SemanticQueryPlan)
         else SemanticQueryPlan.model_validate(base)
     )
-    return apply_plan_delta(plan, delta)
+    history = apply_followup_history(question, plan)
+    if history is None:
+        return None
+    return history[0]

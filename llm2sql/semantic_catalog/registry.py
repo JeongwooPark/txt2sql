@@ -8,9 +8,8 @@ from llm2sql.semantic_plan.catalog import (
     BASIC_ZONE_TABLE,
     BUILDING_TABLE,
     ENTITIES,
+    INDUSTRIAL_TABLE,
 )
-
-INDUSTRIAL_TABLE = "AL_D060_00_20250804"
 
 SOURCE_BINDINGS: dict[str, SourceBinding] = {
     "building": SourceBinding("building", BUILDING_TABLE, "20250704"),

@@ -33,3 +33,10 @@
 - 맥락: SQL 문자열 토큰 존재는 정답이 아님. AND/OR 반전·NOT 누락·집계 변경을 실행 전에 막아야 함
 - 결정: 기존 `sql_validator.py` domain diagnose는 유지하고, `sqlglot` WHERE boolean tree와 Plan predicate ops를 비교한다
 - 결과: 완전 논리 정규화(CNF)는 하지 않고 OR/NOT/집계/ORDER/LIMIT 누락을 탐지한다
+
+## ADR-0006 within은 covered_by 정책이며 ST_Intersects가 아니다
+
+- 상태: accepted
+- 맥락: v1 compiler가 within과 intersects를 모두 ST_Intersects로 번역함
+- 결정: Plan에는 PostGIS 함수 문자열을 넣지 않고 `spatial_policy.py`가 관계명→함수를 고른다. 장소 scope의 기존 boundary JOIN은 건물 footprint 겹침 관례로 ST_Intersects를 유지한다
+- join은 generic SQL이 아니라 `building_in_admin` 등 edge_id만 허용한다
