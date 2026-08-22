@@ -1,0 +1,13 @@
+{
+  "status": "NOT_ELIGIBLE",
+  "verified_pairs": 30,
+  "min_verified_pairs": 5000,
+  "holdout_separated": false,
+  "gpu_available": true,
+  "gpu": "NVIDIA GeForce RTX 2060 SUPER",
+  "reasons": [
+    "verified_pairs 30 < 5000",
+    "holdout_not_separated"
+  ],
+  "note": "Do not start QLoRA. All three conditions must hold; do not ask the user for permission to skip."
+}

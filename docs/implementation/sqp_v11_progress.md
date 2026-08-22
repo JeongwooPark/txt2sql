@@ -16,6 +16,7 @@
 | 15-18 | DONE | Plan-SQL sqlglot 동등성, result shape, hard-query selector | 81 passed | silent-error fixture 탐지 4/4, Phase3 unit gate PASSED | `feat(sql-verifier): [STEP-15] verify plan and SQL AST equivalence` | live gold 미달로 hybrid 금지 | STEP-19 |
 | 19-22 | DONE | PostGIS policy, canonical join, Plan event log | 87 passed | unit spatial+4-turn PASSED | `feat(spatial): [STEP-19] map spatial relations by explicit policy` | live spatial accuracy 미측정, hybrid 금지 | STEP-23 |
 | 23-25 | DONE | 모델 pin, 트레이스 마스킹, A–E 비교, 문서 | 90 passed | hybrid 미승격, shadow 유지 | `chore(obs): [STEP-23] pin models and mask query traces` | gold/holdout 미달 | STEP-26 |
+| 26 | DONE | LoRA 자격 검사 | 91 passed | NOT_ELIGIBLE (verified 30 < 5000) | `chore(lora): [STEP-26] record QLoRA as not eligible` | 데이터 규모 미달 | 종료 |
 
 ## STEP-00
 
@@ -56,3 +57,8 @@
 - 역할별 `OLLAMA_PLAN_MODEL` pin, 공식 벤치 `:latest` 거부, progress 트레이스 마스킹
 - A–E 비교 결과 hybrid 미승격. 기본값 `shadow` 유지. 태그 `sqp-v11-ready` 미생성
 - 문서: migration / rollback / rollout report, README·작동방식 기본값 shadow
+
+## STEP-26
+
+- verified question-Plan pair 30개, 요구 5,000 미만. holdout 학습 분리 없음. GPU(RTX 2060 SUPER)는 있음
+- 세 조건이 모두 충족되지 않으므로 QLoRA를 시작하지 않음. 상태 `NOT_ELIGIBLE`
