@@ -1,7 +1,7 @@
-# llm2sql Semantic Query Plan (0.2.2)
+# llm2sql Semantic Query Plan (0.2.3)
 
 > 대상: `JeongwooPark/llm2sql`  
-> 도입 버전: **0.2.2**  
+> 도입 버전: **0.2.2** · 현재 제품: **0.2.3**  
 > 기본값: `SEMANTIC_PLAN_MODE=hybrid` (v1.1). `shadow`는 생성만, `off`이면 0.2.1과 동일 동작.
 
 원안은 Router 미적중 이후 LLM이 물리 SQL을 직접 쓰던 구간에 **Semantic Query Plan(SQP)** 을 끼워, LLM은 canonical JSON만 만들고 SQL은 Python compiler가 확정적으로 생성하게 하는 것이다. 이 문서는 그 원안을 **0.2.2에서 실제로 넣는 MVP**로 줄인 명세다.
@@ -16,7 +16,7 @@
 
 - 기존 Router / guide / meta / clarify / profile / followup / RAG는 **그대로 둔다**
 - Router 미적중 뒤에만 SQP를 삽입한다. **복합조건**은 라우터가 일부만 먹지 않고 미적중으로 둔다
-- 기본 모드는 `off`
+- 기본 모드는 `hybrid` (v1.1 승격). `shadow`는 생성만, `off`는 0.2.1과 동일
 - building + 구/동 범위 + count/list/rank/aggregate/distribution
 - 행정 경계 `ST_Intersects`, 동 버퍼 `ST_DWithin`, Plan follow-up delta
 - 실패하면 기존 `run_rag_sql()` 로 내려간다
@@ -218,17 +218,18 @@ uv run python scripts/test_semantic_plan.py
 4. 기존 RAG 삭제
 5. 기존 Router를 SQP로 교체 (`planner_first` 없음. parity 패턴도 Router 우선)
 6. generic join graph, 산업단지 SQP, D198 coverage 확장
-7. 버전을 0.3.0으로 올리는 일 — 아키텍처 추가는 맞지만 기본 off MVP 이므로 **0.2.2**
+7. 버전을 0.3.0으로 올리는 일 — 제품 버전은 **0.2.3**. Plan 스키마는 v1.1이다
 
 ---
 
 ## 12. 다음 단계 (이후)
 
-1. `hybrid` 기본값 검토 (복합 30 스모크는 hybrid 기준 통과)
+1. ~~`hybrid` 기본값 검토~~ — FIX-4에서 승격 완료 (`sqp-v11-ready`)
 2. 기초구역·산업단지 spatial relation을 SQP catalog로
-3. Plan delta에 `remove_filter` / `change_scope`
+3. Plan delta에 `remove_filter` / `change_scope` (event log의 remove/change_scope는 구현됨. catalog 확장과 연동 검토)
 4. parity가 장기간 유지되는 패턴만 Router와 compiler 공유 검토
 5. 그때 0.3.0 검토
+6. QLoRA는 verified pair 5,000 미만이라 `NOT_ELIGIBLE`
 
 목표 4계층은 유지한다.
 

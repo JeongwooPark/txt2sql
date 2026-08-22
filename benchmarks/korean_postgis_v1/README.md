@@ -9,6 +9,7 @@ Gold is `gold Plan + result hash + clarify`. Execution success is not accuracy.
 | `test.jsonl` | official verified eval | **30 spec-seed verified cases (K01–K30)** |
 | `adversarial.jsonl` | paraphrase / trap cases | STEP-02+ |
 | `conversation.jsonl` | multi-turn | Phase 4 |
+| `linking_holdout.json` | labeled schema linking holdout (expression+place) | **17 cases, Recall@10=1.0** |
 | `candidate_compound30.jsonl` | imported smoke 30 | **draft only** |
 | `candidate_nl100.jsonl` | imported smoke 100 | **draft only** |
 

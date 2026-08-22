@@ -1,6 +1,6 @@
 # SQP v1.1 롤아웃 보고서
 
-상태: FIX-4 완료, **hybrid 승격**
+상태: FIX-4 완료, **hybrid 승격**, 제품 **0.2.3**
 
 - 최종 상태: `SEMANTIC_PLAN_MODE` 기본값 `hybrid`
 - 브랜치: `feat/sqp-v11-roadmap`

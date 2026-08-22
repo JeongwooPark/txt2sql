@@ -10,7 +10,7 @@
 | 본 보고서 범위 | **개선·신규 알고리즘** (의도 하이브리드, 규칙 SQL 라우터, 스키마 RAG, Text-to-SQL 검증 루프, 지명 사전, 세션·모호성, 단위 정규화, 지도 발행) |
 | 선행 보고서 | `llm2_geodb/docs/RND_대화형GIS해석_알고리즘_연구결과보고서.md` |
 | 구현 스택 | Ollama(로컬 LLM·임베딩) · PostgreSQL/PostGIS · FastAPI/CLI · GeoServer(선택) · sqlglot |
-| 현재 제품 | **llm2sql 0.2.2**. 본문은 0.1.4 알고리즘을 보존한다. 복합조건·SQP는 [§9.4](#94-semantic-query-plan-022-추가)와 부록 C를 본다 |
+| 현재 제품 | **llm2sql 0.2.3** (SQP v1.1, 기본 `hybrid`). 본문은 0.1.4 알고리즘을 보존한다. 복합조건·SQP는 [§9.4](#94-semantic-query-plan-022-추가)와 부록 C를 본다 |
 
 > **문서 성격**: 이 보고서는 고도화 연구 당시(v0.1.4)의 알고리즘을 고정한 기록이다. 제품 동작·설정·복합질의는 `README.md`, `docs/작동방식_및_알고리즘.md`, `docs/Semantic_Query_Plan_구현.md`가 우선한다.
 
@@ -255,7 +255,7 @@ Algorithm AskInner(u, ι̂, S):
   routed ← match.deferred or TryRoute(u)
   if routed ≠ ∅: return ExecuteRouted(routed)
 
-  # 0.2.2: 복합·미적중 → SQP (off면 생략)
+  # 0.2.2+: 복합·미적중 → SQP (기본 hybrid, off면 생략)
   if SEMANTIC_PLAN_MODE ≠ off:
     sqp ← RunSemanticPlan(u, S)
     if sqp.ok: return sqp
@@ -431,7 +431,7 @@ Algorithm TryRoute(u):
 
 ### 9.4 Semantic Query Plan (0.2.2 추가)
 
-0.1.4 시점의 잔여 질의는 바로 RAG였다. 0.2.2는 라우터 `∅` 뒤에 **canonical Plan** 계층을 둔다. LLM/휴리스틱은 `height_m`, `usage` 같은 논리명만 JSON으로 내고, Python compiler가 카탈로그 allowlist로 SELECT를 만든다. 물리 SQL·물리 컬럼명은 Plan에 넣지 않는다.
+0.1.4 시점의 잔여 질의는 바로 RAG였다. 0.2.2는 라우터 `∅` 뒤에 **canonical Plan** 계층을 둔다. v1.1에서 기본 모드는 `hybrid`다. LLM/휴리스틱은 `height_m`, `usage` 같은 논리명만 JSON으로 내고, Python compiler가 카탈로그 allowlist로 SELECT를 만든다. 물리 SQL·물리 컬럼명은 Plan에 넣지 않는다.
 
 ```
 Algorithm RunSemanticPlan(u, S):
@@ -445,7 +445,7 @@ Algorithm RunSemanticPlan(u, S):
   return FormatSemanticAnswer(P, R)
 ```
 
-모드: `off`(기본, 0.1.4/0.2.1과 동일) / `shadow` / `hybrid`.  
+모드: `off` / `shadow` / `hybrid`(기본, v1.1 승격). `off`는 0.1.4/0.2.1과 같다.  
 후속은 `ApplyPlanDelta`: 직전 `last_semantic_plan` 또는 D010 SQL에서 heuristic Plan을 복원한 뒤 필터·select를 합친다. COUNT에 컬럼 요청이 오면 `list`로 전환한다.  
 검증: `scripts/test_semantic_plan.py`, hybrid 복합 30문항 `scripts/smoke_compound30.py`.  
 다음 단계로 남긴 것: 산업단지 전용 SQP, generic join graph, `planner_first`.
@@ -784,7 +784,7 @@ SQL 생성 시스템 프롬프트의 하드 제약: 한글 테이블명 금지, 
 3. D010 ⋈ BND `ST_Intersects`, `ADM_NM='구서1동' AND ADM_CD LIKE '21%'`
 4. 속성 `A4 LIKE '%구서1동%'` 오탐을 피함
 
-### S4 — 열린 질의 (RAG)와 복합질의 (SQP, 0.2.2)
+### S4 — 열린 질의 (RAG)와 복합질의 (SQP, 0.2.2 → v1.1)
 
 0.1.4:
 
@@ -793,7 +793,7 @@ SQL 생성 시스템 프롬프트의 하드 제약: 한글 테이블명 금지, 
 3. A3 필터 진단 → A4로 재생성 → EXPLAIN 통과 → 실행
 4. 빈 결과면 D198-only 힌트로 재시도
 
-0.2.2 `hybrid`:
+0.2.2 `hybrid` (v1.1부터 기본값):
 
 1. 「해운대구 아파트 중 높이 70m 이상이고 연면적 10000㎡ 이상」
 2. `ShouldDeferCompoundToPlan` → `∅`
@@ -907,7 +907,7 @@ SQL 생성 시스템 프롬프트의 하드 제약: 한글 테이블명 금지, 
 3. **GazetteerScan**: 트라이 최장일치로 법정/행정을 가르고 범위 SQL을 선택
 4. **TryRoute / SpatialTemplates**: 고빈도 패턴의 확정 SQL, LLM 우회. 복합조건은 `∅`로 SQP에 위임
 5. **MatchRouteOptimized**: `try_route` 1회와 deferred 재사용
-6. **RunSemanticPlan (0.2.2)**: canonical Plan → compiler SELECT. `hybrid` 실패 시 RAG
+6. **RunSemanticPlan (0.2.2→v1.1)**: canonical Plan → compiler SELECT. 기본 `hybrid`, 실패 시 RAG
 7. **RetrieveSchema + RunRagSql**: L5 해소 — RAG, few-shot, rewrite, 진단, sqlglot, EXPLAIN, 재시도
 8. **SessionContext**: 번호 선택, focus 후속, Plan delta, 재집계, 차트 pending
 9. **PlanMapSql / Publish**: 채팅 SELECT를 피처 또는 행정 경계 레이어로 비파괴 발행
@@ -962,7 +962,8 @@ SQL 생성 시스템 프롬프트의 하드 제약: 한글 테이블명 금지, 
 | 0.1.3 | RAG 루프 공용화 (`rag_sql`), 파이프라인 단순화 |
 | 0.1.4 | 지명 트라이, 공간·임계·행정동 구성, 안내 선행, 템플릿 답변, 지도 발행 |
 | 0.2 / 0.2.1 | 지도 발행 제품화, 데이터 관리, 분석 레이어 재사용. NL→SQL 골격은 0.1.4와 동일 |
-| **0.2.2** (현재 제품) | Semantic Query Plan. 복합조건 라우터 위임. Plan follow-up. SQL 오류 rollback. 기본 `SEMANTIC_PLAN_MODE=off` |
+| **0.2.2** | Semantic Query Plan MVP. 복합조건 라우터 위임. Plan follow-up. SQL 오류 rollback. 도입 시 기본 `SEMANTIC_PLAN_MODE=off` |
+| **0.2.3** (현재 제품) | SQP v1.1. 기본 `hybrid`. verified gold 30/30, linking holdout, live spatial. 태그 `sqp-v11-ready` |
 
 ### 부록 D. 용어
 
@@ -981,6 +982,6 @@ SQL 생성 시스템 프롬프트의 하드 제약: 한글 테이블명 금지, 
 
 - `llm2_geodb/docs/RND_대화형GIS해석_알고리즘_연구결과보고서.md` — 선행 대화 계층
 - `llm2sql/docs/고도화_llm2_geodb_to_llm2sql.md` — 기능 대조·모듈 매핑
-- `llm2sql/docs/작동방식_및_알고리즘.md` — 0.2.2 시나리오 설명
-- `llm2sql/docs/Semantic_Query_Plan_구현.md` — SQP MVP 명세
-- `llm2sql/README.md` — 사용·파이프라인 요약 (버전 **0.2.2**)
+- `llm2sql/docs/작동방식_및_알고리즘.md` — 0.2.3 시나리오 설명
+- `llm2sql/docs/Semantic_Query_Plan_구현.md` — SQP 명세 (기본 `hybrid`)
+- `llm2sql/README.md` — 사용·파이프라인 요약 (버전 **0.2.3**, SQP v1.1)

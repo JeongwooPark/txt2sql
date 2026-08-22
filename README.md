@@ -1,13 +1,13 @@
 # llm2sql
 
-**버전 0.2.2**
+**버전 0.2.3** (SQP Plan v1.1, 기본 `SEMANTIC_PLAN_MODE=hybrid`)
 
 부산 GIS(건물·행정구역·기초구역·산업단지) 데이터를 **자연어**로 조회하는 Python 도구입니다.  
 로컬 **Ollama**로 SQL을 생성·보정하고, **PostgreSQL + PostGIS**에서 실행한 뒤 **한국어**로 답변합니다.  
 CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니다.
 
 ```text
-질문 → 안내/메타/모호성/특징·비교/순위비교/라우터/(선택) SQP/RAG+LLM
+질문 → 안내/메타/모호성/특징·비교/순위비교/라우터/SQP(기본 hybrid)/RAG+LLM
      → SQL 실행 → 한국어 답변 (스트림 가능)
          ├─ 세션: 후속 질문, 모호 동 번호 선택(1·2번)
          └─ 지도: geometry 발행 → GeoServer WMS/WFS → 출력 레이어
@@ -17,12 +17,13 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 
 | 문서 | 내용 |
 |------|------|
-| `docs/작동방식_및_알고리즘.md` | 0.2.2 파이프라인 시나리오 |
-| `docs/Semantic_Query_Plan_구현.md` | SQP MVP 명세 |
-| `docs/implementation/sqp_v11_migration.md` | v1.1 shadow 적용 |
+| `docs/작동방식_및_알고리즘.md` | 0.2.3 파이프라인 시나리오 (SQP v1.1, 기본 `hybrid`) |
+| `docs/Semantic_Query_Plan_구현.md` | SQP 명세. 기본 `hybrid` |
+| `docs/implementation/sqp_v11_migration.md` | v1.1 hybrid 적용 |
 | `docs/implementation/sqp_v11_rollback.md` | `off`로 되돌리기 |
+| `docs/implementation/sqp_v11_rollout_report.md` | FIX-4 승격 결과 |
 | `docs/고도화_llm2_geodb_to_llm2sql.md` | llm2_geodb 대비 고도화 |
-| `docs/RND_자연어GIS질의_알고리즘_연구결과보고서.md` | 0.1.4 알고리즘 기록 + 0.2.2 SQP 보론 |
+| `docs/RND_자연어GIS질의_알고리즘_연구결과보고서.md` | 0.1.4 알고리즘 기록 + SQP 보론 |
 
 ---
 
@@ -43,14 +44,15 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 13. [벤치마크·스크립트](#벤치마크스크립트)
 14. [프로젝트 구조](#프로젝트-구조)
 15. [문제 해결](#문제-해결)
-16. [0.2.2 변경 요약](#022-변경-요약)
-17. [0.2.1 변경 요약](#021-변경-요약)
-18. [0.2 변경 요약](#02-변경-요약)
-19. [0.1.4 변경 요약](#014-변경-요약)
-20. [0.1.3 변경 요약](#013-변경-요약)
-21. [0.1.2 변경 요약](#012-변경-요약)
-22. [0.1.1 변경 요약](#011-변경-요약)
-23. [0.1.0 변경 요약](#010-변경-요약)
+16. [0.2.3 변경 요약](#023-변경-요약)
+17. [0.2.2 변경 요약](#022-변경-요약)
+18. [0.2.1 변경 요약](#021-변경-요약)
+19. [0.2 변경 요약](#02-변경-요약)
+20. [0.1.4 변경 요약](#014-변경-요약)
+21. [0.1.3 변경 요약](#013-변경-요약)
+22. [0.1.2 변경 요약](#012-변경-요약)
+23. [0.1.1 변경 요약](#011-변경-요약)
+24. [0.1.0 변경 요약](#010-변경-요약)
 
 ---
 
@@ -455,7 +457,7 @@ GeoServer가 꺼져 있거나 발행에 실패해도 **채팅 답변은 그대�
 6. meta_qa
 7. clarify_qa
 8. intent_router     단건 패턴. 복합조건은 미적중
-9. semantic_plan     라우터 미적중 시 (기본 off). hybrid면 Plan→SQL, 실패 시 RAG
+9. semantic_plan     라우터 미적중 시 (기본 hybrid). Plan→SQL, 실패·clarify·품질 미달이면 RAG
 10. RAG + LLM        스키마 검색 → SQL → 검증/재생성
 11. answer           실행 결과 → 한국어 (토큰 스트림 가능)
 12. attach_map       적격 SQL → 임시 테이블 + GeoServer (실패 무시)
@@ -580,19 +582,24 @@ llm2sql/
 
 ---
 
+## 0.2.3 변경 요약
+
+- **SQP v1.1 승격**: 휴리스틱 OR/NOT/범위/필드 비교, contract verifier, labeled linking holdout, PostGIS live spatial 6종
+- **기본 hybrid**: `SEMANTIC_PLAN_MODE` 기본값은 `hybrid`. 라우터 미적중이면 SQP SQL을 실행하고, 실패·clarify·품질 미달이면 RAG로 내려간다. `shadow`는 `.env`로 명시한다
+- **게이트**: verified gold 30/30, holdout Recall@10·Value Recall@5 = 1.0 (n=17), live spatial 6/6. 태그 `sqp-v11-ready`
+- **롤백**: `SEMANTIC_PLAN_MODE=off`. 절차는 `docs/implementation/sqp_v11_rollback.md`
+- **QLoRA**: 학습 쌍 부족으로 `NOT_ELIGIBLE`
+
 ## 0.2.2 변경 요약
 
-- **Semantic Query Plan (SQP)**: 규칙 라우터 미적중 질의에 canonical JSON Plan → deterministic SELECT. LLM이 물리 SQL을 직접 쓰지 않음
-- **기본 hybrid**: `SEMANTIC_PLAN_MODE` 기본값은 `hybrid`. 라우터 미적중이면 SQP SQL을 실행하고, 실패·clarify·품질 미달이면 RAG로 내려간다. `shadow`는 `.env`로 명시한다 (`docs/implementation/sqp_v11_rollout_report.md`)
-- **의미 게이트**: 부분 Plan 자동 실행 금지, Plan-SQL 동등성, 공간 관계는 `spatial_policy.py`가 함수를 고른다
-- **후속**: BasePlan + event log (`undo_last` / `reset_to_base`). 기존 Plan delta API는 유지
-- **롤백**: `SEMANTIC_PLAN_MODE=off`. 절차는 `docs/implementation/sqp_v11_rollback.md`
+- **Semantic Query Plan (SQP) MVP**: 규칙 라우터 미적중 질의에 canonical JSON Plan → deterministic SELECT. LLM이 물리 SQL을 직접 쓰지 않음
+- **도입 시 기본 off**: `shadow`/`hybrid`는 플래그. 0.2.3에서 hybrid로 승격
 - **복합질의 위임**: 높이+연면적, 공간+수치, 구조+순위처럼 조건이 겹치면 라우터가 일부만 먹지 않고 SQP로 넘김. 단일 건수·순위는 라우터 우선
 - **공간**: 행정동 `ST_Intersects`, 동 경계 `ST_DWithin`. 역·POI는 확인질문
-- **후속**: Plan delta(`add_filter` / `change_limit` / `add_select`). 직전 D010 결과에도 적용. 「이상만」은 차트 필터가 아님
+- **후속**: Plan delta(`add_filter` / `change_limit` / `add_select`). 직전 D010 결과에도 적용
 - **안전**: catalog allowlist, 리터럴 이스케이프, SQL 오류 시 트랜잭션 롤백, 미지원 필드는 RAG
-- **테스트**: `scripts/test_semantic_plan.py`, `tests/semantic_plan/`, `scripts/smoke_compound30.py` (hybrid 30/30)
-- **문서**: `docs/Semantic_Query_Plan_구현.md`, `docs/작동방식_및_알고리즘.md`, `docs/고도화_llm2_geodb_to_llm2sql.md`, `docs/RND_자연어GIS질의_알고리즘_연구결과보고서.md`
+- **테스트**: `scripts/test_semantic_plan.py`, `tests/semantic_plan/`, `scripts/smoke_compound30.py`
+- **문서**: `docs/Semantic_Query_Plan_구현.md`, `docs/작동방식_및_알고리즘.md`
 
 ## 0.2.1 변경 요약
 

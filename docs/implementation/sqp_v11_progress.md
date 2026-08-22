@@ -59,8 +59,9 @@
 ## STEP-23~25
 
 - 역할별 `OLLAMA_PLAN_MODEL` pin, 공식 벤치 `:latest` 거부, progress 트레이스 마스킹
-- A–E 비교 결과 hybrid 미승격. 기본값 `shadow` 유지. 태그 `sqp-v11-ready` 미생성
-- 문서: migration / rollback / rollout report, README·작동방식 기본값 shadow
+- (당시) A–E 비교 결과 hybrid 미승격. 기본값 `shadow` 유지. 태그 `sqp-v11-ready` 미생성
+- (당시) 문서: migration / rollback / rollout report, README·작동방식 기본값 shadow
+- 이후 FIX-4에서 전 지표 통과 → 기본값 `hybrid`, 태그 `sqp-v11-ready`
 
 ## STEP-26
 
@@ -74,3 +75,4 @@
 - C heuristic 30/30, D holdout Recall 1.0 n=17, E Phase 3 unit + live spatial 6/6
 - Router 회귀 0, 부분 Plan 자동 실행 0 (불완전 OR는 clarify), unsafe write 차단 유지
 - 전 지표 통과 → `SEMANTIC_PLAN_MODE` 기본값 `hybrid`, 태그 `sqp-v11-ready`
+- 제품 버전 **0.2.3**
