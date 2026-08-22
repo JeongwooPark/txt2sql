@@ -1,10 +1,12 @@
 {
   "spatial_relation_policies": {
-    "within": "ST_CoveredBy",
     "covered_by": "ST_CoveredBy",
+    "within": "ST_CoveredBy",
     "intersects": "ST_Intersects",
     "touches": "ST_Touches",
     "buffer": "ST_DWithin",
+    "within_distance": "ST_DWithin",
+    "outside_distance": "ST_DWithin",
     "nearest": "ST_Distance",
     "overlap_ratio": "ST_Intersection"
   },
@@ -12,8 +14,70 @@
   "canonical_join_edges_only": true,
   "poi_ambiguous_clarifies": true,
   "four_turn_event_log": true,
-  "unit_tests_passed": 87,
-  "live_spatial_accuracy": "not_measured",
+  "unit_tests_passed": 92,
+  "live_spatial_accuracy": {
+    "n": 6,
+    "passed": 6,
+    "accuracy": 1.0,
+    "cases": [
+      {
+        "id": "within",
+        "relation": "within",
+        "expected_fn": "ST_CoveredBy",
+        "function_ok": true,
+        "live": "ok",
+        "row_count": null,
+        "detail": "ST_CoveredBy; explain_only"
+      },
+      {
+        "id": "intersects",
+        "relation": "intersects",
+        "expected_fn": "ST_Intersects",
+        "function_ok": true,
+        "live": "ok",
+        "row_count": null,
+        "detail": "ST_Intersects; explain_only"
+      },
+      {
+        "id": "touches",
+        "relation": "touches",
+        "expected_fn": "ST_Touches",
+        "function_ok": true,
+        "live": "ok",
+        "row_count": 0,
+        "detail": "ST_Touches"
+      },
+      {
+        "id": "buffer",
+        "relation": "buffer",
+        "expected_fn": "ST_DWithin",
+        "function_ok": true,
+        "live": "ok",
+        "row_count": 1,
+        "detail": "ST_DWithin"
+      },
+      {
+        "id": "nearest",
+        "relation": "nearest",
+        "expected_fn": "ST_Distance",
+        "function_ok": true,
+        "live": "ok",
+        "row_count": 1,
+        "detail": "ST_Distance"
+      },
+      {
+        "id": "overlap_ratio",
+        "relation": "overlap_ratio",
+        "expected_fn": "ST_Intersection",
+        "function_ok": true,
+        "live": "ok",
+        "row_count": null,
+        "detail": "ST_Intersection; explain_only"
+      }
+    ]
+  },
+  "env_blocked": false,
+  "block_reason": null,
   "gate_passed": true,
-  "note": "Unit spatial policy and 4-turn event log passed. Live Spatial Relation Accuracy on PostGIS was not measured in this step; hybrid remains blocked by Phase 1 gold."
+  "note": "Live EXPLAIN/LIMIT 1 on six spatial policies. Zero rows are valid; predicates were not relaxed."
 }
