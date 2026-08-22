@@ -1011,6 +1011,8 @@ def _try_semantic_result(
         shadow_message,
         semantic_ok=semantic.get("ok"),
         fallback_reason=semantic.get("fallback_reason"),
+        plan_version=(semantic.get("semantic_plan") or {}).get("version"),
+        needs_clarification=semantic.get("needs_clarification"),
     )
     return None
 

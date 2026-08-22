@@ -1,0 +1,27 @@
+{
+  "step": "09",
+  "phase1_gate": "NOT_PASSED",
+  "reason": "verified gold exact match is 2/30; OR/NOT/range/field-compare still need later heuristic-v11 binding",
+  "heuristic_eval": {
+    "n": 30,
+    "passed": 2,
+    "failed": 28,
+    "plan_exact_match": 0.0667,
+    "error_counts": {
+      "P05": 3,
+      "P01": 5,
+      "P03": 17,
+      "P04": 8,
+      "P02": 9,
+      "P06": 2,
+      "A02": 1,
+      "A01": 1
+    }
+  },
+  "unit_tests": {"passed": 75, "failed": 0, "skipped": 0},
+  "router_regression": 0,
+  "unsafe_write_block": "unit_covered",
+  "partial_plan_auto_execute": 0,
+  "semantic_plan_mode_default": "shadow",
+  "tag": "deferred_until_gold_gate"
+}

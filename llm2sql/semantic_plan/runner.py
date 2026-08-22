@@ -57,12 +57,20 @@ def run_semantic_plan(
         "Semantic Query Plan 생성 완료",
         query_kind=generated.query_kind,
         entity=generated.entity,
+        plan_version=generated.version,
     )
     normalized = normalize_semantic_plan(generated, question, conn=conn)
     checked = validate_semantic_plan(normalized, question, conn=conn)
     emit(
         "plan_validate",
         f"Plan 검증 완료 status={checked.status} score={checked.score:.2f}",
+        plan_version=checked.plan.version,
+        slot_confidence=(
+            checked.plan.slot_confidence.overall
+            if checked.plan.slot_confidence
+            else None
+        ),
+        verification_errors=list(checked.errors),
     )
 
     if checked.status == "clarify":
