@@ -22,6 +22,8 @@ class SessionContext:
     table: str | None = None
     pending_chart: dict[str, Any] | None = None
     last_chart: dict[str, Any] | None = None
+    last_map_scope: str | None = None
+    last_map_payload: dict[str, Any] | None = None
 
     def update_from_result(
         self,

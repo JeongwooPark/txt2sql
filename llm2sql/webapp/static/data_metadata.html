@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>llm2sql · 메타데이터 업데이트</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/app.css?v=17" />
+  </head>
+  <body class="site" data-ui="data-meta">
+    <header class="site-head">
+      <a class="site-brand" href="/map">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <strong>llm2sql</strong>
+        <span class="sub">부산 GIS</span>
+      </a>
+      <nav class="site-nav" aria-label="메인 메뉴">
+        <a class="nav-link" href="/map" data-nav="map">지도</a>
+        <a class="nav-link" href="/chat" data-nav="chat">채팅</a>
+        <div class="nav-drop" data-nav="data">
+          <button type="button" class="nav-drop-btn" aria-expanded="false" aria-haspopup="true">데이터 관리</button>
+          <div class="nav-drop-menu" role="menu">
+            <a href="/data" role="menuitem">개요</a>
+            <a href="/data/upload" role="menuitem">공간데이터 업로드</a>
+            <a href="/data/metadata" role="menuitem" class="active">메타데이터 업데이트</a>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <div class="site-body">
+      <div class="data-split">
+        <aside class="data-side">
+          <h2>등록된 레이어</h2>
+          <p class="data-lead">왼쪽에서 테이블을 고르면 한글명·설명을 수정합니다.</p>
+          <div id="dataset-list">
+            <p class="layer-empty">불러오는 중…</p>
+          </div>
+        </aside>
+        <main class="data-main">
+          <h1>메타데이터 업데이트</h1>
+          <p class="data-lead">
+            table_metadata / column_metadata를 고쳐 챗봇 안내와 지도 레이어
+            표시명에 반영합니다. llm2_geodb 메타데이터 화면과 같은 역할입니다.
+          </p>
+          <form class="meta-form" aria-disabled="true">
+            <label>
+              테이블명
+              <input type="text" disabled placeholder="레이어를 선택하세요" />
+            </label>
+            <label>
+              한글 표시명
+              <input type="text" disabled placeholder="예: 용도별건물공간정보" />
+            </label>
+            <label>
+              설명
+              <textarea disabled placeholder="데이터셋 설명"></textarea>
+            </label>
+            <button type="button" class="pane-btn" disabled>저장 (향후 제공)</button>
+          </form>
+          <div class="coming-note">
+            이번 버전은 화면 골격만 제공합니다. 저장·컬럼 편집 API는 다음
+            단계에서 연결합니다.
+          </div>
+        </main>
+      </div>
+    </div>
+    <footer class="site-foot">
+      <span>llm2sql 1.4.0</span>
+      <span>PostgreSQL/PostGIS · GeoServer · OpenLayers · Ollama</span>
+    </footer>
+    <script src="/static/js/site.js?v=1"></script>
+    <script src="/static/js/data.js?v=1"></script>
+  </body>
+</html>

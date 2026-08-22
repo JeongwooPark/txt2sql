@@ -1,5 +1,63 @@
 /** WMS GetFeatureInfo · WFS hit → 속성 모달. */
 
+const SKIP_KEYS = new Set([
+  "geometry",
+  "boundedby",
+  "bbox",
+  "the_geom",
+  "geom",
+  "shape",
+  "wkt",
+  "fid",
+  "gml_id",
+  "id",
+]);
+
+function flattenProps(props) {
+  const out = {};
+  for (const [key, value] of Object.entries(props || {})) {
+    if (value && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) {
+      if ("coordinates" in value || "type" in value) continue;
+      Object.assign(out, flattenProps(value));
+      continue;
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+function lookupLabel(fields, key) {
+  if (!key) return key;
+  if (fields[key]) return fields[key];
+  const upper = key.toUpperCase();
+  if (fields[upper]) return fields[upper];
+  const stripped = key.split(/[.:]/).pop() || key;
+  if (fields[stripped]) return fields[stripped];
+  if (fields[stripped.toUpperCase()]) return fields[stripped.toUpperCase()];
+  const want = stripped.toLowerCase();
+  for (const [name, label] of Object.entries(fields || {})) {
+    if (name.toLowerCase() === want) return label;
+  }
+  return key;
+}
+
+async function labelsForProps(layer, props) {
+  if (!layer) return {};
+  const columns = Object.keys(props || {});
+  try {
+    const res = await fetch("/api/map/labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ layer, columns }),
+    });
+    const data = await res.json();
+    if (data.ok && data.fields) return data.fields;
+  } catch {
+    /* keep empty */
+  }
+  return {};
+}
+
 export function bindIdentify(map, getQueryable, showProps) {
   const hint = document.getElementById("click-info");
   map.on("singleclick", async (evt) => {
@@ -24,7 +82,9 @@ export function bindIdentify(map, getQueryable, showProps) {
           const data = await res.json();
           const feat = (data.features || [])[0];
           if (feat && feat.properties) {
-            showProps(entry.title, feat.properties);
+            const props = flattenProps(feat.properties);
+            const fields = await labelsForProps(entry.layer, props);
+            showProps(entry.title, props, fields, { layer: entry.layer });
             if (hint) hint.textContent = "맵을 클릭하여 속성을 확인하세요";
             return;
           }
@@ -35,7 +95,11 @@ export function bindIdentify(map, getQueryable, showProps) {
       if (source && source.getFeaturesAtCoordinate) {
         const hits = source.getFeaturesAtCoordinate(evt.coordinate);
         if (hits && hits[0]) {
-          showProps(entry.title, hits[0].getProperties());
+          const raw = { ...hits[0].getProperties() };
+          delete raw.geometry;
+          const props = flattenProps(raw);
+          const fields = await labelsForProps(entry.layer, props);
+          showProps(entry.title, props, fields, { layer: entry.layer });
           if (hint) hint.textContent = "맵을 클릭하여 속성을 확인하세요";
           return;
         }
@@ -43,19 +107,24 @@ export function bindIdentify(map, getQueryable, showProps) {
     }
     const pixelHits = map.getFeaturesAtPixel(evt.pixel) || [];
     if (pixelHits[0]) {
-      const props = { ...pixelHits[0].getProperties() };
-      delete props.geometry;
-      showProps("피처", props);
+      const raw = { ...pixelHits[0].getProperties() };
+      delete raw.geometry;
+      const props = flattenProps(raw);
+      const top = (getQueryable() || [])[0];
+      const fields = await labelsForProps(top?.layer, props);
+      showProps(top?.title || "피처", props, fields, { layer: top?.layer });
     }
     if (hint) hint.textContent = "맵을 클릭하여 속성을 확인하세요";
   });
 }
 
-export function renderProperties(target, props) {
-  const skip = new Set(["geometry", "boundedBy"]);
-  const rows = Object.entries(props || {}).filter(
-    ([k, v]) => !skip.has(k) && v != null && typeof v !== "object"
-  );
+export function renderProperties(target, props, fields = {}) {
+  const rows = Object.entries(props || {}).filter(([k, v]) => {
+    const key = String(k);
+    if (SKIP_KEYS.has(key.toLowerCase())) return false;
+    if (key.toLowerCase().includes("geom")) return false;
+    return v != null && typeof v !== "object";
+  });
   if (!rows.length) {
     target.innerHTML = "<p class='layer-empty'>표시할 속성이 없습니다.</p>";
     return;
@@ -65,7 +134,8 @@ export function renderProperties(target, props) {
   for (const [key, value] of rows) {
     const tr = document.createElement("tr");
     const th = document.createElement("th");
-    th.textContent = key;
+    th.textContent = lookupLabel(fields, key);
+    th.title = key;
     const td = document.createElement("td");
     td.textContent = String(value);
     tr.append(th, td);
@@ -73,4 +143,37 @@ export function renderProperties(target, props) {
   }
   target.innerHTML = "";
   target.appendChild(table);
+}
+
+const explainSeq = new WeakMap();
+
+export function attachExplain(el, payload) {
+  if (!el) return;
+  const token = (explainSeq.get(el) || 0) + 1;
+  explainSeq.set(el, token);
+  el.hidden = false;
+  el.className = "attr-explain loading";
+  el.textContent = "설명을 작성하는 중…";
+  fetch("/api/map/explain", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      if (explainSeq.get(el) !== token) return;
+      const text = (data && data.explanation) || "";
+      el.className = "attr-explain";
+      if (!text) {
+        el.hidden = true;
+        el.textContent = "";
+        return;
+      }
+      el.textContent = text;
+    })
+    .catch(() => {
+      if (explainSeq.get(el) !== token) return;
+      el.className = "attr-explain error";
+      el.textContent = "설명을 불러오지 못했습니다. 아래 표에서 값을 확인할 수 있습니다.";
+    });
 }

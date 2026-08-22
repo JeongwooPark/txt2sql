@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>llm2sql · 데이터 관리</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/app.css?v=17" />
+  </head>
+  <body class="site" data-ui="data">
+    <header class="site-head">
+      <a class="site-brand" href="/map">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <strong>llm2sql</strong>
+        <span class="sub">부산 GIS</span>
+      </a>
+      <nav class="site-nav" aria-label="메인 메뉴">
+        <a class="nav-link" href="/map" data-nav="map">지도</a>
+        <a class="nav-link" href="/chat" data-nav="chat">채팅</a>
+        <div class="nav-drop" data-nav="data">
+          <button type="button" class="nav-drop-btn" aria-expanded="false" aria-haspopup="true">데이터 관리</button>
+          <div class="nav-drop-menu" role="menu">
+            <a href="/data" role="menuitem" class="active">개요</a>
+            <a href="/data/upload" role="menuitem">공간데이터 업로드</a>
+            <a href="/data/metadata" role="menuitem">메타데이터 업데이트</a>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <div class="site-body">
+      <div class="data-page">
+        <h1>데이터 관리</h1>
+        <p class="data-lead">
+          KorDB에 등록된 공간데이터를 확인하고, 이후 버전에서 기존 레이어를
+          갱신하거나 신규 데이터를 추가합니다. 예: 남구 용도별건물공간정보
+          (AL_D198) 추가 등록.
+        </p>
+        <div class="data-cards">
+          <a class="data-card" href="/data/upload">
+            <h2>공간데이터 업로드</h2>
+            <p>
+              Shapefile ZIP을 PostgreSQL/PostGIS에 적재하고 GeoServer 레이어로
+              발행합니다. 업로드 API는 다음 단계에서 연결합니다.
+            </p>
+          </a>
+          <a class="data-card" href="/data/metadata">
+            <h2>메타데이터 업데이트</h2>
+            <p>
+              테이블·컬럼 한글명과 설명을 수정해 챗봇·지도 표시명에 반영합니다.
+              저장 API는 다음 단계에서 연결합니다.
+            </p>
+          </a>
+        </div>
+      </div>
+    </div>
+    <footer class="site-foot">
+      <span>llm2sql 1.4.0</span>
+      <span>PostgreSQL/PostGIS · GeoServer · OpenLayers · Ollama</span>
+    </footer>
+    <script src="/static/js/site.js?v=1"></script>
+  </body>
+</html>

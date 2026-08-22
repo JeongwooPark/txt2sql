@@ -18,13 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from llm2sql import Llm2SqlEngine, SessionContext
-from llm2sql.geoserver import GeoServerClient
-from llm2sql.map_publish import (
-    delete_published_layer,
-    fetch_layer_attributes,
-    is_safe_layer_name,
-    start_cleanup_scheduler,
-)
+from llm2sql.map import create_map_router, start_cleanup_scheduler
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 _SENTINEL = object()
@@ -33,12 +27,7 @@ _SENTINEL = object()
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1)
     session_id: str | None = None
-
-
-class LayerAttributesRequest(BaseModel):
-    layer: str = Field(..., min_length=1)
-    limit: int = Field(50, ge=1, le=500)
-    offset: int = Field(0, ge=0)
+    include_map: bool = False
 
 
 def create_app() -> FastAPI:
@@ -60,7 +49,7 @@ def create_app() -> FastAPI:
             if engine is not None:
                 engine.close()
 
-    app = FastAPI(title="llm2sql Chat", version="0.1.4", lifespan=lifespan)
+    app = FastAPI(title="llm2sql Chat", version="1.4.0", lifespan=lifespan)
 
     def get_engine() -> Llm2SqlEngine:
         engine = engine_holder.get("engine")
@@ -73,6 +62,26 @@ def create_app() -> FastAPI:
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
+
+    @app.get("/chat")
+    def chat_ui() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html")
+
+    @app.get("/map")
+    def map_ui() -> FileResponse:
+        return FileResponse(STATIC_DIR / "map.html")
+
+    @app.get("/data")
+    def data_home() -> FileResponse:
+        return FileResponse(STATIC_DIR / "data.html")
+
+    @app.get("/data/upload")
+    def data_upload() -> FileResponse:
+        return FileResponse(STATIC_DIR / "data_upload.html")
+
+    @app.get("/data/metadata")
+    def data_metadata() -> FileResponse:
+        return FileResponse(STATIC_DIR / "data_metadata.html")
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
@@ -120,6 +129,7 @@ def create_app() -> FastAPI:
                         session_id=session_id,
                         on_progress=on_progress,
                         on_token=on_token,
+                        include_map=body.include_map,
                     )
                 payload = result.to_dict()
                 rows = payload.get("rows") or []
@@ -168,64 +178,12 @@ def create_app() -> FastAPI:
             },
         )
 
-    @app.get("/api/map/status")
-    def map_status() -> dict[str, Any]:
-        settings = get_engine().settings
-        if not settings.geoserver_url:
-            return {
-                "enabled": False,
-                "online": False,
-                "message": "GeoServer가 설정되지 않았습니다. 채팅만 사용할 수 있습니다.",
-            }
-        client = GeoServerClient(settings)
-        online = client.check()
-        return {
-            "enabled": True,
-            "online": online,
-            "workspace": client.workspace,
-            "wms_url": client.wms_url(),
-            "wfs_url": client.wfs_url(),
-            "message": None
-            if online
-            else "GeoServer에 연결할 수 없습니다. 채팅은 유지됩니다.",
-        }
-
-    @app.get("/api/map/layers")
-    def map_layers() -> dict[str, Any]:
-        settings = get_engine().settings
-        client = GeoServerClient(settings)
-        if not client.enabled or not client.check():
-            return {"layers": [], "online": False}
-        return {"layers": client.catalog_layers(), "online": True}
-
-    @app.post("/api/map/attributes")
-    def map_attributes(body: LayerAttributesRequest) -> dict[str, Any]:
-        if not is_safe_layer_name(body.layer):
-            raise HTTPException(status_code=400, detail="허용되지 않은 레이어입니다.")
-        try:
-            data = fetch_layer_attributes(
-                get_engine().settings,
-                body.layer,
-                limit=body.limit,
-                offset=body.offset,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-        return {"ok": True, **data}
-
-    @app.delete("/api/map/layer/{name}")
-    def map_delete_layer(name: str) -> dict[str, Any]:
-        if not is_safe_layer_name(name):
-            raise HTTPException(status_code=400, detail="허용되지 않은 레이어입니다.")
-        try:
-            delete_published_layer(get_engine().settings, name)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-        return {"ok": True}
+    app.include_router(
+        create_map_router(
+            lambda: get_engine().settings,
+            get_ollama=lambda: get_engine().ollama_client,
+        )
+    )
 
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

@@ -2,6 +2,8 @@
 
 const BUSAN = [129.0756, 35.1796];
 
+export const DEFAULT_BG = "osm";
+
 export const BG_SOURCES = {
   osm: {
     title: "OpenStreetMap",
@@ -30,7 +32,7 @@ export function createMap(target) {
   for (const [id, spec] of Object.entries(BG_SOURCES)) {
     layers[id] = new ol.layer.Tile({
       source: spec.source(),
-      visible: id === "cartoDark",
+      visible: id === DEFAULT_BG,
       zIndex: 0,
     });
   }
@@ -49,17 +51,41 @@ export function createMap(target) {
 
 export function fitLonLatExtent(map, extent) {
   if (!extent || extent.length !== 4) return;
+  const padded = padLonLatExtent(extent);
   const transformed = ol.proj.transformExtent(
-    extent,
+    padded,
     "EPSG:4326",
     "EPSG:3857"
   );
   if (transformed.some((n) => !Number.isFinite(n))) return;
   map.getView().fit(transformed, {
-    duration: 700,
-    padding: [48, 48, 48, 48],
+    duration: 800,
+    padding: [56, 56, 56, 56],
     maxZoom: 18,
+    constrainResolution: false,
   });
+}
+
+/** 단일 건물처럼 작은 bbox는 ~330m 이상으로 키운다. */
+export function padLonLatExtent(extent, minSpan = 0.003, margin = 0.15) {
+  if (!extent || extent.length !== 4) return extent;
+  let [minx, miny, maxx, maxy] = extent.map(Number);
+  if ([minx, miny, maxx, maxy].some((n) => !Number.isFinite(n))) return extent;
+  if (maxx < minx) [minx, maxx] = [maxx, minx];
+  if (maxy < miny) [miny, maxy] = [maxy, miny];
+  if (maxx - minx < minSpan) {
+    const mid = (minx + maxx) / 2;
+    minx = mid - minSpan / 2;
+    maxx = mid + minSpan / 2;
+  }
+  if (maxy - miny < minSpan) {
+    const mid = (miny + maxy) / 2;
+    miny = mid - minSpan / 2;
+    maxy = mid + minSpan / 2;
+  }
+  const padX = (maxx - minx) * margin;
+  const padY = (maxy - miny) * margin;
+  return [minx - padX, miny - padY, maxx + padX, maxy + padY];
 }
 
 export function createTileWmsLayer(info) {
@@ -75,6 +101,25 @@ export function createTileWmsLayer(info) {
       },
       serverType: "geoserver",
       transition: 0,
+    }),
+    opacity: 0.82,
+    zIndex: 80,
+  });
+}
+
+/** 분석 결과 WMS. SLD_BODY·소수 피처에 TileWMS보다 ImageWMS가 안정적이다. */
+export function createAnalysisWmsLayer(info) {
+  const qualified = `${info.workspace}:${info.layer}`;
+  return new ol.layer.Image({
+    source: new ol.source.ImageWMS({
+      url: info.wms_url,
+      params: {
+        LAYERS: qualified,
+        TRANSPARENT: true,
+        VERSION: "1.1.1",
+      },
+      ratio: 1,
+      serverType: "geoserver",
     }),
     opacity: 0.82,
     zIndex: 80,

@@ -49,11 +49,12 @@ class Settings:
     geoserver_user: str = ""
     geoserver_password: str = ""
     geoserver_workspace: str = "korDB"
-    geoserver_datastore: str = "llm2sql_map"
-    map_schema: str = "llm2sql_map"
+    geoserver_datastore: str = "KoreaDB"
+    map_schema: str = "public"
     map_max_features: int = 2000
     map_wfs_max_features: int = 5000
     map_retention_hours: int = 24
+    map_max_analysis_layers: int = 8
 
     def with_overrides(self, **kwargs: object) -> Settings:
         return replace(self, **kwargs)
@@ -146,14 +147,14 @@ class Settings:
                     data,
                     "geoserver_datastore",
                     "GEOSERVER_DATASTORE",
-                    default="llm2sql_map",
+                    default="KoreaDB",
                 )
             ).strip()
-            or "llm2sql_map",
+            or "KoreaDB",
             map_schema=str(
-                _pick(data, "map_schema", "MAP_SCHEMA", default="llm2sql_map")
+                _pick(data, "map_schema", "MAP_SCHEMA", default="public")
             ).strip()
-            or "llm2sql_map",
+            or "public",
             map_max_features=int(
                 _pick(data, "map_max_features", "MAP_MAX_FEATURES", default=2000)
             ),
@@ -171,6 +172,14 @@ class Settings:
                     "map_retention_hours",
                     "MAP_RETENTION_HOURS",
                     default=24,
+                )
+            ),
+            map_max_analysis_layers=int(
+                _pick(
+                    data,
+                    "map_max_analysis_layers",
+                    "MAP_MAX_ANALYSIS_LAYERS",
+                    default=8,
                 )
             ),
         )

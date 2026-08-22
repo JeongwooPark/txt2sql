@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import urllib.error
 import urllib.request
 from typing import Any
@@ -69,9 +70,9 @@ class GeoServerClient:
                 names.append(name)
         return names
 
-    def catalog_layers(self) -> list[dict[str, str]]:
+    def catalog_layers(self) -> list[dict[str, Any]]:
         """KorDB 카탈로그용: 임시 분석 레이어를 제외한 워크스페이스 레이어."""
-        out: list[dict[str, str]] = []
+        out: list[dict[str, Any]] = []
         for name in self.list_workspace_layers():
             short = name.split(":")[-1]
             if short.startswith(_TEMP_PREFIX):
@@ -82,9 +83,51 @@ class GeoServerClient:
                     "qualified": self.qualified_layer(short),
                     "wms_url": self.wms_url(),
                     "wfs_url": self.wfs_url(),
+                    "extent": self.layer_latlon_extent(short) or [],
                 }
             )
         return out
+
+    def layer_latlon_extent(self, layer: str) -> list[float] | None:
+        """레이어 lat/lon bbox. 줌에 쓸 EPSG:4326 [minx, miny, maxx, maxy]."""
+        short = (layer or "").split(":")[-1]
+        if not short:
+            return None
+        status, body = self._request(
+            "GET",
+            f"{self.base_url}/rest/workspaces/{self.workspace}/layers/{short}",
+            timeout=3,
+        )
+        href = ""
+        if status == 200:
+            try:
+                data = json.loads(body.decode("utf-8") or "{}")
+            except json.JSONDecodeError:
+                data = {}
+            href = str(
+                ((data.get("layer") or {}).get("resource") or {}).get("href") or ""
+            )
+        if href:
+            status, body = self._request("GET", href, timeout=3)
+            if status == 200:
+                try:
+                    parsed = parse_latlon_bbox(json.loads(body.decode("utf-8") or "{}"))
+                except json.JSONDecodeError:
+                    parsed = None
+                if parsed:
+                    return parsed
+        status, body = self._request(
+            "GET",
+            f"{self.base_url}/rest/workspaces/{self.workspace}"
+            f"/datastores/{self.datastore}/featuretypes/{short}",
+            timeout=3,
+        )
+        if status != 200:
+            return None
+        try:
+            return parse_latlon_bbox(json.loads(body.decode("utf-8") or "{}"))
+        except json.JSONDecodeError:
+            return None
 
     def ensure_workspace(self) -> bool:
         status, body = self._request(
@@ -200,6 +243,35 @@ class GeoServerClient:
             return int(exc.code), exc.read() if exc.fp else b""
         except Exception:
             return 0, b""
+
+
+def parse_latlon_bbox(payload: dict[str, Any] | None) -> list[float] | None:
+    """GeoServer featureType JSON에서 EPSG:4326 bbox를 꺼낸다."""
+    if not isinstance(payload, dict):
+        return None
+    ft = payload.get("featureType") or payload.get("coverage") or payload
+    if not isinstance(ft, dict):
+        return None
+    box = ft.get("latLonBoundingBox")
+    if not isinstance(box, dict):
+        return None
+    try:
+        ext = [
+            float(box["minx"]),
+            float(box["miny"]),
+            float(box["maxx"]),
+            float(box["maxy"]),
+        ]
+    except (KeyError, TypeError, ValueError):
+        return None
+    minx, miny, maxx, maxy = ext
+    if not all(math.isfinite(v) for v in ext):
+        return None
+    if maxx <= minx or maxy <= miny:
+        return None
+    if abs(minx) <= 1 and abs(miny) <= 1 and abs(maxx) <= 1 and abs(maxy) <= 1:
+        return None
+    return ext
 
 
 def _postgis_params(database_url: str, schema: str) -> dict[str, str] | None:

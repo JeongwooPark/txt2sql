@@ -11,6 +11,15 @@
   let busy = false;
   let stickToBottom = true;
   let scrollRaf = 0;
+  const includeMap = document.body?.dataset?.ui === "map";
+
+  function chatPayload(question) {
+    return {
+      question,
+      session_id: sessionId,
+      include_map: includeMap,
+    };
+  }
 
   function isNearBottom(threshold = 80) {
     const gap =
@@ -143,7 +152,7 @@
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, session_id: sessionId }),
+        body: JSON.stringify(chatPayload(q)),
       });
       if (!res.ok || !res.body) {
         throw new Error(`요청 실패 (${res.status})`);
@@ -740,7 +749,7 @@
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, session_id: sessionId }),
+        body: JSON.stringify(chatPayload(q)),
       });
       if (!res.ok || !res.body) return;
       const reader = res.body.getReader();
@@ -774,6 +783,18 @@
   }
 
   newChatBtn.addEventListener("click", async () => {
+    const oldSession = sessionId;
+    if (
+      document.body?.dataset?.ui === "map" &&
+      window.Llm2SqlMap &&
+      typeof window.Llm2SqlMap.clearAnalysis === "function"
+    ) {
+      try {
+        await window.Llm2SqlMap.clearAnalysis(oldSession);
+      } catch {
+        /* ignore */
+      }
+    }
     localStorage.removeItem(SESSION_KEY);
     sessionId = null;
     messagesEl.innerHTML = `

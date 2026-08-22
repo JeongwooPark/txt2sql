@@ -158,44 +158,14 @@ def _with_map(
     question: str,
     session_id: str | None,
     progress: ProgressTracker | None = None,
+    session: SessionContext | None = None,
 ) -> dict[str, Any]:
     """채팅 성공 후 지도 레이어를 붙인다. 실패해도 답변은 유지한다."""
-    if not result.get("ok"):
-        return result
-    try:
-        from llm2sql.map_publish import publish_query_layer
+    from llm2sql.map import attach_map
 
-        mapped = publish_query_layer(
-            settings,
-            question=question,
-            sql=result.get("sql"),
-            route=result.get("route"),
-            ok=bool(result.get("ok")),
-            session_id=session_id,
-        )
-        if mapped:
-            result = dict(result)
-            result["map"] = mapped
-            if progress is not None:
-                if mapped.get("available"):
-                    progress.emit(
-                        "map",
-                        f"지도 레이어 {mapped.get('layer')} ({mapped.get('feature_count', 0)}건)",
-                    )
-                else:
-                    progress.emit("map", mapped.get("error") or "지도 발행 실패")
-    except Exception as exc:
-        result = dict(result)
-        result["map"] = {
-            "available": False,
-            "error": f"{type(exc).__name__}: {exc}",
-        }
-        if progress is not None:
-            progress.emit("map", "지도 발행 중 오류 (채팅은 유지)")
-    if progress is not None:
-        result = dict(result)
-        result["steps"] = progress.steps
-    return result
+    return attach_map(
+        result, settings, question, session_id, progress, session=session
+    )
 
 
 def _qa_ok(obj: Any, **extra: Any) -> dict[str, Any]:
@@ -341,6 +311,7 @@ def ask(
     on_token: TokenCallback | None = None,
     session: SessionContext | None = None,
     session_id: str | None = None,
+    include_map: bool = True,
 ) -> dict[str, Any]:
     """일회성 질의 (호환 API). 연결을 열고 닫는다.
 
@@ -355,6 +326,7 @@ def ask(
         on_token=on_token,
         session=session,
         session_id=session_id,
+        include_map=include_map,
     )
 
 
@@ -710,6 +682,7 @@ def run_ask(
     on_token: TokenCallback | None = None,
     session: SessionContext | None = None,
     session_id: str | None = None,
+    include_map: bool = True,
 ) -> dict[str, Any]:
     """핵심 파이프라인. conn/ollama_client가 있으면 재사용."""
     progress = ProgressTracker(on_step=on_progress)
@@ -718,8 +691,10 @@ def run_ask(
     def finish(payload: dict[str, Any], q: str | None = None) -> dict[str, Any]:
         payload = dict(payload)
         payload["steps"] = progress.steps
+        if not include_map:
+            return payload
         return _with_map(
-            payload, settings, q or question, session_id, progress
+            payload, settings, q or question, session_id, progress, session
         )
 
     if session is not None:

@@ -48,6 +48,7 @@ class Llm2SqlEngine:
         session_id: str | None = None,
         on_progress: ProgressCallback | None = None,
         on_token: TokenCallback | None = None,
+        include_map: bool = True,
     ) -> AskResult:
         if self._closed:
             raise RuntimeError("엔진이 이미 close() 되었습니다.")
@@ -62,6 +63,7 @@ class Llm2SqlEngine:
             on_token=on_token,
             session=session,
             session_id=session_id,
+            include_map=include_map,
         )
         return AskResult.from_dict(result)
 
@@ -73,6 +75,11 @@ class Llm2SqlEngine:
                 self.settings.database_url,
                 row_factory=dict_row,
             )
+
+    @property
+    def ollama_client(self) -> Any:
+        self._ensure_resources()
+        return self._ollama
 
     def close(self) -> None:
         if self._conn is not None and not self._conn.closed:
