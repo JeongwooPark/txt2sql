@@ -32,6 +32,10 @@ Normalize common domain aliases:
 
 Bare "면적" without 건축면적/연면적/대지면적 is ambiguous: requires_clarification=true.
 
+Inside/within a dong ("안에", "내부") → spatial_mode=boundary.
+Distance from a dong/gu boundary ("N m 이내", "주변") → spatial_relations.within_distance.
+Station/POI coordinates are unsupported: requires_clarification=true.
+
 Do not invent fields.
 Do not invent units.
 Do not invent places.
@@ -131,6 +135,75 @@ _FEW_SHOTS = [
             "assumptions": [],
             "unsupported_reason": None,
             "model_confidence": 0.95,
+        },
+    ),
+    (
+        "연산동 안에 있는 공동주택 중 연면적 상위 10개",
+        {
+            "version": "1.0",
+            "query_kind": "rank",
+            "entity": "building",
+            "scope": {
+                "place": {"name": "연산동", "kind": "admin_dong"},
+                "spatial_mode": "boundary",
+            },
+            "filters": [
+                {"field": "usage", "operator": "eq", "value": "공동주택"}
+            ],
+            "select": ["name", "gross_floor_area_m2", "height_m"],
+            "aggregations": [],
+            "group_by": [],
+            "order_by": [
+                {
+                    "field": "gross_floor_area_m2",
+                    "direction": "desc",
+                    "nulls": "last",
+                }
+            ],
+            "limit": 10,
+            "spatial_relations": [],
+            "requires_clarification": False,
+            "ambiguities": [],
+            "assumptions": [],
+            "unsupported_reason": None,
+            "model_confidence": 0.96,
+        },
+    ),
+    (
+        "구서동 주변 500m 이내에 있는 공동주택",
+        {
+            "version": "1.0",
+            "query_kind": "list",
+            "entity": "building",
+            "scope": {
+                "place": {"name": "구서동", "kind": "legal_dong"},
+                "spatial_mode": "auto",
+            },
+            "filters": [
+                {"field": "usage", "operator": "eq", "value": "공동주택"}
+            ],
+            "select": ["name", "legal_dong", "lot_address"],
+            "aggregations": [],
+            "group_by": [],
+            "order_by": [],
+            "limit": 100,
+            "spatial_relations": [
+                {
+                    "relation": "within_distance",
+                    "target": {
+                        "entity": None,
+                        "place": {"name": "구서동", "kind": "legal_dong"},
+                        "longitude": None,
+                        "latitude": None,
+                    },
+                    "distance_m": 500,
+                }
+            ],
+            "requires_clarification": False,
+            "ambiguities": [],
+            "assumptions": [],
+            "unsupported_reason": None,
+            "model_confidence": 0.94,
         },
     ),
 ]

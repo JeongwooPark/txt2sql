@@ -55,14 +55,23 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
 
     place = plan.scope.place if plan.scope else None
     spatial_mode = plan.scope.spatial_mode if plan.scope else "auto"
-    if place and place.name.strip():
+
+    spatial_places: set[str] = set()
+    if plan.spatial_relations:
+        spatial_boundary, spatial_places = _apply_spatial_relations(
+            alias, plan, tables, joins, where
+        )
+        uses_boundary = uses_boundary or spatial_boundary
+
+    if place and place.name.strip() and place.name.strip() not in spatial_places:
         name = place.name.strip()
         want_boundary = spatial_mode == "boundary" or (
             spatial_mode == "auto" and uses_admin_boundary(name)
         )
         if want_boundary:
             uses_boundary = True
-            tables.append(ADMIN_TABLE)
+            if ADMIN_TABLE not in tables:
+                tables.append(ADMIN_TABLE)
             joins.append(
                 f"JOIN {_ident(ADMIN_TABLE, physical=True)} a "
                 f"ON ST_Intersects({alias}.geometry, a.geometry)"
@@ -77,9 +86,6 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
         clause, used_height = _filter_sql(alias, plan.entity, spec)
         where.append(clause)
         height_used = height_used or used_height
-
-    if plan.spatial_relations:
-        raise SemanticCompileError("spatial_relations are not compiled in v1")
 
     if plan.query_kind in {"rank", "list"} and any(
         item.field == "height_m" for item in plan.order_by
@@ -238,6 +244,86 @@ def _filter_sql(alias: str, entity: str, spec: FilterSpec) -> tuple[str, bool]:
             return f"{col} ILIKE {_literal(mapped, 'text')}", height_used
     expr = f"{col}::float8" if field.data_type == "number" else col
     return f"{expr} {op} {_literal(spec.value, field.data_type)}", height_used
+
+
+def _apply_spatial_relations(
+    alias: str,
+    plan: SemanticQueryPlan,
+    tables: list[str],
+    joins: list[str],
+    where: list[str],
+) -> tuple[bool, set[str]]:
+    """spatial_relations → JOIN/WHERE. 물리 함수명은 compiler만 고른다."""
+    uses_boundary = False
+    used_places: set[str] = set()
+    admin_alias_used = False
+    for index, rel in enumerate(plan.spatial_relations):
+        target = rel.target
+        place_name = (
+            target.place.name.strip() if target.place and target.place.name else None
+        )
+        if rel.relation in {"within", "intersects"}:
+            if not place_name:
+                raise SemanticCompileError("within/intersects requires a place target")
+            used_places.add(place_name)
+            d_alias = "a" if not admin_alias_used else f"a{index}"
+            admin_alias_used = True
+            if ADMIN_TABLE not in tables:
+                tables.append(ADMIN_TABLE)
+            joins.append(
+                f"JOIN {_ident(ADMIN_TABLE, physical=True)} {d_alias} "
+                f"ON ST_Intersects({alias}.geometry, {d_alias}.geometry)"
+            )
+            where.append(_admin_name_sql(d_alias, place_name))
+            where.append(f"{d_alias}.\"ADM_CD\" LIKE '21%'")
+            uses_boundary = True
+            continue
+        if rel.relation in {"within_distance", "outside_distance"}:
+            if rel.distance_m is None or rel.distance_m <= 0:
+                raise SemanticCompileError("distance_m must be > 0")
+            meters = sql_number(float(rel.distance_m))
+            expand = sql_number(max(0.0015, float(rel.distance_m) / 111000.0 * 1.5))
+            z_alias = "z" if index == 0 else f"z{index}"
+            if place_name:
+                used_places.add(place_name)
+                if ADMIN_TABLE not in tables:
+                    tables.append(ADMIN_TABLE)
+                pred = f"{_admin_name_sql('d', place_name)} AND d.\"ADM_CD\" LIKE '21%'"
+                joins.append(
+                    "CROSS JOIN (\n"
+                    "  SELECT ST_Union(d.geometry) AS geom\n"
+                    f"  FROM {_ident(ADMIN_TABLE, physical=True)} d\n"
+                    f"  WHERE {pred}\n"
+                    f") {z_alias}"
+                )
+                where.append(f"{z_alias}.geom IS NOT NULL")
+                where.append(f"{alias}.geometry && ST_Expand({z_alias}.geom, {expand})")
+                where.append(
+                    "ST_DWithin("
+                    f"{alias}.geometry::geography, "
+                    f"{z_alias}.geom::geography, "
+                    f"{meters})"
+                )
+                if rel.relation == "outside_distance":
+                    where.append(
+                        f"NOT ST_Intersects({alias}.geometry, {z_alias}.geom)"
+                    )
+                uses_boundary = True
+                continue
+            if target.longitude is not None and target.latitude is not None:
+                lon = sql_number(float(target.longitude))
+                lat = sql_number(float(target.latitude))
+                point = f"ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326)"
+                where.append(
+                    "ST_DWithin("
+                    f"{alias}.geometry::geography, "
+                    f"{point}::geography, "
+                    f"{meters})"
+                )
+                continue
+            raise SemanticCompileError("within_distance needs a place or lon/lat")
+        raise SemanticCompileError(f"unsupported spatial relation: {rel.relation}")
+    return uses_boundary, used_places
 
 
 def _a4_place_sql(alias: str, place: str) -> str:

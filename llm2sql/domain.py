@@ -555,6 +555,14 @@ _NAME_STOP = frozenset(
         "내부",
         "건수",
         "개수",
+        "얼마",
+        "얼마나",
+        "예쁜",
+        "멋진",
+        "좋은",
+        "괜찮은",
+        "자동문",
+        "오래된",
         "퍼센트",
         "퍼센트씩",
         "비율",
@@ -668,10 +676,40 @@ def looks_like_building_name_lookup(question: str) -> bool:
         return False
     if looks_like_measure_threshold(q):
         return False
+    if any(k in q for k in ("평균", "합계", "용도별", "분포")):
+        return False
+    # 주관 형용사는 건물명이 아니라 clarify 경로로 보낸다
+    if any(
+        k in q
+        for k in (
+            "예쁜",
+            "멋진",
+            "좋은",
+            "괜찮은",
+            "핫한",
+            "유명한",
+            "추천",
+            "오래된",
+            "오래 된",
+            "낡은",
+        )
+    ) and not any(k in q for k in ("가장 오래", "제일 오래")):
+        return False
     # 장소+용도/건물 건수는 고유명사 조회가 아님
     place_hit = extract_place(q) or extract_gu(q)
     countish = any(
-        k in q for k in ("몇", "건수", "개수", "채수", "채야", "수는", "수가")
+        k in q
+        for k in (
+            "몇",
+            "건수",
+            "개수",
+            "채수",
+            "채야",
+            "수는",
+            "수가",
+            "얼마",
+            "얼마나",
+        )
     )
     if place_hit and countish and (
         extract_usage(q)
@@ -872,6 +910,22 @@ def d198_table_for_gu(gu: str | None) -> str | None:
 
 def looks_like_age_question(question: str) -> bool:
     return any(k in question for k in AGE_HINTS)
+
+
+def is_vague_age_threshold(question: str) -> bool:
+    """'오래된 단독주택은 몇 채'처럼 경과년수 숫자가 없는 주관 표현.
+
+    '가장 오래된' 순위 질의는 제외한다.
+    """
+    q = question or ""
+    if extract_age_years(q) is not None or extract_calendar_year(q) is not None:
+        return False
+    if any(
+        k in q
+        for k in ("가장 오래", "제일 오래", "가장 먼저 지어", "제일 먼저 지어")
+    ):
+        return False
+    return any(k in q for k in ("오래된", "오래 된", "오래전", "낡은"))
 
 
 def extract_calendar_year(question: str) -> tuple[int, str | None] | None:

@@ -367,6 +367,9 @@ _AREA_LISTISH = (
     "어떤",
     "찾아",
     "알려줘",
+    "이름",
+    "건물명",
+    "명칭",
 )
 _AREA_COUNTISH = ("몇", "건수", "개수", "채수", "수는", "개가", "채야", "몇개")
 
@@ -471,14 +474,17 @@ def _parse_height_threshold(q: str) -> tuple[str, str] | None:
 
 
 def _parse_floor_threshold(q: str) -> tuple[str, str] | None:
-    if "지상" not in q and "층수" not in q:
-        return None
     m = re.search(
-        r"(?:지상\s*층?|층수)[이가]?\s*(\d+)\s*층\s*(이상|이하|초과|미만|넘는)",
+        r"(?:지상\s*층?|층수|지상층)[이가]?\s*(\d+)\s*층\s*(이상|이하|초과|미만|넘는)",
         q,
     )
     if m:
         return _rel_op(m.group(2)), m.group(1)
+    m = re.search(r"(\d+)\s*층\s*(이상|이하|초과|미만|넘는)", q)
+    if m:
+        return _rel_op(m.group(2)), m.group(1)
+    if "지상" not in q and "층수" not in q:
+        return None
     m = re.search(r"지상\s*층?[이가]?\s*(\d+)\s*층", q)
     if not m:
         return None
@@ -601,6 +607,56 @@ def _legal_dong_for_filter(
     return place
 
 
+def _looks_like_rank_ask(q: str) -> bool:
+    if any(
+        k in q
+        for k in ("상위", "가장 높", "가장 큰", "제일 높", "제일 큰", "높은 순", "큰 순")
+    ):
+        return True
+    return bool(
+        re.search(r"\d+\s*(개|곳|채|동)\b", q)
+        and any(k in q for k in ("높", "큰", "상위", "넓은"))
+    )
+
+
+def _numeric_families(q: str) -> set[str]:
+    fam: set[str] = set()
+    if _parse_area_threshold(q) is not None:
+        fam.add("area")
+    if _parse_height_threshold(q) is not None:
+        fam.add("height")
+    if _parse_floor_threshold(q) is not None:
+        fam.add("floors")
+    return fam
+
+
+def should_defer_compound_to_plan(q: str) -> bool:
+    """단일 규칙 라우트가 조건을 일부만 먹을 복합질의는 SQP에 넘긴다."""
+    if any(h in q for h in ("용도별건물", "AL_D198", "D198")):
+        return False
+    families = _numeric_families(q)
+    if len(families) >= 2:
+        return True
+    spatial_inside = any(
+        k in q for k in ("안에", "내에", "내부", "안쪽", "경계 안", "경계안")
+    )
+    if spatial_inside and (families or _looks_like_rank_ask(q)):
+        return True
+    if _has_place_buffer_hint(q) and families:
+        return True
+    if extract_structure(q) and (
+        "floors" in families or _looks_like_rank_ask(q) or families
+    ):
+        return True
+    if any(k in q for k in ("평균", "합계")) and any(
+        k in q for k in ("높이", "연면적", "건축면적", "대지면적", "층수", "지상")
+    ):
+        return True
+    if "용도별" in q and any(k in q for k in ("개수", "건수", "분포", "구성")):
+        return True
+    return False
+
+
 def try_route(
     question: str,
     conn: psycopg.Connection | None = None,
@@ -622,6 +678,9 @@ def try_route(
     spatial_hit = try_spatial_route(q)
     if spatial_hit is not None:
         return spatial_hit
+
+    if should_defer_compound_to_plan(q):
+        return None
 
     # 용도별건물공간정보(D198) 전 속성 — D010 면적/산지 오탐보다 우선
     # 특정 건물명+사용승인일 조회는 카탈로그(A13 있음) 오탐보다 이름 조회가 우선
@@ -982,6 +1041,8 @@ def _route_place_building_count(q: str) -> RoutedQuery | None:
     if "산업단지" in q or "기초구역" in q:
         return None
     if any(k in q for k in ("연면적", "건물면적", "대지면적", "면적", "높이", "지상층", "층수")):
+        return None
+    if "용도별" in q:
         return None
     if any(k in q for k in ("안에", "내부", "안쪽", "경계 안", "교차", "겹치", "인접")):
         return None
@@ -1565,6 +1626,14 @@ def fix_common_sql_mistakes(sql: str, question: str | None = None) -> str:
         out = re.sub(r'"A19"', '"A14"', out)
         out = re.sub(r'"A30"', '"A16"', out)
         out = re.sub(r'"A31"', '"A26"', out)
+
+    # text 일자 < CURRENT_DATE → 명시적 date 캐스트 (실행 오류 방지)
+    out = re.sub(
+        r'"(A13|A22|A33|A34)"\s*([<>]=?)\s*(CURRENT_DATE)',
+        r'"\1"::date \2 \3',
+        out,
+        flags=re.I,
+    )
 
     # 동래/금정 사용승인·허가일 질의는 규칙 SQL로 고정 (D010 A13 오인 방지)
     d198_hit = _route_d198_attr(q, conn=None)

@@ -13,6 +13,15 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
          └─ 지도: geometry 발행 → GeoServer WMS/WFS → 출력 레이어
 ```
 
+자세한 시나리오·연구 기록은 `docs/`를 본다.
+
+| 문서 | 내용 |
+|------|------|
+| `docs/작동방식_및_알고리즘.md` | 0.2.2 파이프라인 시나리오 |
+| `docs/Semantic_Query_Plan_구현.md` | SQP MVP 명세 |
+| `docs/고도화_llm2_geodb_to_llm2sql.md` | llm2_geodb 대비 고도화 |
+| `docs/RND_자연어GIS질의_알고리즘_연구결과보고서.md` | 0.1.4 알고리즘 기록 + 0.2.2 SQP 보론 |
+
 ---
 
 ## 목차
@@ -54,9 +63,9 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 | 순위 | 부산시·구·동 단위 건물면적/연면적/높이/지상층 1위 (이상값 필터) |
 | 안전 | 채팅 경로는 SELECT/WITH만 허용, 쓰기·DDL 차단. 지도용 임시 테이블(`temp_*`)만 별도 발행 |
 | 모호성 | 복수 구 동명 → 후보 제시 후 **`1` / `1번` 선택** 가능 |
-| 후속 | 직전 건물 focus로 「이름/지번/높이」 등 |
+| 후속 | 직전 건물 focus, Plan delta(「그중 100m 이상」「10개만」「지번도 같이」) |
 | 안내 | 역할·기능·제한, 범위 외 거절·유도 |
-| 성능 | 고빈도 패턴은 규칙 라우터로 LLM 우회 |
+| 성능 | 고빈도 패턴은 규칙 라우터로 LLM 우회. 복합조건은 SQP(`hybrid`) |
 | 엔진 | `Llm2SqlEngine` (연결·Ollama 재사용, `on_progress` / `on_token`) |
 | 웹 UI | 공통 Head/Bottom · 지도(`/map`) · 채팅(`/`, `/chat`) · 데이터 관리(업로드·메타데이터) |
 | 지도 | GeoServer WMS(기본)·WFS, KorDB 카탈로그, 분석결과 중첩, Identify·속성 설명 |
@@ -387,16 +396,34 @@ uv run llm2sql --chat
 
 ### 6) 후속 질문 (세션)
 
-| 질문 예 | route |
-|---------|-------|
-| 그 아파트의 이름은? | `followup_attr` |
+| 질문 예 | 동작 |
+|---------|------|
+| 그 아파트의 이름은? | `followup_attr` (focus 건물) |
 | 지번은? / 높이는? | `followup_attr` |
+| 그중 높이 80m 이상만 | Plan delta 또는 직전 D010 WHERE 유지 |
+| 10개만 보여줘 | LIMIT만 변경 |
+| 건물명과 지번도 같이 | SELECT 컬럼 추가. 직전이 건수면 목록으로 전환 |
 
-웹 UI 또는 `--chat`에서 세션 유지 필요.
+웹 UI 또는 `--chat`에서 세션 유지 필요. 「이상만」은 차트 시리즈 필터가 아니라 **데이터 조건**으로 본다.
 
-### 7) 일반 GIS 조회 → 지도
+### 7) 복합 GIS 조회 → 규칙 또는 SQP
 
-라우터 적중 시 규칙 SQL. 미적중 시 RAG + Ollama → 진단·교정(`fix_common_sql_mistakes`) → 실행 → 한국어 답변.
+한 질문에 수치·공간·구조·순위가 **둘 이상** 겹치면 규칙 라우터가 조건 하나만 먹고 나머지를 버리지 않는다. `should_defer_compound_to_plan`이 미적중으로 두고, `SEMANTIC_PLAN_MODE=hybrid`이면 Semantic Query Plan이 확정 SQL을 만든다.
+
+| 질문 예 | 경로 |
+|---------|------|
+| 해운대구 아파트 중 높이 70m 이상이고 연면적 10000㎡ 이상 | `semantic_plan_list` (높이+연면적) |
+| 연산동 안에 있는 공동주택 중 연면적 상위 10개 | `semantic_plan_rank` (`ST_Intersects`) |
+| 구서동 주변 500m 이내 공동주택 중 높이 40m 이상 | `semantic_plan_list` (`ST_DWithin`) |
+| 해운대구 건물 용도별 개수 | `semantic_plan_distribution` |
+| 구서역 주변 500m 공동주택 | `semantic_plan_clarify` (역·POI 미지원) |
+| 해운대구 공동주택 중 건축면적 1000㎡ 이상 건수 | 기존 라우터 (`building_area_threshold_count`) |
+
+단일 수치 건수·단일 지표 순위는 **라우터가 그대로 우선**한다.
+
+### 8) 일반 GIS 조회 → 지도
+
+라우터 적중 시 규칙 SQL. 미적중이고 SQP가 `off`이거나 SQP가 fallback하면 RAG + Ollama → 진단·교정(`fix_common_sql_mistakes`) → 실행 → 한국어 답변.
 
 성공한 SELECT는 다음처럼 지도에 올립니다.
 
@@ -415,12 +442,12 @@ GeoServer가 꺼져 있거나 발행에 실패해도 **채팅 답변은 그대�
 ```text
 1. clarify 번호 선택 병합 (직전 clarify_place + "1")
 2. guide_qa
-3. followup_qa
+3. followup_qa / Plan delta (그중·N개만·컬럼 추가)
 4. rank_compare_qa   복수 지역 최고 건물 비교
 5. profile_qa        특징 요약·지역/용도 비교
 6. meta_qa
 7. clarify_qa
-8. intent_router     건수·순위·버퍼 등
+8. intent_router     단건 패턴. 복합조건은 미적중
 9. semantic_plan     라우터 미적중 시 (기본 off). hybrid면 Plan→SQL, 실패 시 RAG
 10. RAG + LLM        스키마 검색 → SQL → 검증/재생성
 11. answer           실행 결과 → 한국어 (토큰 스트림 가능)
@@ -467,8 +494,8 @@ D010 주요 컬럼: `A4` 법정동명, `A5` 지번, `A9` 용도, `A12` 건물면
 2. ‘좋은/추천’은 주관 평가 없이 수치 기준으로 유도.
 3. 동일 동명이 여러 구에 있으면 후보 확인 후 진행.
 4. 채팅 SQL 쓰기 차단. 지도 임시 테이블만 서버가 생성·삭제.
-5. 후속 질문은 세션·focus 건물 필요.
-6. LLM 경로는 수 초~수십 초 소요 가능.
+5. 후속 질문은 세션이 필요하다. focus 건물 또는 직전 D010 SQL.
+6. LLM·SQP 경로는 수 초~수십 초 소요 가능.
 7. 단일 DB 연결 엔진은 동시 `ask`에 락/직렬화 권장(웹은 락 사용).
 8. GeoServer 미설정·다운 시 지도만 생략되고 채팅은 유지.
 9. 배경지도는 동시에 여러 장을 켤 수 없음 (0개 또는 1개).
@@ -485,6 +512,7 @@ uv run python scripts/smoke_clarify.py
 uv run python scripts/smoke_profile_qa.py
 uv run python scripts/refresh_schema_catalog.py
 uv run python scripts/test_semantic_plan.py
+uv run python scripts/smoke_compound30.py   # 복합 30문항, SEMANTIC_PLAN_MODE=hybrid
 
 # 지도
 uv run python scripts/test_map_sql.py      # wrap·적격성·GS 실패 시 채팅 유지
@@ -519,7 +547,7 @@ llm2sql/
     intent_router.py, semantic_plan/, answer.py, ...
   tests/semantic_plan/
   scripts/
-    test_semantic_plan.py, test_map_sql.py, test_map_layers.py, test_map_stack.mjs
+    test_semantic_plan.py, smoke_compound30.py, test_map_sql.py, test_map_layers.py, test_map_stack.mjs
   main.py
   pyproject.toml         # llm2sql, llm2sql-web
   .env.example
@@ -547,12 +575,14 @@ llm2sql/
 
 ## 0.2.2 변경 요약
 
-- **Semantic Query Plan (SQP)**: 규칙 라우터 미적중 질의에 canonical JSON Plan → deterministic SELECT 계층을 추가. LLM이 물리 SQL을 직접 쓰지 않음
+- **Semantic Query Plan (SQP)**: 규칙 라우터 미적중 질의에 canonical JSON Plan → deterministic SELECT. LLM이 물리 SQL을 직접 쓰지 않음
 - **기본 off**: `SEMANTIC_PLAN_MODE=off` 이면 0.2.1과 동일. `shadow`는 생성만, `hybrid`는 실행 후 실패 시 기존 RAG로 fallback
-- **MVP 범위**: 건물(D010) count/list/rank, 용도·높이·면적·층수·구조 필터, 구/동 `A4` 또는 행정 경계 JOIN
-- **안전**: catalog allowlist 식별자, 리터럴 이스케이프, 기존 readonly·EXPLAIN 재사용, 미지원 필드는 RAG로 넘김
-- **테스트**: `scripts/test_semantic_plan.py`, `tests/semantic_plan/`
-- **문서**: `docs/Semantic_Query_Plan_구현.md`
+- **복합질의 위임**: 높이+연면적, 공간+수치, 구조+순위처럼 조건이 겹치면 라우터가 일부만 먹지 않고 SQP로 넘김. 단일 건수·순위는 라우터 우선
+- **공간**: 행정동 `ST_Intersects`, 동 경계 `ST_DWithin`. 역·POI는 확인질문
+- **후속**: Plan delta(`add_filter` / `change_limit` / `add_select`). 직전 D010 결과에도 적용. 「이상만」은 차트 필터가 아님
+- **안전**: catalog allowlist, 리터럴 이스케이프, SQL 오류 시 트랜잭션 롤백, 미지원 필드는 RAG
+- **테스트**: `scripts/test_semantic_plan.py`, `tests/semantic_plan/`, `scripts/smoke_compound30.py` (hybrid 30/30)
+- **문서**: `docs/Semantic_Query_Plan_구현.md`, `docs/작동방식_및_알고리즘.md`, `docs/고도화_llm2_geodb_to_llm2sql.md`, `docs/RND_자연어GIS질의_알고리즘_연구결과보고서.md`
 
 ## 0.2.1 변경 요약
 

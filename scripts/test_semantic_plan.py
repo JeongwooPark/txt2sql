@@ -35,7 +35,11 @@ def main() -> int:
         "tests.semantic_plan.test_normalizer",
         "tests.semantic_plan.test_validator",
         "tests.semantic_plan.test_compiler",
+        "tests.semantic_plan.test_compiler_spatial",
         "tests.semantic_plan.test_generator",
+        "tests.semantic_plan.test_followup",
+        "tests.semantic_plan.test_parity",
+        "tests.semantic_plan.test_compound",
     )
     passed = 0
     failed: list[str] = []

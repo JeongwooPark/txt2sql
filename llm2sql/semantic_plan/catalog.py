@@ -243,8 +243,13 @@ def catalog_prompt_text(*, entity: str = "building") -> str:
         [
             "",
             "supported operators: eq, neq, gt, gte, lt, lte, contains, in, between",
-            "supported spatial relations: within, intersects, within_distance",
+            "supported spatial relations: within, intersects, within_distance, outside_distance",
             "supported query_kind: count, list, rank, aggregate, distribution",
+            "spatial_mode auto: 구/법정동은 주소 속성, 행정전용 동은 경계",
+            "spatial_mode boundary: 행정 경계 containment (안에/내부)",
+            "within_distance: 동·구 경계로부터 미터 거리. 역·POI 좌표는 불가",
+            "건축면적 building_area_m2 / 연면적 gross_floor_area_m2 / 대지면적 site_area_m2 는 서로 다름",
+            "층수 → ground_floors",
         ]
     )
     return "\n".join(lines)

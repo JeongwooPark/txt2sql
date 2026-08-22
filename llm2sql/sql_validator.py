@@ -64,6 +64,30 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
             'not district-only AL_D198 "A30".'
         )
 
+    # text 일자 컬럼을 date와 직접 비교 (PostgreSQL text < date 오류)
+    if re.search(
+        r'"(A13|A22|A33|A34)"\s*[<>]=?\s*CURRENT_DATE',
+        s,
+        flags=re.I,
+    ) and not re.search(
+        r'"(A13|A22|A33|A34)"::\s*date',
+        s,
+        flags=re.I,
+    ):
+        reasons.append(
+            'Approval dates are stored as text; compare with "A34"::date on AL_D198 '
+            "(or cast explicitly). Never compare text < date."
+        )
+    if (
+        looks_like_age_question(q)
+        and "AL_D010" in upper
+        and re.search(r'"A13"\s*[<>=]', s)
+    ):
+        reasons.append(
+            f'Age/오래된 queries must use {d198_coverage_label()} AL_D198 "A34"::date, '
+            'not AL_D010 "A13".'
+        )
+
     # 건축년수인데 데이터기준일(A35) 사용 / 달력연도를 INTERVAL 경과년수로 오인
     if any(k in q for k in ("지어진", "건축년", "준공", "사용승인", "년 미만", "년 이상")):
         if re.search(r'"A35"', s) or re.search(r"\bA35\b", s):

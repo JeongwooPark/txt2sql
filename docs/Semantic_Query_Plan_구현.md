@@ -15,12 +15,13 @@
 0.2.2는 다음만 넣는다.
 
 - 기존 Router / guide / meta / clarify / profile / followup / RAG는 **그대로 둔다**
-- Router 미적중 뒤에만 SQP를 삽입한다
+- Router 미적중 뒤에만 SQP를 삽입한다. **복합조건**은 라우터가 일부만 먹지 않고 미적중으로 둔다
 - 기본 모드는 `off`
-- building + 구/동 범위 + count/list/rank (+ 가능한 aggregate/distribution)
+- building + 구/동 범위 + count/list/rank/aggregate/distribution
+- 행정 경계 `ST_Intersects`, 동 버퍼 `ST_DWithin`, Plan follow-up delta
 - 실패하면 기존 `run_rag_sql()` 로 내려간다
 
-산업단지 전용 질의, D198 건축년수, POI 거리, Plan follow-up merge는 **다음 단계**로 남긴다.
+산업단지 전용 SQP, D198 건축년수 SQP, generic join graph, `planner_first`는 **다음 단계**로 남긴다.
 
 ---
 
@@ -73,9 +74,10 @@ llm2sql/semantic_plan/
   compiler.py     deterministic SELECT (psycopg 식별자/리터럴 이스케이프)
   runner.py       generate → validate → compile → 검증 → 실행
   answer.py       count/list/rank/distribution 템플릿 답변
+  followup.py     add_filter / change_sort / change_limit / add_select
 ```
 
-`followup.py`(Plan delta merge)는 넣지 않는다. 기존 `_expand_followup_question` / `try_subset_followup` 이 SQP보다 먼저 동작한다.
+직전 결과가 `semantic_plan_*` 이거나 직전 SQL이 D010이면, 짧은 후속은 Plan delta로 먼저 병합한다. 그 다음이 기존 `try_subset_followup` 이다. `heuristic_plan` / `plan_followup_delta` assumption은 품질 점수에서 깎지 않는다.
 
 ---
 
@@ -85,7 +87,22 @@ llm2sql/semantic_plan/
 
 **Scope:** 구·법정동은 D010 `A4 LIKE`. `spatial_mode=boundary` 또는 행정전용 동은 `BND_ADM_DONG_PG` + `ST_Intersects`.
 
-**Query kind:** `count`, `list`, `rank`. `aggregate` / `distribution` 은 컴파일은 되나 휴리스틱 입구만 있다.
+**거리:** `within_distance` / `outside_distance` → 행정 경계 `ST_Union` + `ST_DWithin(...::geography)`. 같은 장소를 A4로 중복 필터하지 않는다. 역·POI는 clarify.
+
+**Query kind:** `count`, `list`, `rank`, `aggregate`, `distribution`. 휴리스틱이 「평균」「용도별」을 입구에서 고른다.
+
+**복합질의 위임 (`should_defer_compound_to_plan`)**
+
+라우터가 첫 적중만 쓰면 높이+연면적 질문이 연면적 건수만 답하는 식의 손실이 난다. 아래면 `try_route`는 `None`을 주고 SQP가 받는다.
+
+- 수치 가족(면적·높이·층수)이 **둘 이상**
+- 「안에/내에」 + (수치 또는 순위)
+- 동 버퍼 + 추가 수치 (높이 40m 이상 등). 버퍼만 있는 건수는 기존 `place_buffer_*`
+- 구조 + (층수·순위·면적/높이)
+- 「평균/합계」 + 높이·면적·층
+- 「용도별 개수/분포」(「용도별건물」데이터셋 질의는 제외)
+
+고빈도 단일 패턴(구+용도 건수, 단일 임계 건수, 단일 지표 순위)은 **Router가 먼저** 가져간다.
 
 **Filter:** `usage`, `structure`, `height_m`, `building_area_m2`, `gross_floor_area_m2`, `site_area_m2`, `ground_floors`, `basement_floors`
 
@@ -97,7 +114,7 @@ llm2sql/semantic_plan/
 
 - 건축년수 / 사용승인 (D198 coverage)
 - 시가총액 등 catalog 밖 필드
-- 역·POI 좌표, `spatial_relations` 일반형
+- 역·POI 좌표 (동·구 경계 거리는 지원)
 - `entity != building`
 - 필터 6개·공간관계 2개 초과
 
@@ -164,7 +181,9 @@ Hint는 validator가 다시 검사한다. LLM 출력에 `SELECT`, `A16`, `AL_D01
 
 ## 9. 세션·지도·차트
 
-- `SessionContext.last_semantic_plan` 저장. Plan delta follow-up은 아직 없다.
+- `SessionContext.last_semantic_plan` 저장. 후속 `그중 100m 이상` / `높이 순` / `10개만` / `지번도 같이` 는 Plan delta로 병합. 직전 라우터 D010 결과도 heuristic Plan을 재구성해 같은 delta를 탄다
+- 「N m 이상만」은 차트 시리즈 필터(`chart_help`)가 가로채지 않는다
+- route `semantic_plan_*` 는 지도 skip 목록에 넣지 않는다. D010 SELECT면 기존 geometry 주입이 동작한다.
 - route `semantic_plan_*` 는 지도 skip 목록에 넣지 않는다. D010 SELECT면 기존 geometry 주입이 동작한다.
 - distribution 은 `usage` + `n`/`count` alias 로 차트 제안을 탈 수 있다.
 - 단순 결과는 SQP 템플릿 답변(LLM 2회 호출 회피).
@@ -183,8 +202,13 @@ uv run python scripts/test_semantic_plan.py
 - 컴파일 SQL에 D010·A4·A9·A16, DML 없음
 - place 리터럴 이스케이프
 - heuristic MVP 질문, 물리 컬럼·SQL leak 파싱 거부
+- 행정 경계 `ST_Intersects`, 동 버퍼 `ST_DWithin`
+- Plan follow-up delta (filter/sort/limit/select). 직전 D010 SQL에서도 동작
+- Router 동등 패턴 parity: 용도 건수, 높이 임계, 연면적 순위 (Router는 계속 우선)
+- 복합질의 위임: 높이+연면적·공간+수치 등은 `try_route is None` 후 heuristic SQL에 모든 조건이 남는지
+- 스모크: `scripts/smoke_compound30.py` (`SEMANTIC_PLAN_MODE=hybrid`)
 
-통합 벤치·Router 30문항 수집은 이 버전에 넣지 않았다. `shadow` 모드로 필요 시 비교한다.
+`planner_first`로 Router를 끄지 않는다. parity가 확인된 패턴도 **Router 적중이 우선**이고, SQP는 미적중 long-tail·복합조건·후속 delta용이다.
 
 ---
 
@@ -194,18 +218,18 @@ uv run python scripts/test_semantic_plan.py
 2. Plan에 raw SQL / 물리 테이블명
 3. 검증 실패 Plan 억지 실행
 4. 기존 RAG 삭제
-5. 기존 Router를 SQP로 교체
+5. 기존 Router를 SQP로 교체 (`planner_first` 없음. parity 패턴도 Router 우선)
 6. generic join graph, 산업단지 SQP, D198 coverage 확장
 7. 버전을 0.3.0으로 올리는 일 — 아키텍처 추가는 맞지만 기본 off MVP 이므로 **0.2.2**
 
 ---
 
-## 12. 다음 단계
+## 12. 다음 단계 (이후)
 
-1. `hybrid` 실측 후 few-shot/catalog 보강
-2. 행정동 경계·거리(`ST_DWithin`)를 compiler에 편입
-3. Plan follow-up delta (`add_filter` / `change_sort` / `change_limit`)
-4. SQP가 Router와 동등한 정확도를 보이는 패턴만 점진 통합
+1. `hybrid` 기본값 검토 (복합 30 스모크는 hybrid 기준 통과)
+2. 기초구역·산업단지 spatial relation을 SQP catalog로
+3. Plan delta에 `remove_filter` / `change_scope`
+4. parity가 장기간 유지되는 패턴만 Router와 compiler 공유 검토
 5. 그때 0.3.0 검토
 
 목표 4계층은 유지한다.

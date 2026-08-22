@@ -198,6 +198,8 @@ def is_chart_series_filter_question(question: str) -> bool:
             "만으로 그려",
         )
     ) or bool(re.search(r"[가-힣0-9]만(?:으로|으)?(?:\s|$)", q))
+    if re.search(r"(이상|이하|초과|미만)만", q):
+        return False
     if not onlyish and "만" not in q:
         return False
     if onlyish:

@@ -601,8 +601,23 @@ def try_subset_followup(
     last_order = _order_from_last_sql(session.last_sql or "")
     limit_n = _extract_followup_n(q, default=1)
     if spec is None and last_order is not None:
-        spec = ("date", last_order[1] if last_order[0] in {"A33", "A34", "A13"} else last_order[1])
-        # 직전 ORDER BY 컬럼을 그대로 쓸 수 있게 kind는 아래에서 last_order로 덮음
+        col, direction = last_order
+        kind_by_col = {
+            "A16": "height",
+            "A30": "height",
+            "A14": "area",
+            "A12": "area",
+            "A19": "area",
+            "A15": "area",
+            "A13": "date",
+            "A33": "date",
+            "A34": "date",
+            "A18": "far",
+            "A20": "far",
+            "A17": "far_cov",
+            "A21": "far_cov",
+        }
+        spec = (kind_by_col.get(col, "area"), direction)
     if spec is None:
         return None
     kind, direction = spec

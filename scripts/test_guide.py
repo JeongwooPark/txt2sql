@@ -20,6 +20,8 @@ def main() -> int:
         "기능 알려줘",
         "가능한 게 뭐야",
         "뭐가 가능해",
+        "너는 무슨 일을 해?",
+        "어떤 질문을 하면 돼?",
     )
     for q in help_qs:
         guide = try_guide(q)

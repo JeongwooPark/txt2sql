@@ -39,3 +39,20 @@ def test_heuristic_ambiguous_area() -> None:
     plan = try_heuristic_plan("면적이 가장 큰 건물")
     assert plan is not None
     assert plan.requires_clarification is True
+
+
+def test_heuristic_boundary_and_distance() -> None:
+    inside = try_heuristic_plan("연산동 안에 있는 공동주택")
+    assert inside is not None
+    assert inside.scope is not None
+    assert inside.scope.spatial_mode == "boundary"
+
+    near = try_heuristic_plan("구서동 주변 500m 이내에 있는 공동주택")
+    assert near is not None
+    assert near.spatial_relations
+    assert near.spatial_relations[0].relation == "within_distance"
+    assert near.spatial_relations[0].distance_m == 500
+
+    station = try_heuristic_plan("구서역 주변 500m 이내 공동주택")
+    assert station is not None
+    assert station.requires_clarification is True

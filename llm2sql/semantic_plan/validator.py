@@ -22,7 +22,7 @@ _MAX_AGG = 4
 _MAX_ORDER = 3
 _MAX_LIMIT = 1000
 _V1_ENTITIES = frozenset({"building"})
-_V1_SPATIAL = frozenset({"within", "intersects", "within_distance"})
+_V1_SPATIAL = frozenset({"within", "intersects", "within_distance", "outside_distance"})
 
 
 def validate_semantic_plan(
@@ -157,9 +157,9 @@ def validate_semantic_plan(
                 return _fallback(plan, "longitude/latitude both required", score - 0.4)
             if not (-180 <= lon <= 180 and -90 <= lat <= 90):
                 return _fallback(plan, "invalid lon/lat range", score - 0.4)
-            warnings.append("coordinate target is experimental in v1")
-            status = "fallback"
-            errors.append("poi/coordinate spatial queries fall back in v1")
+        elif rel.relation in {"within", "intersects", "within_distance", "outside_distance"}:
+            if target.place is None or not (target.place.name or "").strip():
+                return _fallback(plan, "spatial relation needs a place or lon/lat", score - 0.4)
 
     if len(plan.filters) > _MAX_FILTERS:
         return _fallback(plan, "too many filters", score - 0.2)
@@ -174,9 +174,18 @@ def validate_semantic_plan(
     if plan.limit is not None and plan.limit > _MAX_LIMIT:
         return _fallback(plan, "limit exceeds 1000", score - 0.2)
 
+    tracked = [
+        item
+        for item in plan.assumptions
+        if item not in {"heuristic_plan", "plan_followup_delta"}
+    ]
+    if tracked:
+        score -= 0.1 * min(len(tracked), 3)
+        warnings.extend(tracked)
     if plan.assumptions:
-        score -= 0.1 * min(len(plan.assumptions), 3)
-        warnings.extend(plan.assumptions)
+        warnings.extend(
+            item for item in plan.assumptions if item not in tracked
+        )
     if plan.ambiguities:
         score -= 0.3
         status = "clarify"

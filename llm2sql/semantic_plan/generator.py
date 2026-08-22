@@ -14,6 +14,7 @@ import psycopg
 
 from llm2sql.config import Settings
 from llm2sql.domain import (
+    LENGTH_DIST_PATTERN,
     extract_gu,
     extract_place,
     extract_structure,
@@ -29,6 +30,8 @@ from llm2sql.semantic_plan.models import (
     ScopeSpec,
     SemanticPlanGenerationError,
     SemanticQueryPlan,
+    SpatialRelationSpec,
+    SpatialTargetSpec,
 )
 from llm2sql.semantic_plan.prompts import build_messages
 from llm2sql.session import SessionContext
@@ -54,7 +57,6 @@ _UNSUPPORTED_HINTS = (
     "인구",
     "세대수",
     "지하철",
-    "역전",
     "버스",
     "주차",
     "좋은",
@@ -115,6 +117,33 @@ def extract_plan_hints(question: str) -> dict[str, Any]:
                 "unit": "m2" if schema_unit in {"㎡", "m2"} else ("m" if schema_unit == "m" else "floor"),
             }
         )
+    if not any(item["field"] == "ground_floors" for item in numerics):
+        floor_m = re.search(r"(\d+)\s*층\s*(이상|이하|초과|미만|넘는)", q)
+        if floor_m:
+            numerics.append(
+                {
+                    "field": "ground_floors",
+                    "operator": _REL.get(floor_m.group(2), "gte"),
+                    "value": int(floor_m.group(1)),
+                    "unit": "floor",
+                }
+            )
+    if not numerics:
+        bare = re.search(
+            rf"(\d+(?:\.\d+)?)\s*(킬로미터|㎞|km|미터|m)\s*(이상|이하|초과|미만|넘는)",
+            q,
+        )
+        if bare:
+            converted = convert_for_schema(bare.group(1), bare.group(2), "m")
+            if converted is not None:
+                numerics.append(
+                    {
+                        "field": "height_m",
+                        "operator": _REL.get(bare.group(3), "gte"),
+                        "value": converted.canonical,
+                        "unit": "m",
+                    }
+                )
     kind = "unknown"
     if gu and (place == gu or not place):
         kind = "gu"
@@ -127,6 +156,9 @@ def extract_plan_hints(question: str) -> dict[str, Any]:
         "structure": structure[0] if structure else None,
         "numeric_expressions": numerics,
         "age_question": looks_like_age_question(q),
+        "distance_m": _extract_distance_m(q),
+        "distance_outside": any(k in q for k in ("경계 밖", "바깥", "외부")),
+        "boundary": any(k in q for k in ("안에", "내부", "경계 안", "경계안", "안쪽")),
     }
 
 
@@ -149,6 +181,15 @@ def try_heuristic_plan(question: str, hints: dict[str, Any] | None = None) -> Se
         return None
     if looks_like_age_question(q):
         return None
+    if re.search(r"[가-힣]{1,12}역", q) and _extract_distance_m(q) is not None:
+        return SemanticQueryPlan(
+            query_kind="list",
+            entity="building",
+            requires_clarification=True,
+            ambiguities=[
+                "역·POI 좌표는 지원하지 않습니다. 동·구 경계 기준으로 거리를 물어 주세요."
+            ],
+        )
     if "면적" in q and not any(k in q for k in ("연면적", "건축면적", "건물면적", "대지면적")):
         return SemanticQueryPlan(
             query_kind="list",
@@ -159,8 +200,12 @@ def try_heuristic_plan(question: str, hints: dict[str, Any] | None = None) -> Se
     hints = hints or extract_plan_hints(q)
     if not hints.get("place") and not hints.get("usage") and not hints.get("numeric_expressions"):
         return None
-    if not any(k in q for k in ("건물", "아파트", "주택", "건축물", "공동주택", "창고", "학교")):
-        if not hints.get("numeric_expressions") and not hints.get("usage"):
+    if not any(k in q for k in ("건물", "아파트", "주택", "건축물", "공동주택", "창고", "학교", "공장")):
+        if (
+            not hints.get("numeric_expressions")
+            and not hints.get("usage")
+            and not hints.get("distance_m")
+        ):
             return None
 
     query_kind = _guess_kind(q)
@@ -183,12 +228,30 @@ def try_heuristic_plan(question: str, hints: dict[str, Any] | None = None) -> Se
 
     place_name = hints.get("place")
     scope = None
+    spatial_relations: list[SpatialRelationSpec] = []
+    distance_m = hints.get("distance_m")
     if place_name:
         kind = hints.get("place_kind") or "unknown"
         if kind not in {"sido", "gu", "legal_dong", "admin_dong", "basic_zone", "unknown"}:
             kind = "unknown"
-        mode = "boundary" if any(k in q for k in ("안에", "내부", "경계 안", "경계안")) else "auto"
-        scope = ScopeSpec(place=PlaceSpec(name=place_name, kind=kind), spatial_mode=mode)
+        if isinstance(distance_m, (int, float)) and distance_m > 0:
+            relation = "outside_distance" if hints.get("distance_outside") else "within_distance"
+            spatial_relations.append(
+                SpatialRelationSpec(
+                    relation=relation,
+                    target=SpatialTargetSpec(
+                        place=PlaceSpec(name=place_name, kind=kind)
+                    ),
+                    distance_m=float(distance_m),
+                )
+            )
+            scope = ScopeSpec(
+                place=PlaceSpec(name=place_name, kind=kind),
+                spatial_mode="auto",
+            )
+        else:
+            mode = "boundary" if hints.get("boundary") else "auto"
+            scope = ScopeSpec(place=PlaceSpec(name=place_name, kind=kind), spatial_mode=mode)
 
     select: list[str] = []
     order_by: list[OrderSpec] = []
@@ -230,6 +293,7 @@ def try_heuristic_plan(question: str, hints: dict[str, Any] | None = None) -> Se
         group_by=group_by,
         order_by=order_by,
         limit=limit,
+        spatial_relations=spatial_relations,
         requires_clarification=False,
         model_confidence=0.7,
         assumptions=["heuristic_plan"],
@@ -328,6 +392,20 @@ def _extract_json_object(text: str) -> str:
     payload = blob[start : end + 1]
     json.loads(payload)
     return payload
+
+
+def _extract_distance_m(question: str) -> float | None:
+    if not any(
+        k in question for k in ("이내", "주변", "근처", "버퍼", "반경", "바깥", "경계 밖")
+    ) and not re.search(r"\d+(?:\.\d+)?\s*(?:m|미터|km)\s*안", question):
+        return None
+    match = re.search(LENGTH_DIST_PATTERN, question)
+    if not match:
+        return None
+    converted = convert_for_schema(match.group(1), match.group(2), "m")
+    if converted is None:
+        return None
+    return float(converted.canonical)
 
 
 def _guess_kind(question: str) -> str:

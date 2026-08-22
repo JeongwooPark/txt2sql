@@ -13,7 +13,12 @@ from typing import Literal
 import psycopg
 
 from llm2sql.domain import D198_TABLES, looks_like_building_name_lookup
-from llm2sql.intent_router import RoutedQuery, _route_building_rank, try_route
+from llm2sql.intent_router import (
+    RoutedQuery,
+    _route_building_rank,
+    should_defer_compound_to_plan,
+    try_route,
+)
 
 DispatchMode = Literal["baseline", "optimized"]
 
@@ -150,7 +155,7 @@ def match_route_baseline(
         return RouteMatch(early=early, deferred=None, mode="baseline", try_route_calls=calls)
 
     ranked = _route_building_rank(q)
-    if ranked is not None:
+    if ranked is not None and not should_defer_compound_to_plan(q):
         # baseline은 rank를 try_route와 별도 호출 (try_route 내부에서도 호출되지만 early에서 직접)
         return RouteMatch(early=ranked, deferred=None, mode="baseline", try_route_calls=calls)
 

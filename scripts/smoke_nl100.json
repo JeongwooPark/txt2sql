@@ -1,0 +1,929 @@
+{
+  "generated_at": "2026-08-22 15:06:49",
+  "source": "live KorDB samples via information_schema + table_metadata + distinct values",
+  "database": "gisdb (credentials redacted)",
+  "tables": [
+    "AL_D010_26_20250704",
+    "AL_D198_26260_20250115",
+    "AL_D198_26410_20250115",
+    "AL_D060_00_20250804",
+    "BND_ADM_DONG_PG",
+    "TL_KODIS_BAS_26_202507"
+  ],
+  "exclude_existing_smoke": true,
+  "extra_samples": {
+    "busan_admin": [
+      [
+        "강동동",
+        1
+      ],
+      [
+        "남목1동",
+        1
+      ],
+      [
+        "남목2동",
+        1
+      ],
+      [
+        "남목3동",
+        1
+      ],
+      [
+        "농소1동",
+        1
+      ],
+      [
+        "농소2동",
+        1
+      ],
+      [
+        "농소3동",
+        1
+      ],
+      [
+        "다운동",
+        1
+      ],
+      [
+        "달동",
+        1
+      ],
+      [
+        "대송동",
+        1
+      ],
+      [
+        "대현동",
+        1
+      ],
+      [
+        "두동면",
+        1
+      ],
+      [
+        "두서면",
+        1
+      ],
+      [
+        "무거동",
+        1
+      ],
+      [
+        "반구1동",
+        1
+      ],
+      [
+        "반구2동",
+        1
+      ],
+      [
+        "방어동",
+        1
+      ],
+      [
+        "범서읍",
+        1
+      ],
+      [
+        "병영1동",
+        1
+      ],
+      [
+        "병영2동",
+        1
+      ],
+      [
+        "복산동",
+        1
+      ],
+      [
+        "삼남읍",
+        1
+      ],
+      [
+        "삼동면",
+        1
+      ],
+      [
+        "삼산동",
+        1
+      ],
+      [
+        "삼호동",
+        1
+      ],
+      [
+        "상북면",
+        1
+      ],
+      [
+        "서생면",
+        1
+      ],
+      [
+        "선암동",
+        1
+      ],
+      [
+        "성안동",
+        1
+      ],
+      [
+        "송정동",
+        1
+      ],
+      [
+        "수암동",
+        1
+      ],
+      [
+        "신정1동",
+        1
+      ],
+      [
+        "신정2동",
+        1
+      ],
+      [
+        "신정3동",
+        1
+      ],
+      [
+        "신정4동",
+        1
+      ],
+      [
+        "신정5동",
+        1
+      ],
+      [
+        "야음장생포동",
+        1
+      ],
+      [
+        "약사동",
+        1
+      ],
+      [
+        "양정동",
+        1
+      ],
+      [
+        "언양읍",
+        1
+      ]
+    ],
+    "busan_ind": [
+      {
+        "name": "공공시설구역",
+        "kind": "일반산업단지",
+        "code": "26380"
+      },
+      {
+        "name": "기룡2일반산업단지",
+        "kind": "지방산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "기룡지방산업단지",
+        "kind": "지방산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "기장대우일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "녹지구역",
+        "kind": "일반산업단지",
+        "code": "26380"
+      },
+      {
+        "name": "동남권 방사선 의.과학 일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "명례일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "명지국가산업단지",
+        "kind": "국가산업단지",
+        "code": "26440"
+      },
+      {
+        "name": "모라도시첨단산업단지",
+        "kind": "도시첨단산업단지",
+        "code": "26530"
+      },
+      {
+        "name": "반룡일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "부산신소재일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "부산신항 국제산업물류도시(1단계)일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26440"
+      },
+      {
+        "name": "부산신항 국제산업물류지구",
+        "kind": "일반산업단지",
+        "code": "26440"
+      },
+      {
+        "name": "부산신항배후 국제물류도시(1단계)일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26440"
+      },
+      {
+        "name": "사상재생사업지구(일반산업단지)",
+        "kind": "재생사업지구",
+        "code": "26530"
+      },
+      {
+        "name": "센텀2지구 도시첨단산업단지",
+        "kind": "도시첨단산업단지",
+        "code": "26350"
+      },
+      {
+        "name": "신호지방산업단지",
+        "kind": "지방산업단지",
+        "code": "26440"
+      },
+      {
+        "name": "에코장안일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "오리일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "장안일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "정관코리일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26710"
+      },
+      {
+        "name": "지사2일반산업단지",
+        "kind": "일반산업단지",
+        "code": "26440"
+      }
+    ],
+    "busan_ind_kind": [
+      [
+        "일반산업단지",
+        114
+      ],
+      [
+        "지방산업단지",
+        6
+      ],
+      [
+        "도시첨단산업단지",
+        5
+      ],
+      [
+        "국가산업단지",
+        2
+      ],
+      [
+        "산업단지미분류",
+        1
+      ],
+      [
+        "농공단지",
+        1
+      ],
+      [
+        "재생사업지구",
+        1
+      ]
+    ]
+  },
+  "count": 100,
+  "questions": [
+    {
+      "id": "N001",
+      "category": "안내",
+      "q": "너는 무슨 일을 해?",
+      "map_eligible": false
+    },
+    {
+      "id": "N002",
+      "category": "안내",
+      "q": "사용 방법을 간단히 알려줘",
+      "map_eligible": false
+    },
+    {
+      "id": "N003",
+      "category": "안내",
+      "q": "어떤 질문을 하면 돼?",
+      "map_eligible": false
+    },
+    {
+      "id": "N004",
+      "category": "범위외",
+      "q": "내일 부산 강수량 예보 알려줘",
+      "map_eligible": false
+    },
+    {
+      "id": "N005",
+      "category": "범위외",
+      "q": "김해공항 항공편 지연 현황은?",
+      "map_eligible": false
+    },
+    {
+      "id": "N006",
+      "category": "범위외",
+      "q": "달러 환율이 얼마야?",
+      "map_eligible": false
+    },
+    {
+      "id": "N007",
+      "category": "범위외",
+      "q": "오늘 점심 메뉴 추천해줘",
+      "map_eligible": false
+    },
+    {
+      "id": "N008",
+      "category": "메타",
+      "q": "보유한 공간 데이터셋이 뭐가 있어?",
+      "map_eligible": false
+    },
+    {
+      "id": "N009",
+      "category": "메타",
+      "q": "GIS건물통합정보가 어떤 자료야?",
+      "map_eligible": false
+    },
+    {
+      "id": "N010",
+      "category": "메타",
+      "q": "용도별건물공간정보는 어디 구까지 있어?",
+      "map_eligible": false
+    },
+    {
+      "id": "N011",
+      "category": "메타",
+      "q": "A16 컬럼은 무슨 뜻이야?",
+      "map_eligible": false
+    },
+    {
+      "id": "N012",
+      "category": "메타",
+      "q": "연면적은 어떤 속성에 있어?",
+      "map_eligible": false
+    },
+    {
+      "id": "N013",
+      "category": "메타",
+      "q": "지상층 컬럼 이름이 뭐야?",
+      "map_eligible": false
+    },
+    {
+      "id": "N014",
+      "category": "메타",
+      "q": "기초구역 테이블에 어떤 컬럼이 있어?",
+      "map_eligible": false
+    },
+    {
+      "id": "N015",
+      "category": "메타",
+      "q": "산업단지 자료의 기준일은?",
+      "map_eligible": false
+    },
+    {
+      "id": "N016",
+      "category": "메타",
+      "q": "법정동명과 행정동명의 차이가 뭐야?",
+      "map_eligible": false
+    },
+    {
+      "id": "N017",
+      "category": "건수",
+      "q": "대연동 건물이 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N018",
+      "category": "건수",
+      "q": "문현동에는 건물이 얼마나 있어?",
+      "map_eligible": true
+    },
+    {
+      "id": "N019",
+      "category": "건수",
+      "q": "광안동 건물 수는?",
+      "map_eligible": true
+    },
+    {
+      "id": "N020",
+      "category": "건수",
+      "q": "반송동 건축물 몇 동이야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N021",
+      "category": "건수",
+      "q": "구포동 건물 건수를 알려줘",
+      "map_eligible": true
+    },
+    {
+      "id": "N022",
+      "category": "건수",
+      "q": "감천동에 있는 건물은 몇 개야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N023",
+      "category": "건수",
+      "q": "장림동 건물 채수는?",
+      "map_eligible": true
+    },
+    {
+      "id": "N024",
+      "category": "건수",
+      "q": "동삼동 건물은 몇 채 있나요?",
+      "map_eligible": true
+    },
+    {
+      "id": "N025",
+      "category": "건수",
+      "q": "반여동 건물 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N026",
+      "category": "모호",
+      "q": "중앙동 건물 몇 채야?",
+      "map_eligible": false
+    },
+    {
+      "id": "N027",
+      "category": "모호",
+      "q": "신흥동 건물은?",
+      "map_eligible": false
+    },
+    {
+      "id": "N028",
+      "category": "구조",
+      "q": "광안동의 철근콘크리트 구조물은?",
+      "map_eligible": true
+    },
+    {
+      "id": "N029",
+      "category": "건물명",
+      "q": "엘시티의 높이와 층수는?",
+      "map_eligible": false
+    },
+    {
+      "id": "N030",
+      "category": "오탐방지",
+      "q": "자동문의 종류를 설명해줘",
+      "map_eligible": false
+    },
+    {
+      "id": "N031",
+      "category": "구군",
+      "q": "남구 건물 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N032",
+      "category": "구군",
+      "q": "강서구 건물은 얼마나 되나요?",
+      "map_eligible": true
+    },
+    {
+      "id": "N033",
+      "category": "구군",
+      "q": "영도구 건물 수는?",
+      "map_eligible": true
+    },
+    {
+      "id": "N034",
+      "category": "구군",
+      "q": "북구 건축물 몇 동이야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N035",
+      "category": "구군",
+      "q": "부산진구 건물 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N036",
+      "category": "전역",
+      "q": "부산시 전체 건물 수는?",
+      "map_eligible": true
+    },
+    {
+      "id": "N037",
+      "category": "전역",
+      "q": "부산광역시 공동주택은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N038",
+      "category": "전역",
+      "q": "부산에서 공장은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N039",
+      "category": "용도",
+      "q": "대연동 공동주택은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N040",
+      "category": "용도",
+      "q": "광안동 숙박시설은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N041",
+      "category": "용도",
+      "q": "장림동 공장은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N042",
+      "category": "용도",
+      "q": "남구 창고시설은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N043",
+      "category": "용도",
+      "q": "영도구 종교시설은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N044",
+      "category": "용도",
+      "q": "북구 교육연구시설은 몇 개야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N045",
+      "category": "용도",
+      "q": "부산진구 제2종근린생활시설은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N046",
+      "category": "용도",
+      "q": "강서구 자동차관련시설은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N047",
+      "category": "행정동",
+      "q": "대연3동 안에 있는 건물 건수는?",
+      "map_eligible": true
+    },
+    {
+      "id": "N048",
+      "category": "행정동",
+      "q": "광안2동 건물 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N049",
+      "category": "행정동",
+      "q": "우1동 안에 있는 건물은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N050",
+      "category": "행정동",
+      "q": "문현1동 건물 수는?",
+      "map_eligible": true
+    },
+    {
+      "id": "N051",
+      "category": "행정동",
+      "q": "구포1동 건물 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N052",
+      "category": "행정동",
+      "q": "감천1동 안에 있는 건물 건수는?",
+      "map_eligible": true
+    },
+    {
+      "id": "N053",
+      "category": "행정동",
+      "q": "반여1동 아파트는 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N054",
+      "category": "행정동",
+      "q": "대연1동 공동주택은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N055",
+      "category": "임계",
+      "q": "남구에서 건물 높이가 30미터 이상인 건물은 몇 개야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N056",
+      "category": "임계",
+      "q": "광안동에서 높이가 20미터를 넘는 건물은?",
+      "map_eligible": true
+    },
+    {
+      "id": "N057",
+      "category": "임계",
+      "q": "북구에서 지상층이 12층 이상인 건물은 몇 개야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N058",
+      "category": "임계",
+      "q": "우동에서 지상층이 20층 넘는 건물은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N059",
+      "category": "임계",
+      "q": "대연동에서 연면적 500 이상인 건물 수는?",
+      "map_eligible": true
+    },
+    {
+      "id": "N060",
+      "category": "임계",
+      "q": "문현동에서 연면적 80평 이상인 건물은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N061",
+      "category": "임계",
+      "q": "강서구에서 건물면적이 200제곱미터 이상인 공장은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N062",
+      "category": "임계",
+      "q": "영도구에서 높이가 15미터 미만인 건물은 몇 개야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N063",
+      "category": "순위",
+      "q": "광안동에서 연면적이 가장 큰 숙박시설은?",
+      "map_eligible": true,
+      "session": "rank_gwang"
+    },
+    {
+      "id": "N064",
+      "category": "후속",
+      "q": "그 건물 높이는?",
+      "map_eligible": false,
+      "session": "rank_gwang"
+    },
+    {
+      "id": "N065",
+      "category": "순위",
+      "q": "남구에서 건물면적이 가장 큰 공동주택은?",
+      "map_eligible": true,
+      "session": "rank_nam"
+    },
+    {
+      "id": "N066",
+      "category": "후속",
+      "q": "지번 알려줘",
+      "map_eligible": false,
+      "session": "rank_nam"
+    },
+    {
+      "id": "N067",
+      "category": "순위",
+      "q": "장림동에서 가장 높은 공장은?",
+      "map_eligible": true
+    },
+    {
+      "id": "N068",
+      "category": "순위",
+      "q": "우동에서 지상층이 가장 많은 건물은?",
+      "map_eligible": true
+    },
+    {
+      "id": "N069",
+      "category": "비교",
+      "q": "엘시티랑 엘크루 블루오션 중에 더 높은 건물은?",
+      "map_eligible": false
+    },
+    {
+      "id": "N070",
+      "category": "비교",
+      "q": "부산대학교와 부경대학교 건물 수를 비교해줘",
+      "map_eligible": false
+    },
+    {
+      "id": "N071",
+      "category": "프로필",
+      "q": "광안동 숙박시설의 특징은?",
+      "map_eligible": false
+    },
+    {
+      "id": "N072",
+      "category": "프로필",
+      "q": "장림동 공장 동네는 어떤 느낌이야?",
+      "map_eligible": false
+    },
+    {
+      "id": "N073",
+      "category": "프로필",
+      "q": "대연동 공동주택을 요약해줘",
+      "map_eligible": false
+    },
+    {
+      "id": "N074",
+      "category": "비교",
+      "q": "대연동이랑 문현동 건물 규모를 비교해줘",
+      "map_eligible": false
+    },
+    {
+      "id": "N075",
+      "category": "비교",
+      "q": "남구와 영도구 아파트 특징 비교",
+      "map_eligible": false
+    },
+    {
+      "id": "N076",
+      "category": "주관",
+      "q": "우동에서 제일 괜찮은 아파트는?",
+      "map_eligible": false
+    },
+    {
+      "id": "N077",
+      "category": "주관",
+      "q": "광안동에서 살기 좋은 공동주택은?",
+      "map_eligible": false
+    },
+    {
+      "id": "N078",
+      "category": "주관",
+      "q": "다대동 바닷가 쪽 예쁜 건물 알려줘",
+      "map_eligible": false
+    },
+    {
+      "id": "N079",
+      "category": "공간",
+      "q": "대연3동과 교차하는 기초구역은 몇 개야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N080",
+      "category": "공간",
+      "q": "남구 기초구역 개수는?",
+      "map_eligible": false
+    },
+    {
+      "id": "N081",
+      "category": "공간",
+      "q": "광안2동 주변 100m 안에 있는 건물 건수는?",
+      "map_eligible": true
+    },
+    {
+      "id": "N082",
+      "category": "공간",
+      "q": "좌표(129.12, 35.15)에서 200미터 이내 건물 건수",
+      "map_eligible": true
+    },
+    {
+      "id": "N083",
+      "category": "공간",
+      "q": "반여동에 있는 건물이 반여1동과 반여2동에 몇 퍼센트씩 있는가?",
+      "map_eligible": false
+    },
+    {
+      "id": "N084",
+      "category": "공간",
+      "q": "우동과 교차하는 기초구역 목록",
+      "map_eligible": true
+    },
+    {
+      "id": "N085",
+      "category": "공간",
+      "q": "북구 기초구역 면적이 가장 큰 것은?",
+      "map_eligible": false
+    },
+    {
+      "id": "N086",
+      "category": "산업단지",
+      "q": "사하구 산업단지는 몇 개야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N087",
+      "category": "산업단지",
+      "q": "강서구 산업단지 이름을 알려줘",
+      "map_eligible": false
+    },
+    {
+      "id": "N088",
+      "category": "산업단지",
+      "q": "장림동 산업단지 안에 있는 건물은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N089",
+      "category": "산업단지",
+      "q": "부산 일반산업단지는 몇 개야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N090",
+      "category": "산업단지",
+      "q": "사하구 산업단지와 교차하는 기초구역은 몇 개야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N091",
+      "category": "산업단지",
+      "q": "감천동 공장 중에서 산업단지 안에 있는 것은?",
+      "map_eligible": true
+    },
+    {
+      "id": "N092",
+      "category": "산업단지",
+      "q": "명지국가산업단지 안에 있는 건물은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N093",
+      "category": "연도",
+      "q": "금정구 각년도별 단독주택 건립 수는?",
+      "map_eligible": false,
+      "session": "year_guseo"
+    },
+    {
+      "id": "N094",
+      "category": "후속",
+      "q": "3년 단위로 묶어줘",
+      "map_eligible": false,
+      "session": "year_guseo"
+    },
+    {
+      "id": "N095",
+      "category": "연도",
+      "q": "동래구 상업용 건물 연도별 수는?",
+      "map_eligible": false
+    },
+    {
+      "id": "N096",
+      "category": "구간",
+      "q": "금정구 주거용 연면적 크기별 수는?",
+      "map_eligible": false
+    },
+    {
+      "id": "N097",
+      "category": "연도",
+      "q": "안락동에서 지어진지 30년 넘은 건물은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N098",
+      "category": "연도",
+      "q": "사직동 아파트 중 2000년 이후 사용승인된 것은?",
+      "map_eligible": true
+    },
+    {
+      "id": "N099",
+      "category": "연도",
+      "q": "남산동에서 오래된 단독주택은 몇 채야?",
+      "map_eligible": true
+    },
+    {
+      "id": "N100",
+      "category": "연도",
+      "q": "동래구 집합건축물 중 허가일자가 1990년대인 것은 몇 채야?",
+      "map_eligible": true
+    }
+  ]
+}

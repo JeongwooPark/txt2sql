@@ -80,6 +80,10 @@ from llm2sql.route_dispatch import (
 from llm2sql.router_lexicon import map_unknown_to_router
 from llm2sql.session import SessionContext
 from llm2sql.semantic_plan import run_semantic_plan
+from llm2sql.semantic_plan.followup import (
+    is_semantic_plan_followup,
+    merge_followup_plan,
+)
 
 _AGE_REPLY_HINTS = (
     "건축년수",
@@ -966,6 +970,51 @@ def _finish_semantic_query(
     )
 
 
+def _try_semantic_result(
+    question: str,
+    settings: Settings,
+    progress: ProgressTracker,
+    *,
+    semantic: dict[str, Any],
+    on_token: TokenCallback | None,
+    shadow_message: str,
+) -> dict[str, Any] | None:
+    """hybrid면 SQP 결과를 반환하고, fallback/shadow면 None으로 다음 경로를 탄다."""
+    if settings.semantic_plan_mode == "hybrid":
+        if semantic.get("needs_clarification"):
+            progress.emit("clarify", "Semantic Plan 확인 요청")
+            emit_text_chunks(str(semantic.get("answer") or ""), on_token)
+            return _payload(
+                answer=semantic.get("answer"),
+                route=semantic.get("route") or "semantic_plan_clarify",
+                semantic_plan=semantic.get("semantic_plan"),
+                ambiguous_terms=list(
+                    (semantic.get("semantic_plan") or {}).get("ambiguities") or []
+                ),
+            )
+        if semantic.get("ok") and not semantic.get("fallback"):
+            return _finish_semantic_query(
+                question,
+                settings,
+                progress,
+                semantic=semantic,
+                on_token=on_token,
+            )
+        progress.emit(
+            "route",
+            "Semantic Plan fallback → RAG+LLM: "
+            f"{semantic.get('fallback_reason')}",
+        )
+        return None
+    progress.emit(
+        "plan",
+        shadow_message,
+        semantic_ok=semantic.get("ok"),
+        fallback_reason=semantic.get("fallback_reason"),
+    )
+    return None
+
+
 def _ask_inner(
     question: str,
     settings: Settings,
@@ -977,6 +1026,45 @@ def _ask_inner(
     on_token: TokenCallback | None = None,
     preferred_intent: IntentPrediction | None = None,
 ) -> dict[str, Any]:
+    if (
+        session is not None
+        and settings.semantic_plan_mode in {"shadow", "hybrid"}
+        and is_semantic_plan_followup(question, session)
+    ):
+        base_plan = session.last_semantic_plan
+        if base_plan is None:
+            from llm2sql.semantic_plan.generator import try_heuristic_plan
+
+            heur = try_heuristic_plan(
+                session.last_full_question or session.last_question or ""
+            )
+            if heur is not None and not heur.requires_clarification:
+                base_plan = heur.model_dump()
+        if base_plan:
+            merged = merge_followup_plan(question, base_plan)
+            if merged is not None:
+                progress.emit("route", "Semantic Plan 후속 delta")
+                semantic = run_semantic_plan(
+                    question,
+                    settings,
+                    conn=conn,
+                    ollama_client=ollama_client,
+                    session=session,
+                    progress=progress,
+                    execute=settings.semantic_plan_mode == "hybrid",
+                    plan=merged,
+                )
+                finished = _try_semantic_result(
+                    question,
+                    settings,
+                    progress,
+                    semantic=semantic,
+                    on_token=on_token,
+                    shadow_message="Semantic Plan follow-up shadow 완료",
+                )
+                if finished is not None:
+                    return finished
+
     if session is not None:
         subset = try_subset_followup(question, session)
         if subset is not None:
@@ -1207,38 +1295,16 @@ def _ask_inner(
             progress=progress,
             execute=settings.semantic_plan_mode == "hybrid",
         )
-        if settings.semantic_plan_mode == "hybrid":
-            if semantic.get("needs_clarification"):
-                progress.emit("clarify", "Semantic Plan 확인 요청")
-                emit_text_chunks(str(semantic.get("answer") or ""), on_token)
-                return _payload(
-                    answer=semantic.get("answer"),
-                    route=semantic.get("route") or "semantic_plan_clarify",
-                    semantic_plan=semantic.get("semantic_plan"),
-                    ambiguous_terms=list(
-                        (semantic.get("semantic_plan") or {}).get("ambiguities") or []
-                    ),
-                )
-            if semantic.get("ok") and not semantic.get("fallback"):
-                return _finish_semantic_query(
-                    question,
-                    settings,
-                    progress,
-                    semantic=semantic,
-                    on_token=on_token,
-                )
-            progress.emit(
-                "route",
-                "Semantic Plan fallback → RAG+LLM: "
-                f"{semantic.get('fallback_reason')}",
-            )
-        else:
-            progress.emit(
-                "plan",
-                "Semantic Plan shadow 완료",
-                semantic_ok=semantic.get("ok"),
-                fallback_reason=semantic.get("fallback_reason"),
-            )
+        finished = _try_semantic_result(
+            question,
+            settings,
+            progress,
+            semantic=semantic,
+            on_token=on_token,
+            shadow_message="Semantic Plan shadow 완료",
+        )
+        if finished is not None:
+            return finished
 
     progress.emit("route", "라우트 미매칭 → RAG+LLM 경로")
     rag = run_rag_sql(

@@ -88,9 +88,16 @@ def execute_query(
 ) -> list[dict[str, Any]]:
     assert_readonly_sql(sql)
     sql = ensure_limit(sql, default_limit=default_limit)
-    with conn.cursor() as cur:
-        cur.execute(sql)
-        if cur.description is None:
-            return []
-        rows = list(cur.fetchall())
-        return [_sanitize_row(dict(r)) for r in rows]
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            if cur.description is None:
+                return []
+            rows = list(cur.fetchall())
+            return [_sanitize_row(dict(r)) for r in rows]
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise

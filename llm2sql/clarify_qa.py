@@ -425,6 +425,16 @@ def check_ambiguity(
             answer=_vague_guidance(q, vague_hits),
         )
 
+    from llm2sql.domain import is_vague_age_threshold
+
+    if is_vague_age_threshold(q):
+        return ClarifyAnswer(
+            intent="clarify_vague",
+            ambiguous_terms=["오래된"],
+            options=[],
+            answer=_age_threshold_guidance(q),
+        )
+
     place = extract_place(q)
     gu_name = extract_gu(q)
 
@@ -650,6 +660,30 @@ def _vague_guidance(q: str, vague_hits: list[str]) -> str:
             ]
         )
     return "\n".join(lines)
+
+
+def _age_threshold_guidance(q: str) -> str:
+    from llm2sql.domain import d198_coverage_label, extract_gu, has_batchim
+
+    place = extract_place(q) or extract_gu(q) or "해당 지역"
+    if "단독" in q:
+        usage = "단독주택"
+    elif "아파트" in q or "공동주택" in q:
+        usage = "아파트(공동주택)"
+    else:
+        usage = "건물"
+    label = d198_coverage_label()
+    eun = "은" if has_batchim(usage) else "는"
+    return "\n".join(
+        [
+            "「오래된」은 주관적인 표현이라 몇 년이 지났는지를 숫자로 정해야 합니다.",
+            f"건축 경과년수는 사용승인일 기준으로 조회하며, 현재 자료는 {label} "
+            "용도별건물입니다.",
+            "예:",
+            f"- {place} {usage} 중 사용승인 후 30년 이상인 건수는?",
+            f"- {place}에서 가장 오래된 {usage}{eun}?",
+        ]
+    )
 
 
 def _lookup_places(
