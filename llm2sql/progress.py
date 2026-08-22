@@ -27,7 +27,11 @@ class ProgressTracker:
             "elapsed_ms": elapsed_ms,
         }
         if extra:
-            item["detail"] = {k: v for k, v in extra.items() if v is not None}
+            from llm2sql.observability import mask_mapping
+
+            item["detail"] = mask_mapping(
+                {k: v for k, v in extra.items() if v is not None}
+            )
         self.steps.append(item)
         if self.on_step is not None:
             self.on_step(stage, message, item.get("detail"))

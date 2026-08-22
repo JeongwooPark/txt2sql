@@ -15,6 +15,7 @@
 | 10-14 | DONE | semantic_catalog, linking, join edges, eval_schema_linking | 77 passed | holdout Recall gate NOT_PASSED (목표 미완화) | `feat(catalog): [STEP-10] externalize semantic catalog and source bindings` | labeled holdout 부재 | STEP-15 |
 | 15-18 | DONE | Plan-SQL sqlglot 동등성, result shape, hard-query selector | 81 passed | silent-error fixture 탐지 4/4, Phase3 unit gate PASSED | `feat(sql-verifier): [STEP-15] verify plan and SQL AST equivalence` | live gold 미달로 hybrid 금지 | STEP-19 |
 | 19-22 | DONE | PostGIS policy, canonical join, Plan event log | 87 passed | unit spatial+4-turn PASSED | `feat(spatial): [STEP-19] map spatial relations by explicit policy` | live spatial accuracy 미측정, hybrid 금지 | STEP-23 |
+| 23-25 | DONE | 모델 pin, 트레이스 마스킹, A–E 비교, 문서 | 90 passed | hybrid 미승격, shadow 유지 | `chore(obs): [STEP-23] pin models and mask query traces` | gold/holdout 미달 | STEP-26 |
 
 ## STEP-00
 
@@ -49,3 +50,9 @@
 - followup event: add/replace/remove/negate_filter, change_scope/order/limit, undo_last, reset_to_base. PlanDelta는 migration 유지
 - 87 passed. 태그 `sqp-v11-phase-4`
 - hybrid 승격은 STEP-24에서만 판단
+
+## STEP-23~25
+
+- 역할별 `OLLAMA_PLAN_MODEL` pin, 공식 벤치 `:latest` 거부, progress 트레이스 마스킹
+- A–E 비교 결과 hybrid 미승격. 기본값 `shadow` 유지. 태그 `sqp-v11-ready` 미생성
+- 문서: migration / rollback / rollout report, README·작동방식 기본값 shadow

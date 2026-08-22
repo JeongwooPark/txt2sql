@@ -19,6 +19,8 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 |------|------|
 | `docs/작동방식_및_알고리즘.md` | 0.2.2 파이프라인 시나리오 |
 | `docs/Semantic_Query_Plan_구현.md` | SQP MVP 명세 |
+| `docs/implementation/sqp_v11_migration.md` | v1.1 shadow 적용 |
+| `docs/implementation/sqp_v11_rollback.md` | `off`로 되돌리기 |
 | `docs/고도화_llm2_geodb_to_llm2sql.md` | llm2_geodb 대비 고도화 |
 | `docs/RND_자연어GIS질의_알고리즘_연구결과보고서.md` | 0.1.4 알고리즘 기록 + 0.2.2 SQP 보론 |
 
@@ -137,10 +139,15 @@ uv run python scripts/refresh_schema_catalog.py   # 스키마 임베딩 갱신 �
 | `MAP_WFS_MAX_FEATURES` | 이보다 많으면 WFS 대신 WMS | `5000` |
 | `MAP_RETENTION_HOURS` | `temp_*` 레이어 TTL | `24` |
 | `MAP_MAX_ANALYSIS_LAYERS` | 세션당 분석결과 레이어 상한 | `8` |
-| `SEMANTIC_PLAN_MODE` | 라우터 미적중 시 SQP `off` / `shadow` / `hybrid` | `off` |
+| `SEMANTIC_PLAN_MODE` | 라우터 미적중 시 SQP `off` / `shadow` / `hybrid` | `shadow` |
+| `SEMANTIC_PLAN_VERSION` | Plan 스키마 버전 | `1.1` |
 | `SEMANTIC_PLAN_MAX_RETRIES` | Plan JSON repair 횟수 | `1` |
 | `SEMANTIC_PLAN_MIN_QUALITY` | 이 점수 미만이면 RAG로 fallback | `0.85` |
+| `SEMANTIC_PLAN_MIN_CONTRACT_COVERAGE` | heuristic 채택에 필요한 slot coverage | `1.0` |
+| `SEMANTIC_PLAN_MIN_SLOT_CONFIDENCE` | slot 신뢰 하한. 미달이면 실행 금지 | `0.85` |
 | `SEMANTIC_PLAN_DEBUG` | `plan_quality` 등 디버그 필드 | `false` |
+| `OLLAMA_PLAN_MODEL` | SQP planner 모델. 비우면 `OLLAMA_MODEL` | (없음) |
+| `OLLAMA_PLAN_DIGEST` | 공식 벤치용 planner digest pin | (없음) |
 
 자격 증명은 `.env`만 사용합니다. 저장소에 비밀번호를 커밋하지 마세요.
 
@@ -576,7 +583,10 @@ llm2sql/
 ## 0.2.2 변경 요약
 
 - **Semantic Query Plan (SQP)**: 규칙 라우터 미적중 질의에 canonical JSON Plan → deterministic SELECT. LLM이 물리 SQL을 직접 쓰지 않음
-- **기본 off**: `SEMANTIC_PLAN_MODE=off` 이면 0.2.1과 동일. `shadow`는 생성만, `hybrid`는 실행 후 실패 시 기존 RAG로 fallback
+- **기본 shadow**: `SEMANTIC_PLAN_MODE` 기본값은 `shadow`. 사용자 답에는 SQP SQL을 넣지 않는다. `hybrid` 승격은 Phase gate 전부 통과 후에만 (`docs/implementation/sqp_v11_rollout_report.md`)
+- **의미 게이트**: 부분 Plan 자동 실행 금지, Plan-SQL 동등성, 공간 관계는 `spatial_policy.py`가 함수를 고른다
+- **후속**: BasePlan + event log (`undo_last` / `reset_to_base`). 기존 Plan delta API는 유지
+- **롤백**: `SEMANTIC_PLAN_MODE=off`. 절차는 `docs/implementation/sqp_v11_rollback.md`
 - **복합질의 위임**: 높이+연면적, 공간+수치, 구조+순위처럼 조건이 겹치면 라우터가 일부만 먹지 않고 SQP로 넘김. 단일 건수·순위는 라우터 우선
 - **공간**: 행정동 `ST_Intersects`, 동 경계 `ST_DWithin`. 역·POI는 확인질문
 - **후속**: Plan delta(`add_filter` / `change_limit` / `add_select`). 직전 D010 결과에도 적용. 「이상만」은 차트 필터가 아님

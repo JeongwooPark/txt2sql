@@ -52,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--verified-only", action="store_true")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--official", action="store_true")
     args = parser.parse_args(argv)
 
     from llm2sql.evaluation.jsonl import load_jsonl
@@ -87,8 +88,25 @@ def main(argv: list[str] | None = None) -> int:
 
     from llm2sql import Llm2SqlEngine
     from llm2sql.config import load_settings
+    from llm2sql.observability import official_benchmark_allowed
 
     settings = load_settings().with_overrides(semantic_plan_mode=args.mode)
+    if args.official:
+        allowed, why = official_benchmark_allowed(
+            settings.planner_model(), settings.ollama_embed_model
+        )
+        if not allowed:
+            payload = {
+                "summary": {"name": "eval_nl2sql", "env_blocked": True, "error": why},
+                "items": [],
+                "block_reason": why,
+            }
+            text = json.dumps(payload, ensure_ascii=False, indent=2)
+            if args.out:
+                args.out.parent.mkdir(parents=True, exist_ok=True)
+                args.out.write_text(text, encoding="utf-8")
+            print(text)
+            return 2
     engine = Llm2SqlEngine.from_settings(settings)
     items = []
     errors: Counter[str] = Counter()

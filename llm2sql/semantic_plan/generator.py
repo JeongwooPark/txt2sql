@@ -384,7 +384,7 @@ def _generate_with_llm(
     retries = max(0, int(settings.semantic_plan_max_retries))
     schema = SemanticQueryPlan.model_json_schema()
     raw = chat(
-        model=settings.ollama_model,
+        model=settings.planner_model(),
         messages=messages,
         host=settings.ollama_host if ollama_client is None else None,
         client=ollama_client,
@@ -407,7 +407,7 @@ def _generate_with_llm(
             },
         ]
         repaired = chat(
-            model=settings.ollama_model,
+            model=settings.planner_model(),
             messages=repair_messages,
             host=settings.ollama_host if ollama_client is None else None,
             client=ollama_client,

@@ -1,0 +1,117 @@
+{
+  "variants": {
+    "A": {
+      "label": "off",
+      "semantic_plan_mode": "off",
+      "ran": false,
+      "note": "baseline 0.2.2 path"
+    },
+    "B": {
+      "label": "hybrid_0.2.2",
+      "semantic_plan_mode": "hybrid",
+      "ran": false,
+      "note": "pre-v1.1 hybrid not re-run as default"
+    },
+    "C": {
+      "label": "plan11_verifier",
+      "semantic_plan_mode": "shadow",
+      "ran": true,
+      "phase1": {
+        "step": "09",
+        "phase1_gate": "NOT_PASSED",
+        "reason": "verified gold exact match is 2/30; OR/NOT/range/field-compare still need later heuristic-v11 binding",
+        "heuristic_eval": {
+          "n": 30,
+          "passed": 2,
+          "failed": 28,
+          "plan_exact_match": 0.0667,
+          "error_counts": {
+            "P05": 3,
+            "P01": 5,
+            "P03": 17,
+            "P04": 8,
+            "P02": 9,
+            "P06": 2,
+            "A02": 1,
+            "A01": 1
+          }
+        },
+        "unit_tests": {
+          "passed": 75,
+          "failed": 0,
+          "skipped": 0
+        },
+        "router_regression": 0,
+        "unsafe_write_block": "unit_covered",
+        "partial_plan_auto_execute": 0,
+        "semantic_plan_mode_default": "shadow",
+        "tag": "deferred_until_gold_gate"
+      }
+    },
+    "D": {
+      "label": "plus_linking",
+      "semantic_plan_mode": "shadow",
+      "ran": true,
+      "phase2": {
+        "schema_recall_at_10": 1.0,
+        "value_recall_at_5": 1.0,
+        "join_path_accuracy": "fixture_only",
+        "gate_passed": false,
+        "note": "Holdout KPI not relaxed. Production Recall@10 gate remains open until labeled holdout exists.",
+        "d010_plus_entities": [
+          "admin_area",
+          "basic_zone",
+          "industrial_complex"
+        ]
+      }
+    },
+    "E": {
+      "label": "plus_candidates",
+      "semantic_plan_mode": "shadow",
+      "ran": true,
+      "phase3": {
+        "silent_error_fixtures": {
+          "P04_or_missing": true,
+          "P04_not_missing": true,
+          "P05_aggregate_changed": true,
+          "P06_order_or_limit": true
+        },
+        "detection_rate": 1.0,
+        "zero_rows_relaxed": false,
+        "simple_router_llm_calls": 0,
+        "hard_query_candidates_only": true,
+        "unit_tests_passed": 81,
+        "gate_passed": true,
+        "note": "Unit fixture detection is 100%. Live SQL/result-hash gold remains Phase 1 incomplete; no hybrid promotion."
+      },
+      "phase4": {
+        "spatial_relation_policies": {
+          "within": "ST_CoveredBy",
+          "covered_by": "ST_CoveredBy",
+          "intersects": "ST_Intersects",
+          "touches": "ST_Touches",
+          "buffer": "ST_DWithin",
+          "nearest": "ST_Distance",
+          "overlap_ratio": "ST_Intersection"
+        },
+        "within_not_bulk_intersects": true,
+        "canonical_join_edges_only": true,
+        "poi_ambiguous_clarifies": true,
+        "four_turn_event_log": true,
+        "unit_tests_passed": 87,
+        "live_spatial_accuracy": "not_measured",
+        "gate_passed": true,
+        "note": "Unit spatial policy and 4-turn event log passed. Live Spatial Relation Accuracy on PostGIS was not measured in this step; hybrid remains blocked by Phase 1 gold."
+      }
+    }
+  },
+  "promote_hybrid": false,
+  "keep_mode": "shadow",
+  "blocked_by": [
+    "phase1_gold",
+    "phase2_holdout",
+    "phase4_live_spatial"
+  ],
+  "official_latest_tag": false,
+  "note": "Do not change SEMANTIC_PLAN_MODE default to hybrid until every promotion KPI passes without ENV_BLOCKED."
+}

@@ -68,6 +68,16 @@ class Settings:
     semantic_plan_min_contract_coverage: float = 1.0
     semantic_plan_min_slot_confidence: float = 0.85
     semantic_plan_debug: bool = False
+    ollama_plan_model: str = ""
+    ollama_chat_model: str = ""
+    ollama_plan_digest: str = ""
+    ollama_embed_digest: str = ""
+
+    def planner_model(self) -> str:
+        return (self.ollama_plan_model or self.ollama_model).strip()
+
+    def chat_model(self) -> str:
+        return (self.ollama_chat_model or self.ollama_model).strip()
 
     def with_overrides(self, **kwargs: object) -> Settings:
         return replace(self, **kwargs)
@@ -243,6 +253,18 @@ class Settings:
                 _pick(data, "semantic_plan_debug", "SEMANTIC_PLAN_DEBUG"),
                 False,
             ),
+            ollama_plan_model=str(
+                _pick(data, "ollama_plan_model", "OLLAMA_PLAN_MODEL", default="")
+            ).strip(),
+            ollama_chat_model=str(
+                _pick(data, "ollama_chat_model", "OLLAMA_CHAT_MODEL", default="")
+            ).strip(),
+            ollama_plan_digest=str(
+                _pick(data, "ollama_plan_digest", "OLLAMA_PLAN_DIGEST", default="")
+            ).strip(),
+            ollama_embed_digest=str(
+                _pick(data, "ollama_embed_digest", "OLLAMA_EMBED_DIGEST", default="")
+            ).strip(),
         )
 
 
