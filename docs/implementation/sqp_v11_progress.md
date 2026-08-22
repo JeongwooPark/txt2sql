@@ -10,6 +10,7 @@
 | 05 | DONE | Predicate AST, v1→v1.1 migration | 63 passed | v1 회귀 0 | `feat(plan): [STEP-05] add semantic plan v1.1 predicate AST` | 없음 | STEP-06 |
 | 06 | DONE | Ollama JSON schema format, parse→v1.1 | 66 passed | - | `feat(plan): [STEP-06] enforce structured plan output and normalization` | Ollama live는 mock과 분리 | STEP-07 |
 | 07 | DONE | predicate 재귀 compiler, field compare, HAVING | 69 passed | injection 차단 | `feat(compiler): [STEP-07] compile predicate AST deterministically` | 없음 | STEP-08 |
+| 08 | DONE | contract verifier, slot confidence | 72 passed | slot 미달 시 실행 금지 | `feat(verifier): [STEP-08] verify contract coverage and slot confidence` | 없음 | STEP-09 |
 
 ## STEP-00
 

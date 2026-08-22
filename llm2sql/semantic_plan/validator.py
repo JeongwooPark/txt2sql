@@ -192,6 +192,15 @@ def validate_semantic_plan(
 
     if errors:
         status = "fallback"
+
+    from llm2sql.semantic_plan.contract_verifier import verify_contract
+
+    verified = verify_contract(question, plan)
+    plan = plan.model_copy(update={"slot_confidence": verified.confidence})
+    if status == "ready" and verified.hard_fail:
+        status = "clarify"
+        errors.extend(verified.reasons)
+        score = min(score, verified.confidence.overall)
     return PlanValidationResult(
         status=status,
         score=max(0.0, min(1.0, score)),
