@@ -67,14 +67,25 @@ def load_name_maps(conn: psycopg.Connection) -> tuple[dict[str, str], dict[str, 
 
 def quote_known_identifiers(sql: str) -> str:
     """미인용 알려진 테이블/컬럼명에 쌍따옴표 부여."""
+    from llm2sql.domain import D198_TABLES
+
     out = sql
-    for name in sorted(_KNOWN_TABLES, key=len, reverse=True):
+    known = list(_KNOWN_TABLES)
+    for name in D198_TABLES:
+        if name not in known:
+            known.append(name)
+    for name in sorted(known, key=len, reverse=True):
         pattern = rf'(?<!["\w]){re.escape(name)}(?!["\w])'
         out = re.sub(pattern, f'"{name}"', out, flags=re.IGNORECASE)
     for name in sorted(_KNOWN_COLUMNS, key=len, reverse=True):
         pattern = rf'(?<!["\w]){re.escape(name)}(?!["\w])'
         out = re.sub(pattern, f'"{name}"', out, flags=re.IGNORECASE)
-    # A0..A99 스타일 속성 컬럼 (대문자 유지 필요)
+    out = re.sub(
+        r'(?<!["\w])(AL_D198_[0-9]+_[0-9]+)(?!["\w])',
+        lambda m: f'"{m.group(1)}"',
+        out,
+        flags=re.IGNORECASE,
+    )
     out = re.sub(
         r'(?<!["\w])(A\d{1,2})(?!["\w])',
         lambda m: f'"{m.group(1).upper()}"',

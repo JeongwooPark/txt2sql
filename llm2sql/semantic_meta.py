@@ -206,11 +206,29 @@ SAMPLE_COLUMNS: dict[str, tuple[str, ...]] = {
 
 
 def table_synonyms(table_name: str) -> tuple[str, ...]:
-    return TABLE_SYNONYMS.get(table_name, ())
+    if table_name in TABLE_SYNONYMS:
+        return TABLE_SYNONYMS[table_name]
+    from llm2sql.domain import gu_from_d198_table
+
+    gu = gu_from_d198_table(table_name)
+    if not gu:
+        return ()
+    stem = gu.replace("구", "").replace("군", "")
+    label = stem if len(stem) >= 2 else gu
+    return (
+        f"{gu} 건물",
+        f"{label} 용도별건물",
+        "사용승인",
+        "건축년수",
+        "용도별건물공간정보",
+    )
 
 
 def column_synonyms(table_name: str, column_name: str) -> tuple[str, ...]:
     specific = COLUMN_SYNONYMS.get(table_name, {}).get(column_name, ())
+    if not specific and table_name.startswith("AL_D198_"):
+        template = COLUMN_SYNONYMS.get("AL_D198_26260_20250115", {})
+        specific = template.get(column_name, ())
     generic = COLUMN_SYNONYMS.get("*", {}).get(column_name, ())
     seen: list[str] = []
     for item in (*specific, *generic):

@@ -25,7 +25,6 @@ from llm2sql.units import (
 
 D198_DONGRAE = "AL_D198_26260_20250115"
 D198_GEUMJEONG = "AL_D198_26410_20250115"
-D198_TABLES: tuple[str, ...] = (D198_DONGRAE, D198_GEUMJEONG)
 
 DATASET_HINTS = ("용도별건물공간정보", "용도별건물", "AL_D198", "D198")
 

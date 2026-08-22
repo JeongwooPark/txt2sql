@@ -197,6 +197,19 @@ class GeoServerClient:
         status, _ = self._request("POST", url, payload)
         return status in {200, 201}
 
+    def ensure_featuretype(
+        self,
+        table_name: str,
+        *,
+        srs: str = "EPSG:4326",
+        title: str | None = None,
+    ) -> bool:
+        """레이어가 없으면 만들고, 이미 있으면 성공으로 본다."""
+        if self.create_featuretype(table_name, table_name, srs=srs, title=title):
+            return True
+        short = {name.split(":")[-1] for name in self.list_workspace_layers()}
+        return table_name in short
+
     def delete_layer(self, layer_name: str) -> bool:
         short = layer_name.split(":")[-1]
         qualified = self.qualified_layer(short)

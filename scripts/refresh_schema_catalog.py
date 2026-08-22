@@ -6,7 +6,9 @@ import argparse
 import sys
 
 from llm2sql.config import load_settings
+from llm2sql.data.coverage import refresh_dataset_coverage
 from llm2sql.db import connect
+from llm2sql.domain import D198_TABLES
 from llm2sql.schema_retriever import upsert_catalog_embedding
 
 SPATIAL_TABLES = [
@@ -31,6 +33,14 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = load_settings()
+    try:
+        refresh_dataset_coverage(settings)
+    except Exception:
+        pass
+    if args.tables == parser.get_default("tables"):
+        tables = list(dict.fromkeys([*SPATIAL_TABLES, *D198_TABLES]))
+    else:
+        tables = list(args.tables)
     with connect(settings.database_url) as conn:
         # 임베딩 차원 확인
         probe = conn.execute(
@@ -47,7 +57,7 @@ def main() -> None:
         print(f"catalog embedding dims: {probe['dims'] if probe else '?'}")
         print(f"embed model: {settings.ollama_embed_model}")
 
-        for table in args.tables:
+        for table in tables:
             print(f"refreshing {table} ...", flush=True)
             upsert_catalog_embedding(
                 conn,

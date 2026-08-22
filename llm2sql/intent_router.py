@@ -95,10 +95,21 @@ def _wants_list(q: str) -> bool:
 
 
 _D010 = "AL_D010_26_20250704"
-_USAGE_KINDS = (
-    ("동래", "usage_kinds_dongrae", "AL_D198_26260_20250115", "동래구"),
-    ("금정", "usage_kinds_geumjeong", "AL_D198_26410_20250115", "금정구"),
-)
+
+
+def _usage_kind_specs() -> list[tuple[str, str, str, str]]:
+    from llm2sql.domain import D198_BY_GU
+
+    specs: list[tuple[str, str, str, str]] = []
+    for gu, table in D198_BY_GU.items():
+        stem = gu.replace("구", "").replace("군", "")
+        key = stem if len(stem) >= 2 else gu
+        specs.append((key, f"usage_kinds_{stem or gu}", table, gu))
+    return specs
+
+
+def _swap_d198_for_d010(sql: str) -> str:
+    return re.sub(r"AL_D198_[0-9]+_[0-9]+", _D010, sql)
 
 
 def _count_sql(intent: str, table: str, where: str) -> RoutedQuery:
@@ -563,7 +574,7 @@ def _route_building_floor_threshold(q: str) -> RoutedQuery | None:
 def _route_usage_kinds(q: str) -> RoutedQuery | None:
     if not (("용도" in q) and ("종류" in q or "몇 가지" in q or "몇가지" in q)):
         return None
-    for key, intent, table, like in _USAGE_KINDS:
+    for key, intent, table, like in _usage_kind_specs():
         if key in q:
             return RoutedQuery(
                 intent,
@@ -863,10 +874,7 @@ def _resolve_d198_table(
     if conn is None or not place:
         return None
     with conn.cursor(row_factory=dict_row) as cur:
-        for tbl in (
-            "AL_D198_26410_20250115",
-            "AL_D198_26260_20250115",
-        ):
+        for tbl in D198_TABLES:
             cur.execute(
                 f"""
                 SELECT 1 AS ok FROM "{tbl}"
@@ -1530,8 +1538,7 @@ def fix_common_sql_mistakes(sql: str, question: str | None = None) -> str:
         sql,
     )
     if "ST_DWithin" in out or "ST_DWITHIN" in out.upper():
-        out = out.replace("AL_D198_26260_20250115", "AL_D010_26_20250704")
-        out = out.replace("AL_D198_26410_20250115", "AL_D010_26_20250704")
+        out = _swap_d198_for_d010(out)
 
     q = (question or "").strip()
     if not q:
@@ -1542,18 +1549,17 @@ def fix_common_sql_mistakes(sql: str, question: str | None = None) -> str:
     if kinds is not None:
         return kinds.sql
 
-    # 동래·금정이 아닌 구/용도 COUNT인데 D198을 쓰면 AL_D010으로 교정
+    # 등록되지 않은 구/용도 COUNT인데 D198을 쓰면 AL_D010으로 교정
     gu = extract_gu(q)
     age_q = looks_like_age_question(q)
     if (
         gu
-        and gu not in ("동래구", "금정구")
+        and d198_table_for_gu(gu) is None
         and not age_q
         and "AL_D198_" in out
         and "주요용도" not in q
     ):
-        out = out.replace("AL_D198_26260_20250115", "AL_D010_26_20250704")
-        out = out.replace("AL_D198_26410_20250115", "AL_D010_26_20250704")
+        out = _swap_d198_for_d010(out)
         # D198 컬럼 → D010 대응 컬럼
         out = re.sub(r'"A25"', '"A9"', out)
         out = re.sub(r'"A19"', '"A14"', out)

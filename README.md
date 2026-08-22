@@ -57,7 +57,7 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 | 안내 | 역할·기능·제한, 범위 외 거절·유도 |
 | 성능 | 고빈도 패턴은 규칙 라우터로 LLM 우회 |
 | 엔진 | `Llm2SqlEngine` (연결·Ollama 재사용, `on_progress` / `on_token`) |
-| 웹 UI | 공통 Head/Bottom · 지도(`/map`) · 채팅(`/`, `/chat`) · 데이터 관리 골격. SSE 스트리밍·차트 |
+| 웹 UI | 공통 Head/Bottom · 지도(`/map`) · 채팅(`/`, `/chat`) · 데이터 관리(업로드·메타데이터) |
 | 지도 | GeoServer WMS(기본)·WFS, KorDB 카탈로그, 분석결과 중첩, Identify·속성 설명 |
 | 레이어 | 출력 레이어에서 z-index 관리, 우클릭 삭제·속성 테이블, 분석 레이어 재사용 |
 
@@ -76,6 +76,7 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
   - 워크스페이스 예: `korDB`, 데이터스토어 예: `KoreaDB`
   - URL이 비어 있으면 **채팅만** 동작하고 지도 발행은 건너뜁니다
 - 브라우저: OpenLayers 7.x · Chart.js는 CDN으로 로드
+- **데이터 관리(Shapefile 업로드)**: GeoPandas. `uv sync`로 설치
 
 ---
 
@@ -200,11 +201,19 @@ uv run llm2sql-web
 
 같은 범위(FROM/WHERE)의 후속·특성 질의는 레이어를 다시 발행하지 않고 기존 분석 레이어를 재사용합니다.
 
-입력은 자연어 채팅만 사용합니다. Spatial SQL 텍스트 영역은 이식하지 않았습니다. shapefile ETL은 **데이터 관리** 메뉴의 골격만 두었습니다.
+입력은 자연어 채팅만 사용합니다. Spatial SQL 텍스트 영역은 이식하지 않았습니다.
 
 ### 데이터 관리
 
-향후 기존 레이어 갱신과 신규 데이터 추가(예: 남구 용도별건물공간정보)를 이 메뉴에서 수행합니다. 0.2.1은 llm2_geodb의 업로드·메타데이터 화면을 참고한 **페이지 골격**이며, 저장·업로드 API는 아직 연결하지 않았습니다. 좌측 목록은 GeoServer KorDB 카탈로그(`/api/map/layers`)를 보여 줍니다.
+Head 메뉴 **데이터 관리**에서 기존 레이어를 갱신하고 신규 데이터를 추가합니다. llm2_geodb의 공간데이터 업로드·메타데이터 화면과 같은 흐름입니다.
+
+| 화면 | 동작 |
+|------|------|
+| `/data/upload` | Shapefile ZIP → PostGIS 테이블(같은 이름이면 덮어씀) → GeoServer `korDB` 레이어 |
+| `/data/metadata` | 공간 테이블 선택 → 한글 표시명·설명·단위 저장 (`table_metadata` / `column_metadata`) |
+| DB 코드 해석 | `AL_D198_26_20250704`처럼 `col_def`·`pnu_def`로 추천 메타데이터 채움 |
+
+채팅 SQL은 읽기 전용입니다. 쓰기는 이 메뉴의 업로드·메타데이터 API만 수행합니다.
 
 ### 채팅·세션
 
@@ -223,6 +232,12 @@ uv run llm2sql-web
 | `GET` | `/` `/chat` | 채팅 전용 HTML |
 | `GET` | `/map` | 지도 HTML |
 | `GET` | `/data` `/data/upload` `/data/metadata` | 데이터 관리 HTML |
+| `GET` | `/api/data/tables` | 공간 테이블 목록 (표시명 포함) |
+| `GET` | `/api/data/tables/{name}/structure` | 컬럼 구조 |
+| `GET` | `/api/data/tables/{name}/metadata` | `table_metadata`·주석 |
+| `GET` | `/api/data/tables/{name}/parse` | AL_ 코드 → 추천 메타데이터 |
+| `POST` | `/api/data/metadata` | 표시명·설명 저장. `new_table_name`이면 테이블명 변경 |
+| `POST` | `/api/data/upload` | Shapefile ZIP (`shapefile` 필드) |
 | `GET` | `/api/health` | 웹 프로세스 상태 |
 | `POST` | `/api/session` | 새 `session_id` |
 | `POST` | `/api/chat` | SSE 질의. `include_map`이 true일 때만 지도 발행 |
@@ -477,9 +492,10 @@ node scripts/test_map_stack.mjs            # 프론트 LayerStack
 llm2sql/
   llm2sql/
     engine.py, types.py, domain.py, pipeline.py
+    data/                # Shapefile 업로드·메타데이터
     map/                 # 발행·GeoServer·레이어 스택·/api/map
     webapp/
-      app.py             # FastAPI SSE + map 라우터
+      app.py             # FastAPI SSE + map/data 라우터
       static/
         index.html       # 채팅 (`/`, `/chat`)
         map.html         # 지도 3분할 (`/map`)
@@ -487,7 +503,7 @@ llm2sql/
         data_upload.html
         data_metadata.html
         js/site.js       # Head 메뉴
-        js/data.js       # KorDB 목록
+        js/data.js       # 데이터 관리 공통
         js/map/          # OpenLayers 코어·레이어 UI·Identify
     rank_compare_qa.py
     guide_qa.py, meta_qa.py, clarify_qa.py
@@ -524,7 +540,7 @@ llm2sql/
 
 - **버전 번호**: 잘못 표기한 1.2를 **0.2**, 1.4를 **0.2.1**로 정정
 - **사이트 프레임**: 모든 웹 화면에 Head(메인 메뉴)와 Bottom 패널. 메뉴는 지도·채팅·데이터 관리
-- **데이터 관리 골격**: `/data`, `/data/upload`, `/data/metadata`. 기존 갱신·신규 추가(남구 용도별건물공간정보 등)는 후속. KorDB 목록만 표시
+- **데이터 관리**: `/data/upload` Shapefile ZIP → PostGIS·GeoServer, `/data/metadata` 한글명·설명 저장. AL_ 코드는 `col_def`/`pnu_def`로 해석. 채팅 경로는 읽기 전용 유지
 - **분석결과 레이어 UI**: 「모두 지우기」를 섹션 맨 아래로 이동해 제목이 한 줄로 유지
 - **지도 고도화**: WMS 기본 + WFS 선택, ImageWMS(분석)/TileWMS(KorDB), KorDB 체크 시 bbox fit, 라벨·SLD
 - **레이어 수명**: 세션당 최대 8개, 새 대화 시 cleanup, 24h TTL. 같은 FROM/WHERE면 후속 질의에서 레이어 재사용
@@ -532,7 +548,7 @@ llm2sql/
 - **채팅 폭**: 지도 화면 기본 600px, 드래그 조절
 - **SQL**: FROM 별칭이 WHERE/ON을 테이블로 오인하던 문제 수정, 건물명 조회 geometry wrap, COUNT→피처, 비교 UNION ALL
 - **설정**: `MAP_MAX_ANALYSIS_LAYERS` 등. 비밀번호는 `.env`만
-- **테스트**: `scripts/test_map_sql.py`, `test_map_layers.py`, `test_map_explain.py`, `scripts/smoke_map.py`
+- **테스트**: `scripts/test_map_sql.py`, `test_map_layers.py`, `test_map_explain.py`, `test_data_admin.py`, `scripts/smoke_map.py`
 
 ---
 

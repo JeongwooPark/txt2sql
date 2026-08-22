@@ -136,11 +136,13 @@ def extract_special_land(question: str) -> tuple[str, str] | None:
         )
     return None
 
-# 구 단위 용도별건물(사용승인·허가일자 보유)
-D198_BY_GU: dict[str, str] = {
+# 구 단위 용도별건물(사용승인·허가일자 보유).
+# DB에 AL_D198_* 가 추가되면 data.coverage 가 런타임에 덮어쓴다.
+D198_BY_GU_DEFAULT: dict[str, str] = {
     "동래구": "AL_D198_26260_20250115",
     "금정구": "AL_D198_26410_20250115",
 }
+D198_BY_GU: dict[str, str] = dict(D198_BY_GU_DEFAULT)
 
 # 건축 경과년수 / 준공·사용승인 관련 표현
 AGE_HINTS = (
@@ -168,10 +170,8 @@ AGE_HINTS = (
     "오래된",
 )
 
-D198_TABLES: tuple[str, ...] = (
-    "AL_D198_26260_20250115",
-    "AL_D198_26410_20250115",
-)
+# 모듈이 `from llm2sql.domain import D198_TABLES` 해도 갱신이 보이게 리스트를 제자리 수정한다.
+D198_TABLES: list[str] = list(D198_BY_GU_DEFAULT.values())
 
 
 # '공동주택'의 '공동' 등 지명이 아닌 ~동 오탐
@@ -794,6 +794,74 @@ def place_a4_predicate(place: str) -> str:
     if place.endswith(("동", "가", "리", "로")):
         return f'("A4" LIKE \'% {place}\' OR "A4" = \'{place}\')'
     return f'"A4" LIKE \'%{place}%\''
+
+
+def gu_from_pnu_code(pnu_code: str) -> str | None:
+    """시군구 PNU(5자리) → 부산 구·군 이름."""
+    code = (pnu_code or "").strip()
+    for name, value in BUSAN_GU_CODES.items():
+        if value == code:
+            return name
+    return None
+
+
+def gu_from_d198_table(table: str) -> str | None:
+    """AL_D198_{시군구코드}_{YYYYMMDD} → 구 이름. 시 단위(26) 등은 None."""
+    from llm2sql.data.names import parse_al_table_name
+
+    parsed = parse_al_table_name((table or "").split(".")[-1])
+    if parsed is None or parsed.get("data_code") != "AL_D198":
+        return None
+    return gu_from_pnu_code(parsed["pnu_code"])
+
+
+def set_d198_coverage(by_gu: dict[str, str]) -> None:
+    """질의 엔진이 쓸 구→D198 테이블 맵을 갱신한다. 빈 dict 는 무시한다."""
+    if not by_gu:
+        return
+    ordered = dict(
+        sorted(
+            by_gu.items(),
+            key=lambda item: BUSAN_GU_CODES.get(item[0], "99999"),
+        )
+    )
+    D198_BY_GU.clear()
+    D198_BY_GU.update(ordered)
+    D198_TABLES.clear()
+    seen: list[str] = []
+    for table in ordered.values():
+        if table not in seen:
+            seen.append(table)
+    D198_TABLES.extend(seen)
+
+
+def reset_d198_coverage() -> None:
+    set_d198_coverage(dict(D198_BY_GU_DEFAULT))
+
+
+def d198_coverage_label(*, joiner: str = "·") -> str:
+    names = list(D198_BY_GU.keys())
+    if not names:
+        return "등록된 구"
+    return joiner.join(names)
+
+
+def d198_gu_matches(question: str, gu: str) -> bool:
+    if gu in question:
+        return True
+    stem = gu.replace("구", "").replace("군", "")
+    return len(stem) >= 2 and stem in question
+
+
+def d198_gu_mentioned(question: str) -> str | None:
+    for gu in D198_BY_GU:
+        if d198_gu_matches(question, gu):
+            return gu
+    return None
+
+
+def d198_gus_mentioned(question: str) -> list[str]:
+    return [gu for gu in D198_BY_GU if d198_gu_matches(question, gu)]
 
 
 def d198_table_for_gu(gu: str | None) -> str | None:

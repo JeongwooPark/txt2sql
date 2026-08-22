@@ -12,7 +12,7 @@ from typing import Literal
 
 import psycopg
 
-from llm2sql.domain import looks_like_building_name_lookup
+from llm2sql.domain import D198_TABLES, looks_like_building_name_lookup
 from llm2sql.intent_router import RoutedQuery, _route_building_rank, try_route
 
 DispatchMode = Literal["baseline", "optimized"]
@@ -50,7 +50,7 @@ def tables_from_sql(sql: str | None) -> list[str]:
 def tables_for_intent(intent: str) -> list[str]:
     d010 = ["AL_D010_26_20250704"]
     d060 = ["AL_D060_00_20250804"]
-    d198 = ["AL_D198_26260_20250115", "AL_D198_26410_20250115"]
+    d198 = list(D198_TABLES)
     bas = ["TL_KODIS_BAS_26_202507"]
     if intent == "buildings_in_industrial":
         return d010 + d060

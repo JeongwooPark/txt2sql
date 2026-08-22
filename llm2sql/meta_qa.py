@@ -9,6 +9,8 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from llm2sql.domain import d198_gu_mentioned, d198_table_for_gu, gu_from_d198_table
+
 # 질문 의도 감지
 _META_HINTS = (
     "뭐야",
@@ -588,10 +590,10 @@ def _resolve_tables(conn: psycopg.Connection, q: str) -> list[str]:
         if display_name and display_name in q:
             hit.append(table_name)
             continue
-        aliases = _TABLE_ALIASES.get(table_name, ())
+        aliases = _table_aliases(table_name)
         for alias in aliases:
             # '건물'만으로는 D010만 잡히므로 아래에서 카테고리 확장
-            if alias in ("건물", "부산 건물", "부산건물") and "동래" not in q and "금정" not in q:
+            if alias in ("건물", "부산 건물", "부산건물") and d198_gu_mentioned(q) is None:
                 continue
             if alias.lower() in q_lower or alias in q:
                 hit.append(table_name)
@@ -603,8 +605,7 @@ def _resolve_tables(conn: psycopg.Connection, q: str) -> list[str]:
     if (
         not specific_hit
         and ("건물" in q or "용도별건물" in q)
-        and "동래" not in q
-        and "금정" not in q
+        and d198_gu_mentioned(q) is None
     ):
         with conn.cursor() as cur:
             cur.execute(
@@ -626,6 +627,19 @@ def _resolve_tables(conn: psycopg.Connection, q: str) -> list[str]:
     return out
 
 
+def _table_aliases(table_name: str) -> tuple[str, ...]:
+    if table_name in _TABLE_ALIASES:
+        return _TABLE_ALIASES[table_name]
+    gu = gu_from_d198_table(table_name)
+    if not gu:
+        return ()
+    stem = gu.replace("구", "").replace("군", "")
+    label = stem if len(stem) >= 2 else gu
+    parts = table_name.split("_")
+    pnu = parts[2] if len(parts) > 2 else ""
+    return (label, gu, f"용도별건물 {label}", f"d198_{pnu}")
+
+
 def _default_tables(conn: psycopg.Connection, q: str) -> list[str]:
     if "산업" in q:
         return ["AL_D060_00_20250804"]
@@ -633,10 +647,11 @@ def _default_tables(conn: psycopg.Connection, q: str) -> list[str]:
         return ["TL_KODIS_BAS_26_202507"]
     if "행정" in q or "동경계" in q:
         return ["BND_ADM_DONG_PG"]
-    if "동래" in q:
-        return ["AL_D198_26260_20250115"]
-    if "금정" in q:
-        return ["AL_D198_26410_20250115"]
+    mentioned = d198_gu_mentioned(q)
+    if mentioned:
+        table = d198_table_for_gu(mentioned)
+        if table:
+            return [table]
     if "건물" in q or "용도" in q:
         with conn.cursor() as cur:
             cur.execute(

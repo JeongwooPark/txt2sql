@@ -75,6 +75,12 @@ class Llm2SqlEngine:
                 self.settings.database_url,
                 row_factory=dict_row,
             )
+            try:
+                from llm2sql.data.coverage import refresh_dataset_coverage
+
+                refresh_dataset_coverage(self.settings)
+            except Exception:
+                pass
 
     @property
     def ollama_client(self) -> Any:

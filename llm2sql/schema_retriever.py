@@ -15,6 +15,14 @@ from llm2sql.semantic_meta import (
 )
 
 
+def _sample_columns(table_name: str) -> tuple[str, ...]:
+    if table_name in SAMPLE_COLUMNS:
+        return SAMPLE_COLUMNS[table_name]
+    if table_name.startswith("AL_D198_"):
+        return ("A4", "A25")
+    return ()
+
+
 # 행정구역/구·동 관련 질문에 강제 포함할 테이블
 _ADMIN_HINT_TABLES = (
     "BND_ADM_DONG_PG",
@@ -113,6 +121,17 @@ _SEARCHABLE_FQNAMES = (
 )
 
 
+def searchable_fqnames() -> list[str]:
+    from llm2sql.domain import D198_TABLES
+
+    names = list(_SEARCHABLE_FQNAMES)
+    for table in D198_TABLES:
+        fq = f"public.{table}"
+        if fq not in names:
+            names.append(fq)
+    return names
+
+
 def search_catalog_tables(
     conn: psycopg.Connection,
     question: str,
@@ -135,7 +154,7 @@ def search_catalog_tables(
         ORDER BY embedding <=> %s::vector
         LIMIT %s
         """,
-        (list(_SEARCHABLE_FQNAMES), lit, top_k),
+        (searchable_fqnames(), lit, top_k),
     ).fetchall()
 
     tables: list[str] = []
@@ -292,10 +311,10 @@ def build_compact_schema(
 
         pk_cols = set(_fetch_pk_columns(conn, table_name))
         fk_lines = _fetch_fk_lines(conn, table_name)
-        sample_cols = set(SAMPLE_COLUMNS.get(table_name, ()))
+        sample_cols = set(_sample_columns(table_name))
         samples: dict[str, list[str]] = {}
         if include_sample_values:
-            for col_name in SAMPLE_COLUMNS.get(table_name, ()):
+            for col_name in _sample_columns(table_name):
                 samples[col_name] = _fetch_sample_values(conn, table_name, col_name)
 
         header = f'# Table: "{table_name}"'
@@ -396,11 +415,13 @@ def retrieve_schema(
     )
     tables = apply_admin_boost(question, tables)
 
-    # 건물 속성 질의: 기본은 AL_D010. D198은 동래/금정·건축년수·주요용도명만.
+    # 건물 속성 질의: 기본은 AL_D010. D198은 등록된 구·건축년수·주요용도명.
+    from llm2sql.domain import D198_BY_GU, D198_TABLES, d198_gu_mentioned, d198_gus_mentioned
+
     building_hints = ("건물", "건축", "연면적", "용도", "공동주택", "아파트", "주택")
     needs_d198 = (
-        "동래" in question
-        or "금정" in question
+        d198_gu_mentioned(question) is not None
+        or "용도별건물" in question
         or "주요용도" in question
         or any(
             k in question
@@ -418,14 +439,11 @@ def retrieve_schema(
         if "AL_D010_26_20250704" not in tables:
             tables.append("AL_D010_26_20250704")
         if needs_d198:
-            for t in (
-                "AL_D198_26260_20250115",
-                "AL_D198_26410_20250115",
-            ):
+            for t in D198_TABLES:
                 if t not in tables:
                     tables.append(t)
         else:
-            # 연제·사하 등 타 구 질의에서 D198로 빠지지 않게 제거
+            # 미등록 구 질의에서 D198로 빠지지 않게 제거
             tables = [t for t in tables if not t.startswith("AL_D198_")]
 
     if "산업단지" in question:
@@ -443,36 +461,28 @@ def retrieve_schema(
 
     # 구별 전용 테이블 우선 + 스키마 힌트
     extra_tips = ""
-    if "금정" in question:
-        if "AL_D198_26410_20250115" in tables:
-            tables = ["AL_D198_26410_20250115"] + [
-                t for t in tables if t != "AL_D198_26410_20250115"
-            ]
-        else:
-            tables.insert(0, "AL_D198_26410_20250115")
-        # 동래구 테이블은 금정 질의에서 제외
-        tables = [t for t in tables if t != "AL_D198_26260_20250115"]
-        extra_tips = (
-            '\n- For 금정구 use table "AL_D198_26410_20250115" '
-            '(연면적 column "A19") or "AL_D010_26_20250704" ("A14").\n'
-        )
-        if "주요용도" in question:
+    mentioned = d198_gus_mentioned(question)
+    if mentioned:
+        keep = {D198_BY_GU[gu] for gu in mentioned if D198_BY_GU.get(gu)}
+        for gu in reversed(mentioned):
+            table = D198_BY_GU.get(gu)
+            if not table:
+                continue
+            tables = [table] + [t for t in tables if t != table]
             extra_tips += (
-                '\n- "주요용도명" for 금정구 MUST use '
-                '"AL_D198_26410_20250115"."A25" (not AL_D010 "A9").\n'
+                f'\n- For {gu} use table "{table}" '
+                '(연면적 column "A19") or "AL_D010_26_20250704" ("A14").\n'
             )
-            # 주요용도명 전용: D010 제외해 A9 혼동 방지
-            tables = [t for t in tables if not t.startswith("AL_D010")]
-    if "동래" in question:
-        if "AL_D198_26260_20250115" not in tables:
-            tables.insert(0, "AL_D198_26260_20250115")
+            if "주요용도" in question:
+                extra_tips += (
+                    f'\n- "주요용도명" for {gu} MUST use '
+                    f'"{table}"."A25" (not AL_D010 "A9").\n'
+                )
         if "주요용도" in question:
-            extra_tips += (
-                '\n- "주요용도명" for 동래구 MUST use '
-                '"AL_D198_26260_20250115"."A25" (not AL_D010 "A9").\n'
-            )
             tables = [t for t in tables if not t.startswith("AL_D010")]
-            tables = [t for t in tables if t != "AL_D198_26410_20250115"]
+        if len(keep) == 1:
+            only = next(iter(keep))
+            tables = [t for t in tables if not t.startswith("AL_D198_") or t == only]
 
     schema_text = (
         build_compact_schema(

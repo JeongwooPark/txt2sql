@@ -430,6 +430,7 @@ def check_ambiguity(
 
     # 건축 경과년수인데 동래/금정(D198)이 아니면 데이터 한계 안내
     from llm2sql.domain import (
+        d198_coverage_label,
         d198_table_for_gu,
         extract_age_years,
         looks_like_age_question,
@@ -442,11 +443,11 @@ def check_ambiguity(
                 ambiguous_terms=["사용승인일자"],
                 options=[],
                 answer=(
-                    "건물 ‘준공·사용승인·건축년수’는 현재 동래구·금정구 "
+                    f"건물 ‘준공·사용승인·건축년수’는 현재 {d198_coverage_label()} "
                     "용도별건물(AL_D198)의 사용승인일자(A34)·허가일자(A33)로만 "
                     "조회할 수 있습니다.\n"
                     "예: 금정구 구서동 단독주택 중 사용승인 후 30년 이상인 건수는?\n"
-                    "부산 전체로 물으시면 동래·금정 합산으로 답합니다."
+                    f"부산 전체로 물으시면 {d198_coverage_label(joiner='·')} 합산으로 답합니다."
                 ),
             )
 

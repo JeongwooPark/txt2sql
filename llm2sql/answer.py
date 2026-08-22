@@ -15,6 +15,9 @@ from llm2sql.d198_attrs import (
     parse_year_stats,
 )
 from llm2sql.domain import (
+    D198_BY_GU,
+    d198_coverage_label,
+    d198_table_for_gu,
     extract_gu,
     extract_place,
     extract_special_land,
@@ -44,7 +47,7 @@ ANSWER_SYSTEM_PROMPT = """당신은 부산 GIS 데이터베이스 질의 결과�
 - '세부용도명', '특수지구분명', '사용승인일자 있음' 같은 스키마 용어를 나열하지 마세요.
 - 조건을 제목처럼 이어 붙이지 마세요.
 - '안내:' 머리말, '예:' 나열, 마크다운 불릿, SQL, 컬럼코드(A13 등)를 쓰지 마세요.
-- coverage_note는 사용자가 이미 동래구·금정구를 말한 경우에는 언급하지 마세요.
+- coverage_note는 사용자가 이미 해당 구를 말한 경우에는 언급하지 마세요.
 - 질문에 평이 있거나 결과에 평 환산이 있으면 ㎡와 평을 함께 쓰세요.
 - 출력은 답변 본문만.
 
@@ -56,27 +59,27 @@ ANSWER_SYSTEM_PROMPT = """당신은 부산 GIS 데이터베이스 질의 결과�
 금정구 아파트(공동주택) 사용승인일자 있음 세부용도명 아파트 중에서 해당 조건의 건축물입니다. 예: 「휴림 아르페」 공동주택 일반.
 """
 
-COVERAGE_PREFACE: dict[str, str] = {
-    "building_age_count_d198_partial": (
-        "안내: 건축년수(사용승인·준공 경과)는 현재 동래구·금정구 용도별건물 "
-        "자료에만 있습니다. 부산시 전체가 아니라 동래구·금정구 합산으로 조회합니다."
-    ),
-    "d198_attr_count": (
-        "안내: 용도별건물공간정보는 현재 동래구·금정구 자료입니다."
-    ),
-    "d198_attr_list": (
-        "안내: 용도별건물공간정보는 현재 동래구·금정구 자료입니다."
-    ),
-    "d198_attr_rank": (
-        "안내: 용도별건물공간정보는 현재 동래구·금정구 자료입니다."
-    ),
-    "d198_year_stats": (
-        "안내: 건립 연도(사용승인일) 통계는 현재 동래구·금정구 용도별건물 자료입니다."
-    ),
-    "d198_value_bins": (
-        "안내: 면적·높이 구간 통계는 현재 동래구·금정구 용도별건물 자료입니다."
-    ),
-}
+def _coverage_preface_map() -> dict[str, str]:
+    label = d198_coverage_label()
+    dataset = f"안내: 용도별건물공간정보는 현재 {label} 자료입니다."
+    return {
+        "building_age_count_d198_partial": (
+            f"안내: 건축년수(사용승인·준공 경과)는 현재 {label} 용도별건물 "
+            f"자료에만 있습니다. 부산시 전체가 아니라 {label} 합산으로 조회합니다."
+        ),
+        "d198_attr_count": dataset,
+        "d198_attr_list": dataset,
+        "d198_attr_rank": dataset,
+        "d198_year_stats": (
+            f"안내: 건립 연도(사용승인일) 통계는 현재 {label} 용도별건물 자료입니다."
+        ),
+        "d198_value_bins": (
+            f"안내: 면적·높이 구간 통계는 현재 {label} 용도별건물 자료입니다."
+        ),
+    }
+
+
+COVERAGE_PREFACE: dict[str, str] = _coverage_preface_map()
 
 # 건물 테이블 주요 컬럼 → 한글 라벨 (LLM 혼동 방지)
 _COLUMN_LABELS: dict[str, str] = {
@@ -972,7 +975,7 @@ def _stats_where(question: str) -> str:
     place = extract_place(question) or extract_gu(question) or ""
     if place:
         return f"{place} "
-    return "동래구·금정구 "
+    return f"{d198_coverage_label()} "
 
 
 def _pct(n: int, total: int) -> float:
@@ -1131,10 +1134,10 @@ def _natural_year_stats(
     row_count: int,
 ) -> str:
     gu = extract_gu(question)
-    if gu and gu not in {"동래구", "금정구"} and row_count == 0:
+    if gu and d198_table_for_gu(gu) is None and row_count == 0:
         return (
             f"{gu}는 건립 연도(사용승인일) 통계 자료가 없습니다. "
-            "현재는 동래구·금정구 용도별건물만 연도별 집계가 됩니다."
+            f"현재는 {d198_coverage_label()} 용도별건물만 연도별 집계가 됩니다."
         )
     dist = build_distribution(
         question, rows=rows, route="d198_year_stats", row_count=row_count
@@ -1156,10 +1159,10 @@ def _natural_value_bins(
     row_count: int,
 ) -> str:
     gu = extract_gu(question)
-    if gu and gu not in {"동래구", "금정구"} and row_count == 0:
+    if gu and d198_table_for_gu(gu) is None and row_count == 0:
         return (
             f"{gu}는 면적·높이 구간 통계 자료가 없습니다. "
-            "현재는 동래구·금정구 용도별건물만 구간별 집계가 됩니다."
+            f"현재는 {d198_coverage_label()} 용도별건물만 구간별 집계가 됩니다."
         )
     dist = build_distribution(
         question, rows=rows, route="d198_value_bins", row_count=row_count
@@ -1319,10 +1322,10 @@ def _result_payload(
             payload["rank_metric"] = str(route).replace("building_rank_", "")
         elif route == "building_age_count_d198_partial":
             payload["result_type"] = "건축경과년_건수"
-            payload["scope"] = "동래구+금정구"
-            if gu not in {"동래구", "금정구"}:
+            payload["scope"] = d198_coverage_label(joiner="+")
+            if gu not in D198_BY_GU:
                 payload["coverage_note"] = (
-                    "건축년수 자료는 동래구·금정구 용도별건물만 있습니다."
+                    f"건축년수 자료는 {d198_coverage_label()} 용도별건물만 있습니다."
                 )
         elif str(route).startswith("d198_"):
             if route == "d198_year_stats":
@@ -1338,9 +1341,9 @@ def _result_payload(
                 payload["result_type"] = "건수"
             else:
                 payload["result_type"] = "목록"
-            if gu not in {"동래구", "금정구"}:
+            if gu not in D198_BY_GU:
                 payload["coverage_note"] = (
-                    "용도별건물 사용승인·허가일은 동래구·금정구 자료입니다."
+                    f"용도별건물 사용승인·허가일은 {d198_coverage_label()} 자료입니다."
                 )
         elif str(route).startswith(
             ("d010_attr", "d060_attr", "bnd_attr", "bas_attr")
@@ -1696,9 +1699,9 @@ def coverage_preface(route: str | None, question: str | None = None) -> str | No
     """데이터 범위가 질문보다 좁을 때 앞에 붙일 안내문."""
     if not route:
         return None
-    if question and extract_gu(question) in {"동래구", "금정구"}:
+    if question and extract_gu(question) in D198_BY_GU:
         return None
-    return COVERAGE_PREFACE.get(str(route))
+    return _coverage_preface_map().get(str(route))
 
 
 def with_coverage_preface(

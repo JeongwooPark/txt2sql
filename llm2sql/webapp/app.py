@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from llm2sql import Llm2SqlEngine, SessionContext
+from llm2sql.data import create_data_router
 from llm2sql.map import create_map_router, start_cleanup_scheduler
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -184,6 +185,7 @@ def create_app() -> FastAPI:
             get_ollama=lambda: get_engine().ollama_client,
         )
     )
+    app.include_router(create_data_router(lambda: get_engine().settings))
 
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

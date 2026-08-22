@@ -67,7 +67,7 @@ ORDER BY "A34" DESC NULLS LAST
 LIMIT 1;
 """
 
-DOMAIN_HINTS = """
+_DOMAIN_HINTS_TEMPLATE = """
 Domain mapping (critical):
 - Busan-wide / gu-level building attributes → prefer "AL_D010_26_20250704"
   - "A4"=법정동명(use LIKE '%구명%'), "A9"=건축물용도명, "A14"=연면적,
@@ -76,12 +76,11 @@ Domain mapping (critical):
   - AL_D010 has NO reliable construction/approval year.
     "A13" is often empty; "A22" is 데이터기준일자 only.
     NEVER SELECT MAX("A13") or alias it as 최신건설일.
-  - For 동래/금정 "가장 최근에 지어진" / "가장 오래된":
+  - For registered D198 gus "가장 최근에 지어진" / "가장 오래된":
       FROM AL_D198_… ORDER BY "A34" DESC (or ASC) NULLS LAST LIMIT 1
       아파트 → "A27" ILIKE '%아파트%' (or "A25"='공동주택')
 - District-only building tables (have approval dates):
-  - 동래구 → "AL_D198_26260_20250115"
-  - 금정구 → "AL_D198_26410_20250115"
+__D198_LISTING__
   - "A25"=주요용도명, "A19"=연면적, "A30"=높이, "A31"=지상층
   - "A33"=허가일자, "A34"=사용승인일자 (text 'YYYY-MM-DD')
   - For 달력 연도(2020년 이후/이전에 지어진·준공):
@@ -92,11 +91,11 @@ Domain mapping (critical):
       - N년 이상/넘는: "A34"::date <= (CURRENT_DATE - INTERVAL 'N years')
       - N년 미만: "A34"::date > (CURRENT_DATE - INTERVAL 'N years')
     NEVER use "A35"(데이터기준일자) for building age.
-  - 부산 전체 건축년수 → UNION/SUM of 동래+금정 D198 only (other gus lack dates).
-    Say in the answer that coverage is 동래·금정(사용승인일 보유 구).
-  - "주요용도명" 종류/건수 for 동래/금정 → ALWAYS D198 "A25" (never AL_D010 "A9").
-  - Other gus (연제/사하/해운대 등) building/usage counts → ALWAYS "AL_D010_26_20250704"
-    with "A9" (never AL_D198; those tables only cover 동래/금정).
+  - 부산 전체 건축년수 → UNION/SUM of registered D198 tables only (other gus lack dates).
+    Say in the answer that coverage is __D198_LABEL__(사용승인일 보유 구).
+  - "주요용도명" 종류/건수 for registered D198 gus → ALWAYS D198 "A25" (never AL_D010 "A9").
+  - Other gus (not listed above) building/usage counts → ALWAYS "AL_D010_26_20250704"
+    with "A9" (never AL_D198; those tables only cover __D198_LABEL__).
 - 공공시설/공공시설물 → AL_D010 "A9"='공공용시설' or AL_D198 "A29"='공공용'
 - 행정동(구서1동 등) → join "BND_ADM_DONG_PG" on ST_Intersects; 법정동은 구서동
 - 동 주변 N m 버퍼 → ST_Union of matching "BND_ADM_DONG_PG" + ST_DWithin geography (구서동 → 구서1동/구서2동)
@@ -110,3 +109,20 @@ Domain mapping (critical):
 - Area columns are ㎡. Convert 평 with 1평 = 400/121 ㎡ (≈3.3058). Convert km² to ㎡ (×1,000,000).
 - Height and ST_DWithin distances are meters. Convert km to m (×1000).
 """
+
+
+def domain_hints() -> str:
+    from llm2sql.domain import D198_BY_GU, d198_coverage_label
+
+    lines = [
+        f'  - {gu} → "{table}"' for gu, table in D198_BY_GU.items()
+    ]
+    listing = "\n".join(lines) if lines else "  - (등록된 AL_D198 없음)"
+    return (
+        _DOMAIN_HINTS_TEMPLATE.replace("__D198_LISTING__", listing).replace(
+            "__D198_LABEL__", d198_coverage_label()
+        )
+    )
+
+
+DOMAIN_HINTS = domain_hints()

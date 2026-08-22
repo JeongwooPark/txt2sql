@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/app.css?v=17" />
+    <link rel="stylesheet" href="/static/app.css?v=18" />
   </head>
   <body class="site" data-ui="data-upload">
     <header class="site-head">
@@ -35,8 +35,8 @@
     <div class="site-body">
       <div class="data-split">
         <aside class="data-side">
-          <h2>등록된 레이어</h2>
-          <p class="data-lead">KorDB 카탈로그입니다. 업로드 전 중복 여부를 확인하세요.</p>
+          <h2>등록된 공간 테이블</h2>
+          <p class="data-lead">PostGIS 테이블입니다. 클릭하면 메타데이터 화면으로 이동합니다.</p>
           <div id="dataset-list">
             <p class="layer-empty">불러오는 중…</p>
           </div>
@@ -44,21 +44,23 @@
         <main class="data-main">
           <h1>공간데이터 업로드</h1>
           <p class="data-lead">
-            Shapefile이 들어 있는 ZIP을 올리면 PostGIS 테이블 생성과 GeoServer
-            발행을 한 번에 수행합니다. llm2_geodb의 공간데이터 업로드 화면과
-            같은 흐름입니다.
+            Shapefile ZIP을 올리면 PostGIS에 같은 이름 테이블로 적재하고
+            GeoServer KorDB 레이어로 발행합니다. 같은 이름이 있으면 기존 데이터를
+            덮어씁니다. 예: 남구 용도별건물공간정보 <code>AL_D198_26_…</code>
           </p>
-          <div class="drop-zone" aria-disabled="true">
-            <h2>파일 선택 (향후 제공)</h2>
-            <p>.shp / .dbf / .shx / .prj 가 포함된 ZIP을 여기에 놓습니다.</p>
-            <p>예: 남구 용도별건물공간정보 추가 등록</p>
-            <button type="button" class="pane-btn" disabled>업로드</button>
+          <div class="drop-zone" id="file-upload-area">
+            <h2>ZIP 파일을 놓거나 클릭하여 선택</h2>
+            <p>.shp / .dbf / .shx / .prj 가 포함된 ZIP</p>
+            <input type="file" id="shapefile-input" accept=".zip" hidden />
           </div>
-          <div class="coming-note">
-            이번 버전은 화면 골격만 제공합니다. 다음 단계에서 기존 레이어
-            갱신과 신규 테이블 적재(남구 AL_D198 등) API를 연결합니다.
-            질의·지도는 읽기 전용을 유지합니다.
+          <div class="file-info" id="file-info" hidden>
+            <p>파일: <strong id="file-name"></strong></p>
+            <p>크기: <span id="file-size"></span></p>
+            <p>테이블명: <span id="table-name"></span></p>
+            <button type="button" class="pane-btn" id="upload-btn" disabled>PostgreSQL에 업로드</button>
+            <div class="progress-bar" id="upload-progress"><span></span></div>
           </div>
+          <div class="status-log" id="status-list"></div>
         </main>
       </div>
     </div>
@@ -67,6 +69,7 @@
       <span>PostgreSQL/PostGIS · GeoServer · OpenLayers · Ollama</span>
     </footer>
     <script src="/static/js/site.js?v=1"></script>
-    <script src="/static/js/data.js?v=1"></script>
+    <script src="/static/js/data.js?v=2"></script>
+    <script src="/static/js/data-upload.js?v=2"></script>
   </body>
 </html>

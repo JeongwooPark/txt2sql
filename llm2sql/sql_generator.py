@@ -5,10 +5,10 @@ from typing import Any
 
 from llm2sql.example_store import format_retrieved_examples
 from llm2sql.llm import chat
-from llm2sql.prompt_examples import DOMAIN_HINTS, FEW_SHOT_EXAMPLES
+from llm2sql.prompt_examples import FEW_SHOT_EXAMPLES, domain_hints
 
 
-SYSTEM_PROMPT = f"""You are a PostgreSQL + PostGIS expert for a Korean GIS database.
+_SYSTEM_PROMPT = """You are a PostgreSQL + PostGIS expert for a Korean GIS database.
 Convert the user's natural language question into a single SQL query.
 
 Rules:
@@ -36,9 +36,11 @@ Rules:
 - Prefer Korean text columns for filters (e.g. "A9" 용도명) over opaque codes ("A8").
 - Use GiST-friendly predicates (ST_Intersects / &&) rather than full-table scans.
 - If unsupported, output: SELECT 'UNSUPPORTED' AS error;
-
-{DOMAIN_HINTS}
 """
+
+
+def _system_prompt() -> str:
+    return _SYSTEM_PROMPT + "\n" + domain_hints() + "\n"
 
 
 def _extract_sql(text: str) -> str:
@@ -86,7 +88,7 @@ def generate_sql(
         client=client,
         temperature=0,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _system_prompt()},
             {"role": "user", "content": user_content},
         ],
     )

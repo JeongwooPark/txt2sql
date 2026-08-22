@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/app.css?v=17" />
+    <link rel="stylesheet" href="/static/app.css?v=18" />
   </head>
   <body class="site" data-ui="data-meta">
     <header class="site-head">
@@ -35,36 +35,50 @@
     <div class="site-body">
       <div class="data-split">
         <aside class="data-side">
-          <h2>등록된 레이어</h2>
-          <p class="data-lead">왼쪽에서 테이블을 고르면 한글명·설명을 수정합니다.</p>
+          <h2>공간 테이블</h2>
+          <p class="data-lead">한글 표시명·설명·단위를 고치면 챗봇과 지도에 반영됩니다.</p>
           <div id="dataset-list">
             <p class="layer-empty">불러오는 중…</p>
           </div>
         </aside>
         <main class="data-main">
-          <h1>메타데이터 업데이트</h1>
-          <p class="data-lead">
-            table_metadata / column_metadata를 고쳐 챗봇 안내와 지도 레이어
-            표시명에 반영합니다. llm2_geodb 메타데이터 화면과 같은 역할입니다.
-          </p>
-          <form class="meta-form" aria-disabled="true">
+          <h1 id="selected-table-title">메타데이터 업데이트</h1>
+          <div id="status-banner" class="status-banner"></div>
+          <div id="no-table-selected">
+            <p class="data-lead">왼쪽에서 테이블을 선택하세요.</p>
+          </div>
+          <div id="metadata-form" class="meta-form" hidden>
+            <div class="form-grid">
+              <label>
+                테이블 표시명
+                <input id="table-display-name" type="text" />
+              </label>
+              <label>
+                카테고리
+                <select id="table-category">
+                  <option value="">카테고리를 선택하세요</option>
+                  <option value="행정구역">행정구역</option>
+                  <option value="교통">교통</option>
+                  <option value="환경">환경</option>
+                  <option value="토지">토지</option>
+                  <option value="건물">건물</option>
+                  <option value="기타">기타</option>
+                </select>
+              </label>
+            </div>
             <label>
-              테이블명
-              <input type="text" disabled placeholder="레이어를 선택하세요" />
+              테이블 설명
+              <textarea id="table-description" rows="3"></textarea>
             </label>
-            <label>
-              한글 표시명
-              <input type="text" disabled placeholder="예: 용도별건물공간정보" />
-            </label>
-            <label>
-              설명
-              <textarea disabled placeholder="데이터셋 설명"></textarea>
-            </label>
-            <button type="button" class="pane-btn" disabled>저장 (향후 제공)</button>
-          </form>
-          <div class="coming-note">
-            이번 버전은 화면 골격만 제공합니다. 저장·컬럼 편집 API는 다음
-            단계에서 연결합니다.
+            <div id="database-comments" class="coming-note" hidden></div>
+            <h2>컬럼 정보</h2>
+            <div id="column-list"></div>
+            <div class="form-toolbar">
+              <button type="button" class="pane-btn" id="parse-code-btn">DB 코드 해석</button>
+              <button type="button" class="pane-btn ghost" id="rename-table-btn">테이블명 변경 준비</button>
+              <button type="button" class="pane-btn" id="save-metadata-btn">데이터 갱신</button>
+              <button type="button" class="pane-btn ghost" id="reset-metadata-btn">초기화</button>
+            </div>
           </div>
         </main>
       </div>
@@ -74,6 +88,7 @@
       <span>PostgreSQL/PostGIS · GeoServer · OpenLayers · Ollama</span>
     </footer>
     <script src="/static/js/site.js?v=1"></script>
-    <script src="/static/js/data.js?v=1"></script>
+    <script src="/static/js/data.js?v=2"></script>
+    <script src="/static/js/data-metadata.js?v=1"></script>
   </body>
 </html>

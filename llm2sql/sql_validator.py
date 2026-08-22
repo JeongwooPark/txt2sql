@@ -8,6 +8,12 @@ from typing import Any
 import psycopg
 
 from llm2sql.db import assert_readonly_sql, ensure_limit
+from llm2sql.domain import (
+    d198_coverage_label,
+    d198_gu_mentioned,
+    d198_table_for_gu,
+    looks_like_age_question,
+)
 
 
 def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> str | None:
@@ -21,11 +27,15 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
     if re.search(r'"A3"\s+LIKE\s+\'%[가-힣]', s):
         reasons.append('Use "A4" (법정동명) for Hangul gu/dong filters, not "A3".')
 
-    # 부산 전역 구 질의인데 D198만 사용 (동래/금정 명시 없을 때)
+    # 부산 전역 구 질의인데 D198만 사용 (등록된 D198 구·용도별건물·건축년수가 아닐 때)
     uses_d198 = "AL_D198_" in upper
     uses_d010 = "AL_D010_" in upper
-    mentions_dongrae = "동래" in q
-    mentions_geumjeong = "금정" in q
+    d198_ok = (
+        d198_gu_mentioned(q) is not None
+        or "용도별건물" in q
+        or "주요용도" in q
+        or looks_like_age_question(q)
+    )
     gu_in_q = bool(re.search(r"[가-힣]{1,6}구", q))
     busan_wide = any(
         k in q for k in ("부산시", "부산광역시", "부산 전체", "부산내", "부산 내")
@@ -35,8 +45,7 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
         and "건물" in q
         and uses_d198
         and not uses_d010
-        and not mentions_dongrae
-        and not mentions_geumjeong
+        and not d198_ok
     ):
         reasons.append(
             'For Busan-wide / gu-level building queries prefer "AL_D010_26_20250704", '
@@ -48,8 +57,7 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
         any(k in q for k in ("가장 높", "제일 높", "높이"))
         and uses_d198
         and not uses_d010
-        and not mentions_dongrae
-        and not mentions_geumjeong
+        and not d198_ok
     ):
         reasons.append(
             'Building height ranking for Busan should use "AL_D010_26_20250704"."A16", '
@@ -65,8 +73,8 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
             )
         if "AL_D010" in upper and ("A34" in s or "INTERVAL" in upper):
             reasons.append(
-                "AL_D010 has no approval date; use AL_D198_26260 (동래) and/or "
-                "AL_D198_26410 (금정) with A34 text date cast."
+                "AL_D010 has no approval date; use registered AL_D198 tables "
+                f"({d198_coverage_label()}) with A34 text date cast."
             )
         if re.search(r"(?:19|20)\d{2}\s*년", q) and re.search(
             r"INTERVAL\s+'?(?:19|20)\d{2}\s*years'",
@@ -80,11 +88,11 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
         if (
             any(k in q for k in ("최근", "오래된"))
             and any(k in q for k in ("지어진", "준공"))
-            and any(k in q for k in ("금정", "동래"))
+            and d198_gu_mentioned(q) is not None
             and "AL_D010" in upper
         ):
             reasons.append(
-                "최근/오래된 건축은 동래·금정 AL_D198 \"A34\"(사용승인일자)를 쓰고 "
+                f'최근/오래된 건축은 {d198_coverage_label()} AL_D198 "A34"(사용승인일자)를 쓰고 '
                 "AL_D010 \"A13\" MAX 집계를 쓰지 마세요."
             )
 
@@ -168,29 +176,26 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
     if "산업단지" in q and "AL_D060" not in upper and "건물" not in q:
         reasons.append('Industrial-park questions must use "AL_D060_00_20250804".')
 
-    # 동래/금정 주요용도명 → D198 A25
+    # 등록된 D198 구의 주요용도명 → D198 A25
     if "주요용도" in q or (("용도" in q) and ("종류" in q or "몇 가지" in q)):
-        if "동래" in q and (
-            "AL_D010" in upper or '"A9"' in s or re.search(r"\bA9\b", s)
-        ):
-            reasons.append(
-                '동래구 "주요용도명" kinds/count must use '
-                '"AL_D198_26260_20250115"."A25" with A25 IS NOT NULL, not AL_D010 "A9".'
-            )
-        if "금정" in q and (
-            "AL_D010" in upper or '"A9"' in s or re.search(r"\bA9\b", s)
-        ):
-            reasons.append(
-                '금정구 "주요용도명" kinds/count must use '
-                '"AL_D198_26410_20250115"."A25" with A25 IS NOT NULL, not AL_D010 "A9".'
-            )
+        from llm2sql.domain import D198_BY_GU, d198_gus_mentioned
 
-    # 동래·금정 외 구 용도/건물 COUNT에 D198 사용
+        for gu in d198_gus_mentioned(q):
+            table = D198_BY_GU.get(gu)
+            if not table:
+                continue
+            if "AL_D010" in upper or '"A9"' in s or re.search(r"\bA9\b", s):
+                reasons.append(
+                    f'{gu} "주요용도명" kinds/count must use '
+                    f'"{table}"."A25" with A25 IS NOT NULL, not AL_D010 "A9".'
+                )
+
+    # 미등록 구 용도/건물 COUNT에 D198 사용
     gu_m = re.search(r"([가-힣]{1,6}구)", q)
     if gu_m:
         gu_name = gu_m.group(1)
         if (
-            gu_name not in ("동래구", "금정구")
+            d198_table_for_gu(gu_name) is None
             and uses_d198
             and not uses_d010
             and not any(k in q for k in ("건축년", "준공", "사용승인", "지어진"))
@@ -205,7 +210,7 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
         reasons.append(
             "Query returned 0 rows with AL_D198 only; retry with AL_D010 and A4 LIKE gu filter."
         )
-    if row_count == 0 and gu_m and gu_m.group(1) not in ("동래구", "금정구") and uses_d198:
+    if row_count == 0 and gu_m and d198_table_for_gu(gu_m.group(1)) is None and uses_d198:
         reasons.append(
             "Query returned 0 rows on AL_D198 for a non-동래/금정 gu; "
             'rewrite with "AL_D010_26_20250704" and "A9" for usage filters.'
