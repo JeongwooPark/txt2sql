@@ -379,10 +379,10 @@ def build_chart_spec(
     if not rows:
         return None
 
-    if route == "usage_overview":
+    if route == "usage_overview" or route == "semantic_plan_distribution":
         return _chart_from_named_counts(
             rows,
-            name_keys=("usage",),
+            name_keys=("usage", "legal_dong", "structure", "ground_floors"),
             title=_title_from_question(question, "주요 용도 구성"),
             chart_type="doughnut",
             dataset_label="건물 수",
@@ -526,6 +526,8 @@ def _chart_from_named_counts(
             if not name:
                 continue
         n = row.get("n")
+        if n is None:
+            n = row.get("count", row.get("cnt"))
         if n is None:
             continue
         try:

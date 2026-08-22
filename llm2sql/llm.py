@@ -26,6 +26,7 @@ def chat(
     temperature: float = 0.2,
     stream: bool = False,
     on_token: TokenCallback | None = None,
+    response_format: str | dict[str, Any] | None = None,
 ) -> str:
     """Ollama chat. stream이면 토큰마다 on_token을 호출하고 전체 문자열을 반환."""
     client = resolve_client(host=host, client=client)
@@ -36,11 +37,20 @@ def chat(
     }
     if stream:
         kwargs["stream"] = True
+    if response_format is not None:
+        kwargs["format"] = response_format
+
+    def _invoke(payload: dict[str, Any]) -> Any:
+        try:
+            return client.chat(**payload, think=False)
+        except TypeError:
+            return client.chat(**payload)
 
     try:
-        response = client.chat(**kwargs, think=False)
+        response = _invoke(kwargs)
     except TypeError:
-        response = client.chat(**kwargs)
+        kwargs.pop("format", None)
+        response = _invoke(kwargs)
 
     if not stream:
         return response["message"]["content"]

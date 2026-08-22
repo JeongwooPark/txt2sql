@@ -26,6 +26,8 @@ class AskResult:
     chart: dict[str, Any] | None = None
     table: dict[str, Any] | None = None
     map: dict[str, Any] | None = None
+    semantic_plan: dict[str, Any] | None = None
+    plan_quality: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -36,6 +38,8 @@ class AskResult:
             "chart",
             "table",
             "map",
+            "semantic_plan",
+            "plan_quality",
         ):
             if data.get(key) is None:
                 data.pop(key, None)

@@ -1,13 +1,13 @@
 # llm2sql
 
-**버전 0.2.1**
+**버전 0.2.2**
 
 부산 GIS(건물·행정구역·기초구역·산업단지) 데이터를 **자연어**로 조회하는 Python 도구입니다.  
 로컬 **Ollama**로 SQL을 생성·보정하고, **PostgreSQL + PostGIS**에서 실행한 뒤 **한국어**로 답변합니다.  
 CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니다.
 
 ```text
-질문 → 안내/메타/모호성/특징·비교/순위비교/라우터/RAG+LLM
+질문 → 안내/메타/모호성/특징·비교/순위비교/라우터/(선택) SQP/RAG+LLM
      → SQL 실행 → 한국어 답변 (스트림 가능)
          ├─ 세션: 후속 질문, 모호 동 번호 선택(1·2번)
          └─ 지도: geometry 발행 → GeoServer WMS/WFS → 출력 레이어
@@ -32,13 +32,14 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 13. [벤치마크·스크립트](#벤치마크스크립트)
 14. [프로젝트 구조](#프로젝트-구조)
 15. [문제 해결](#문제-해결)
-16. [0.2.1 변경 요약](#021-변경-요약)
-17. [0.2 변경 요약](#02-변경-요약)
-18. [0.1.4 변경 요약](#014-변경-요약)
-19. [0.1.3 변경 요약](#013-변경-요약)
-20. [0.1.2 변경 요약](#012-변경-요약)
-21. [0.1.1 변경 요약](#011-변경-요약)
-22. [0.1.0 변경 요약](#010-변경-요약)
+16. [0.2.2 변경 요약](#022-변경-요약)
+17. [0.2.1 변경 요약](#021-변경-요약)
+18. [0.2 변경 요약](#02-변경-요약)
+19. [0.1.4 변경 요약](#014-변경-요약)
+20. [0.1.3 변경 요약](#013-변경-요약)
+21. [0.1.2 변경 요약](#012-변경-요약)
+22. [0.1.1 변경 요약](#011-변경-요약)
+23. [0.1.0 변경 요약](#010-변경-요약)
 
 ---
 
@@ -127,6 +128,10 @@ uv run python scripts/refresh_schema_catalog.py   # 스키마 임베딩 갱신 �
 | `MAP_WFS_MAX_FEATURES` | 이보다 많으면 WFS 대신 WMS | `5000` |
 | `MAP_RETENTION_HOURS` | `temp_*` 레이어 TTL | `24` |
 | `MAP_MAX_ANALYSIS_LAYERS` | 세션당 분석결과 레이어 상한 | `8` |
+| `SEMANTIC_PLAN_MODE` | 라우터 미적중 시 SQP `off` / `shadow` / `hybrid` | `off` |
+| `SEMANTIC_PLAN_MAX_RETRIES` | Plan JSON repair 횟수 | `1` |
+| `SEMANTIC_PLAN_MIN_QUALITY` | 이 점수 미만이면 RAG로 fallback | `0.85` |
+| `SEMANTIC_PLAN_DEBUG` | `plan_quality` 등 디버그 필드 | `false` |
 
 자격 증명은 `.env`만 사용합니다. 저장소에 비밀번호를 커밋하지 마세요.
 
@@ -416,9 +421,10 @@ GeoServer가 꺼져 있거나 발행에 실패해도 **채팅 답변은 그대�
 6. meta_qa
 7. clarify_qa
 8. intent_router     건수·순위·버퍼 등
-9. RAG + LLM         스키마 검색 → SQL → 검증/재생성
-10. answer           실행 결과 → 한국어 (토큰 스트림 가능)
-11. attach_map       적격 SQL → 임시 테이블 + GeoServer (실패 무시)
+9. semantic_plan     라우터 미적중 시 (기본 off). hybrid면 Plan→SQL, 실패 시 RAG
+10. RAG + LLM        스키마 검색 → SQL → 검증/재생성
+11. answer           실행 결과 → 한국어 (토큰 스트림 가능)
+12. attach_map       적격 SQL → 임시 테이블 + GeoServer (실패 무시)
 ```
 
 | 모듈 | 역할 |
@@ -430,6 +436,7 @@ GeoServer가 꺼져 있거나 발행에 실패해도 **채팅 답변은 그대�
 | `map/` | SQL wrap, 발행, LayerStack, REST, GeoServer 클라이언트 |
 | `webapp/` | FastAPI + 3분할 UI + OpenLayers |
 | `intent_router.py` | 규칙 SQL |
+| `semantic_plan/` | canonical Plan → deterministic SQL (`SEMANTIC_PLAN_MODE`) |
 | `answer.py` | 자연어·스트림·프로필 서술 |
 
 채팅 경로의 `assert_readonly_sql`은 그대로입니다. 지도 DDL은 안전한 `temp_*` 이름에만 적용됩니다.
@@ -477,6 +484,7 @@ uv run python scripts/smoke_nl_queries.py
 uv run python scripts/smoke_clarify.py
 uv run python scripts/smoke_profile_qa.py
 uv run python scripts/refresh_schema_catalog.py
+uv run python scripts/test_semantic_plan.py
 
 # 지도
 uv run python scripts/test_map_sql.py      # wrap·적격성·GS 실패 시 채팅 유지
@@ -508,9 +516,10 @@ llm2sql/
     rank_compare_qa.py
     guide_qa.py, meta_qa.py, clarify_qa.py
     profile_qa.py, followup_qa.py, session.py
-    intent_router.py, answer.py, ...
+    intent_router.py, semantic_plan/, answer.py, ...
+  tests/semantic_plan/
   scripts/
-    test_map_sql.py, test_map_layers.py, test_map_stack.mjs
+    test_semantic_plan.py, test_map_sql.py, test_map_layers.py, test_map_stack.mjs
   main.py
   pyproject.toml         # llm2sql, llm2sql-web
   .env.example
@@ -535,6 +544,15 @@ llm2sql/
 | 원본 테이블 삭제 거부 | 정상. `DELETE /api/map/layer`는 임시 레이어만 |
 
 ---
+
+## 0.2.2 변경 요약
+
+- **Semantic Query Plan (SQP)**: 규칙 라우터 미적중 질의에 canonical JSON Plan → deterministic SELECT 계층을 추가. LLM이 물리 SQL을 직접 쓰지 않음
+- **기본 off**: `SEMANTIC_PLAN_MODE=off` 이면 0.2.1과 동일. `shadow`는 생성만, `hybrid`는 실행 후 실패 시 기존 RAG로 fallback
+- **MVP 범위**: 건물(D010) count/list/rank, 용도·높이·면적·층수·구조 필터, 구/동 `A4` 또는 행정 경계 JOIN
+- **안전**: catalog allowlist 식별자, 리터럴 이스케이프, 기존 readonly·EXPLAIN 재사용, 미지원 필드는 RAG로 넘김
+- **테스트**: `scripts/test_semantic_plan.py`, `tests/semantic_plan/`
+- **문서**: `docs/Semantic_Query_Plan_구현.md`
 
 ## 0.2.1 변경 요약
 

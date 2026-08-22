@@ -3,12 +3,12 @@
 | 항목 | 내용 |
 |------|------|
 | 기준 시스템 | `llm2_geodb` (LM2GISDB **v0.1.0**) — 대화형 GIS 해석·오케스트레이션 |
-| 고도화 시스템 | **`llm2sql` v0.2.1** — 자연어→SQL→한국어 답변 + 지도·데이터 관리 |
+| 고도화 시스템 | **`llm2sql` v0.2.2** — 자연어→SQL→한국어 답변 + 지도·데이터 관리 + 선택적 Semantic Query Plan |
 | 비교 범위 | 자연어·SQL·의도·메타데이터·안전·세션·답변·지도·데이터 관리·제품 표면 |
 | 작성 기준일 | 2026-08-22 |
 | 작성 목적 | `llm2_geodb`에서 `llm2sql`로 이어진 **고도화 내용** 문서화 |
 
-> **현재 버전: llm2sql 0.2.1** (`pyproject.toml`, FastAPI `version`, 웹 Head/Bottom 패널 표기와 동일)
+> **현재 버전: llm2sql 0.2.2** (`pyproject.toml`, FastAPI `version`, 웹 Head/Bottom 패널 표기와 동일)
 
 ---
 
@@ -576,7 +576,7 @@ v0.2.1에서 `llm2_geodb`의 공간데이터 업로드·메타데이터 화면�
 
 ## 17. 버전별 고도화
 
-`llm2sql`이 `llm2_geodb` 이후 쌓아 온 단계이다. **현재 배포 버전은 0.2.1**이다.
+`llm2sql`이 `llm2_geodb` 이후 쌓아 온 단계이다. **현재 배포 버전은 0.2.2**이다.
 
 | 버전 | 요지 |
 |------|------|
@@ -586,7 +586,8 @@ v0.2.1에서 `llm2_geodb`의 공간데이터 업로드·메타데이터 화면�
 | **0.1.3** | 파이프라인·Ollama·RAG 경로 단순화, 용적율/산업단지 프로필 비교, 고도화 문서 초안 |
 | **0.1.4** | 지명 사전(법정/행정), 공간·임계·행정동 목록, 의도분류/답변 템플릿 최적화 |
 | **0.2** | 지도 3분할, GeoServer WMS/WFS, KorDB·분석 레이어, Identify. 채팅 전용과 지도 화면 이원화 |
-| **0.2.1** (현재) | Head/Bottom 프레임, 데이터 관리(업로드·메타데이터), Identify 설명을 팝업으로 분리, 분석 레이어 재사용·상한·TTL, WMS 기본+WFS 선택, 채팅 폭 조절 |
+| **0.2.1** | Head/Bottom 프레임, 데이터 관리(업로드·메타데이터), Identify 설명을 팝업으로 분리, 분석 레이어 재사용·상한·TTL, WMS 기본+WFS 선택, 채팅 폭 조절 |
+| **0.2.2** (현재) | Semantic Query Plan MVP. 라우터 미적중 시 canonical Plan→deterministic SQL (`off`/`shadow`/`hybrid`, 기본 `off`). 실패 시 기존 RAG 유지 |
 
 `llm2_geodb`는 **v0.1.0**에서 해석·안전 실행·사용자 SQL 지도화·Shapefile ETL을 프로토타입으로 닫고, NL→SQL(L5)을 후속으로 남겼다.
 
@@ -606,7 +607,7 @@ v0.2.1에서 `llm2_geodb`의 공간데이터 업로드·메타데이터 화면�
 6. **데이터 관리 이식**: Shapefile 업로드·한글 메타데이터를 Head 메뉴로 제품화  
 7. **제품화**: 재사용 엔진, SSE 챗봇, CLI, 벤치·스모크, 공통 사이트 프레임
 
-따라서 `llm2sql` v0.2.1은 `llm2_geodb`의 **대화형 이해·안전 실행·지도·데이터 관리** 성과를 계승하면서, 실무 사용자가 SQL을 직접 쓰지 않아도 되는 **자연어 조회 완결형**으로 발전한 결과물이다.
+따라서 `llm2sql` v0.2.2는 `llm2_geodb`의 **대화형 이해·안전 실행·지도·데이터 관리** 성과를 계승하면서, 실무 사용자가 SQL을 직접 쓰지 않아도 되는 **자연어 조회 완결형**으로 발전한 결과물이다. 0.2.2는 라우터 미적중 구간에 Semantic Query Plan을 선택적으로 넣되, 기본값은 기존 RAG 경로와 같다.
 
 ---
 
@@ -614,5 +615,6 @@ v0.2.1에서 `llm2_geodb`의 공간데이터 업로드·메타데이터 화면�
 
 - 기준: `D:\py_workspace\llm2_geodb\docs\RND_대화형GIS해석_알고리즘_연구결과보고서.md`
 - 고도화 알고리즘: `D:\py_workspace\llm2sql\docs\RND_자연어GIS질의_알고리즘_연구결과보고서.md`
-- 제품 README: `D:\py_workspace\llm2sql\README.md` (버전 **0.2.1**)
+- 제품 README: `D:\py_workspace\llm2sql\README.md` (버전 **0.2.2**)
+- Semantic Query Plan: `D:\py_workspace\llm2sql\docs\Semantic_Query_Plan_구현.md`
 - 본 문서: `D:\py_workspace\llm2sql\docs\고도화_llm2_geodb_to_llm2sql.md`

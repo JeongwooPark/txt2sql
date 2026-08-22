@@ -27,6 +27,11 @@ def _route_mode(raw: object) -> str:
     return mode if mode in {"baseline", "optimized"} else "optimized"
 
 
+def _semantic_plan_mode(raw: object) -> str:
+    mode = str(raw or "off").strip().lower()
+    return mode if mode in {"off", "shadow", "hybrid"} else "off"
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -55,6 +60,11 @@ class Settings:
     map_wfs_max_features: int = 5000
     map_retention_hours: int = 24
     map_max_analysis_layers: int = 8
+    # off | shadow | hybrid — 규칙 라우터 미적중 시 Semantic Query Plan
+    semantic_plan_mode: str = "off"
+    semantic_plan_max_retries: int = 1
+    semantic_plan_min_quality: float = 0.85
+    semantic_plan_debug: bool = False
 
     def with_overrides(self, **kwargs: object) -> Settings:
         return replace(self, **kwargs)
@@ -181,6 +191,29 @@ class Settings:
                     "MAP_MAX_ANALYSIS_LAYERS",
                     default=8,
                 )
+            ),
+            semantic_plan_mode=_semantic_plan_mode(
+                _pick(data, "semantic_plan_mode", "SEMANTIC_PLAN_MODE", default="off")
+            ),
+            semantic_plan_max_retries=int(
+                _pick(
+                    data,
+                    "semantic_plan_max_retries",
+                    "SEMANTIC_PLAN_MAX_RETRIES",
+                    default=1,
+                )
+            ),
+            semantic_plan_min_quality=float(
+                _pick(
+                    data,
+                    "semantic_plan_min_quality",
+                    "SEMANTIC_PLAN_MIN_QUALITY",
+                    default=0.85,
+                )
+            ),
+            semantic_plan_debug=_as_bool(
+                _pick(data, "semantic_plan_debug", "SEMANTIC_PLAN_DEBUG"),
+                False,
             ),
         )
 

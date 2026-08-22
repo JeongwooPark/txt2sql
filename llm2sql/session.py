@@ -24,6 +24,8 @@ class SessionContext:
     last_chart: dict[str, Any] | None = None
     last_map_scope: str | None = None
     last_map_payload: dict[str, Any] | None = None
+    last_semantic_plan: dict[str, Any] | None = None
+    last_semantic_plan_route: str | None = None
 
     def update_from_result(
         self,
@@ -67,10 +69,17 @@ class SessionContext:
             self.last_full_question = question
         self.last_route = result.get("route")
         self.last_sql = result.get("sql")
+        plan = result.get("semantic_plan")
+        route = str(result.get("route") or "")
+        if isinstance(plan, dict):
+            self.last_semantic_plan = dict(plan)
+            self.last_semantic_plan_route = route or self.last_semantic_plan_route
+        elif route and not route.startswith(("clarify_", "semantic_plan_")):
+            self.last_semantic_plan = None
+            self.last_semantic_plan_route = None
         self.last_answer = result.get("answer")
         rows = list(result.get("rows") or [])
         self.last_rows = rows
-        route = str(result.get("route") or "")
         chart_payload = result.get("chart") or result.get("chart_spec")
         if result.get("chart_offer") and result.get("chart_spec"):
             self.pending_chart = dict(result["chart_spec"])
