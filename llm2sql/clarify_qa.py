@@ -112,6 +112,21 @@ _STOP = {
     "적은",
     "상위",
     "하위",
+    "그중",
+    "그중에서",
+    "이면서",
+    "이거나",
+    "이름과",
+    "성격의",
+    "구까지",
+    "지하층",
+    "건폐율",
+    "용적율",
+    "용적률",
+    "그리고",
+    "또는",
+    "혹은",
+    "제외",
     "이상",
     "이상인",
     "이상인것",
@@ -535,6 +550,7 @@ def check_ambiguity(
     # 차트 종류 변경/안내·지표 필터 질문은 미지 용어 clarify 대상이 아님
     from llm2sql.chart_qa import (
         is_chart_capability_question,
+        is_chart_metric_draw_question,
         is_chart_series_filter_question,
         is_chart_type_change_question,
     )
@@ -553,6 +569,7 @@ def check_ambiguity(
         is_chart_type_change_question(q)
         or is_chart_capability_question(q)
         or is_chart_series_filter_question(q)
+        or is_chart_metric_draw_question(q)
         or _is_coverage_question(q)
         or looks_like_building_name_lookup(q)
         or looks_like_measure_threshold(q)

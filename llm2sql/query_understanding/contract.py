@@ -117,7 +117,8 @@ def extract_contract(question: str) -> QueryContract:
             span.meta.get("low") is not None and span.meta.get("high") is not None
             for span in ranges
         )
-    contract.all_requested_outputs_bound = True
+    _bind_or_operands(q, boolean_ops)
+    contract.all_requested_outputs_bound = _outputs_bound(outputs)
     contract.coverage_ratio = _slot_coverage(contract)
     contract.complexity = complexity_score(
         boolean_ops=boolean_ops,
@@ -143,10 +144,14 @@ def _extract_ranges(question: str) -> list[Span]:
     found: list[Span] = []
     for pattern in ops.RANGE_PATTERNS:
         for match in re.finditer(pattern, question):
+            gd = match.groupdict()
             meta: dict[str, Any] = {
                 "low": float(match.group("lo")),
                 "high": float(match.group("hi")),
-                "unit": match.groupdict().get("u2") or match.groupdict().get("u1"),
+                "unit": gd.get("u2") or gd.get("u1"),
+                "lo_rel": gd.get("lo_rel") or "이상",
+                "hi_rel": gd.get("hi_rel")
+                or ("사이" if "사이" in match.group(0) else "까지"),
             }
             field = _nearest_metric(question, match.start())
             if field:
@@ -173,11 +178,12 @@ def _extract_numbers(question: str, ranges: list[Span]) -> list[Span]:
             start=match.start(),
             end=match.end(),
             value=float(match.group("num")),
-            meta={"unit": match.group("unit"), "field": _nearest_metric(question, match.start())},
+            meta={"unit": match.group("unit"), "field": None},
         )
         if any(rng.contains(span) for rng in ranges):
             continue
         found.append(span)
+    _bind_numbers_greedily(question, found)
     return found
 
 
@@ -216,7 +222,10 @@ def _extract_limits(question: str) -> list[Span]:
 def _extract_outputs(question: str) -> list[Span]:
     found: list[Span] = []
     for hint in ops.OUTPUT_HINTS:
-        found.extend(find_all(question, re.escape(hint), "output"))
+        for span in find_all(question, re.escape(hint), "output"):
+            span.value = ops.OUTPUT_FIELD_MAP.get(hint, hint)
+            span.meta["field"] = span.value
+            found.append(span)
     return dedupe_nested(found)
 
 
@@ -241,21 +250,98 @@ def _extract_comparisons(question: str) -> list[Span]:
 
 
 def _nearest_metric(question: str, index: int) -> str | None:
-    best: tuple[int, str] | None = None
+    candidates: list[tuple[int, int, int, str]] = []
     for text, field in ops.METRIC_MAP.items():
         pos = question.rfind(text, 0, index + 1)
         if pos < 0:
             continue
         dist = index - pos
-        if best is None or dist < best[0]:
-            best = (dist, field)
-    return best[1] if best and best[0] <= 16 else None
+        if dist > 16:
+            continue
+        candidates.append((pos, pos + len(text), len(text), field))
+    if not candidates:
+        return None
+    kept = [
+        item
+        for item in candidates
+        if not any(
+            item[0] >= other[0] and item[1] <= other[1] and other[2] > item[2]
+            for other in candidates
+        )
+    ]
+    kept.sort(key=lambda item: (index - item[0], -item[2]))
+    return kept[0][3]
 
 
 def _or_has_two_operands(question: str, span: Span) -> bool:
-    left = question[: span.start]
-    right = question[span.end :]
-    return bool(left.strip() and right.strip())
+    left_tok, right_tok = _or_operand_tokens(question, span)
+    return bool(left_tok and right_tok)
+
+
+def _or_operand_tokens(question: str, span: Span) -> tuple[str, str]:
+    left = re.findall(r"[가-힣A-Za-z0-9]+", question[: span.start])
+    right = re.findall(r"[가-힣A-Za-z0-9]+", question[span.end :])
+    skip = {"그리고", "이면서", "중", "그", "이", "저", "및"}
+    left_tok = next((t for t in reversed(left) if t not in skip), "")
+    right_tok = next((t for t in right if t not in skip), "")
+    return left_tok, right_tok
+
+
+def _bind_or_operands(question: str, boolean_ops: list[Span]) -> None:
+    for span in boolean_ops:
+        if span.kind != "or":
+            continue
+        left_tok, right_tok = _or_operand_tokens(question, span)
+        span.meta["left"] = left_tok
+        span.meta["right"] = right_tok
+        span.value = (left_tok, right_tok)
+
+
+def _outputs_bound(outputs: list[Span]) -> bool:
+    if not outputs:
+        return True
+    return all(bool(item.value) for item in outputs)
+
+
+def _bind_numbers_greedily(question: str, numbers: list[Span]) -> None:
+    used_spans: set[tuple[int, int]] = set()
+    for span in numbers:
+        field, metric_span = _nearest_unused_metric(question, span.start, used_spans)
+        span.meta["field"] = field
+        if metric_span is not None:
+            used_spans.add(metric_span)
+
+
+def _nearest_unused_metric(
+    question: str,
+    index: int,
+    used: set[tuple[int, int]],
+) -> tuple[str | None, tuple[int, int] | None]:
+    candidates: list[tuple[int, int, int, str]] = []
+    for text, field in ops.METRIC_MAP.items():
+        pos = question.rfind(text, 0, index + 1)
+        if pos < 0:
+            continue
+        dist = index - pos
+        if dist > 24:
+            continue
+        span = (pos, pos + len(text))
+        if span in used:
+            continue
+        candidates.append((pos, pos + len(text), len(text), field))
+    if not candidates:
+        return None, None
+    kept = [
+        item
+        for item in candidates
+        if not any(
+            item[0] >= other[0] and item[1] <= other[1] and other[2] > item[2]
+            for other in candidates
+        )
+    ]
+    kept.sort(key=lambda item: (index - item[0], -item[2]))
+    best = kept[0]
+    return best[3], (best[0], best[1])
 
 
 def _aggregation_complete(contract: QueryContract) -> bool:
@@ -278,6 +364,7 @@ def _slot_coverage(contract: QueryContract) -> float:
         + contract.order
         + contract.limits
         + contract.groups
+        + contract.outputs
     )
     if contract.unresolved_spans:
         return 0.0 if not slots else round(
@@ -290,5 +377,7 @@ def _slot_coverage(contract: QueryContract) -> float:
     if not contract.all_numeric_expressions_bound:
         bound -= 1
     if not contract.aggregation_complete:
+        bound -= 1
+    if not contract.all_requested_outputs_bound:
         bound -= 1
     return round(max(0.0, bound / len(slots)), 4)

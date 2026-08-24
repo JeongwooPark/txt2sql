@@ -1,0 +1,9 @@
+{
+  "phase": "6-12",
+  "route_capability": "legacy simple count ineligible when OR/NOT/BETWEEN/multi-predicate present",
+  "catalog": "building_coverage_ratio A17, floor_area_ratio A18, violation_status A20, building_dong_name A25, approval_date A13, industrial_complex entity",
+  "compiler_entities": "building, admin_area, basic_zone, industrial_complex",
+  "result_shape": "multi-aggregate and group_by presence checks",
+  "followup": "delta filters AND-merged into canonical predicate",
+  "clarify": "connector/domain tokens excluded from unknown-term"
+}

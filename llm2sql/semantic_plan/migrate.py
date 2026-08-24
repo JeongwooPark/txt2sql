@@ -22,33 +22,21 @@ def filter_to_predicate(spec: FilterSpec) -> PredicateSpec:
         return PredicateSpec(op="cmp", operator=spec.operator, left=left, right=right)
     if spec.operator == "between":
         return PredicateSpec(
-            op="and",
-            args=[
-                PredicateSpec(
-                    op="cmp",
-                    operator="gte",
-                    left=left,
-                    right=OperandSpec(kind="literal", value=spec.value, unit=spec.unit),
-                ),
-                PredicateSpec(
-                    op="cmp",
-                    operator="lte",
-                    left=left,
-                    right=OperandSpec(kind="literal", value=spec.value2, unit=spec.unit),
-                ),
-            ],
+            op="cmp",
+            operator="between",
+            left=left,
+            right=OperandSpec(
+                kind="literal",
+                value=[spec.value, spec.value2],
+                unit=spec.unit,
+            ),
         )
     if spec.operator == "not_in":
         return PredicateSpec(
-            op="not",
-            args=[
-                PredicateSpec(
-                    op="cmp",
-                    operator="in",
-                    left=left,
-                    right=OperandSpec(kind="literal", value=spec.value, unit=spec.unit),
-                )
-            ],
+            op="cmp",
+            operator="not_in",
+            left=left,
+            right=OperandSpec(kind="literal", value=spec.value, unit=spec.unit),
         )
     return PredicateSpec(
         op="cmp",

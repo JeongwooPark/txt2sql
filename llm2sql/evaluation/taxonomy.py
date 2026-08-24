@@ -50,6 +50,54 @@ ERROR_LABELS: dict[str, str] = {
     "C01": "followup_context_error",
 }
 
+ROOT_CAUSES = (
+    "PREDICATE_DROPPED",
+    "BOOLEAN_OR_DROPPED",
+    "BOOLEAN_NOT_DROPPED",
+    "RANGE_BOUND_DROPPED",
+    "OUTPUT_SHAPE_MISMATCH",
+    "ENTITY_SELECTION_ERROR",
+    "SPATIAL_TARGET_DROPPED",
+    "FOLLOWUP_CONTEXT_LOST",
+    "EXECUTION_TIMEOUT",
+)
+
+_CODE_TO_ROOT = {
+    "P04": "BOOLEAN_OR_DROPPED",
+    "P03": "RANGE_BOUND_DROPPED",
+    "P05": "OUTPUT_SHAPE_MISMATCH",
+    "P01": "ENTITY_SELECTION_ERROR",
+    "G01": "SPATIAL_TARGET_DROPPED",
+    "C01": "FOLLOWUP_CONTEXT_LOST",
+    "Q03": "OUTPUT_SHAPE_MISMATCH",
+    "Q02": "EXECUTION_TIMEOUT",
+    "R01": "ENTITY_SELECTION_ERROR",
+}
+
+
+def classify_root_causes(
+    error_codes: list[str],
+    *,
+    sql: str | None = None,
+    timed_out: bool = False,
+) -> list[str]:
+    causes: list[str] = []
+    if timed_out or any("timeout" in code.lower() for code in error_codes):
+        causes.append("EXECUTION_TIMEOUT")
+    for code in error_codes:
+        mapped = _CODE_TO_ROOT.get(code)
+        if mapped and mapped not in causes:
+            causes.append(mapped)
+    if sql:
+        upper = sql.upper()
+        if " OR " not in upper and "BOOLEAN_OR_DROPPED" not in causes:
+            if "P04" in error_codes:
+                causes.append("BOOLEAN_OR_DROPPED")
+        if "NOT " not in upper and "BOOLEAN_NOT_DROPPED" not in causes:
+            if "P04" in error_codes:
+                causes.append("BOOLEAN_NOT_DROPPED")
+    return list(dict.fromkeys(causes))
+
 
 def label(code: str) -> str:
     return ERROR_LABELS.get(code, "unknown")

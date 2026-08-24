@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 AND_PATTERNS = ("그리고", "이면서", "동시에", r"\s중\s", r"중$")
-OR_PATTERNS = ("또는", "혹은", "둘 중 하나")
-NOT_PATTERNS = ("제외", "아닌", "빼고", "이외")
+OR_PATTERNS = ("또는", "혹은", "이거나", "나 ", "이나 ", "든지", "둘 중 하나")
+NOT_PATTERNS = ("제외", "아닌", "빼고", "이외", "말고", "없이")
+_RANGE_UNIT = r"제곱미터|평방미터|㎡|m²|m2|평(?!수|형|방)|미터|m|층"
 RANGE_PATTERNS = (
-    r"(?P<lo>\d+(?:\.\d+)?)\s*(?P<u1>m|미터|㎡|m2|평)?\s*(이상|부터)\s*(?P<hi>\d+(?:\.\d+)?)\s*(?P<u2>m|미터|㎡|m2|평)?\s*(이하|까지|사이)",
-    r"(?P<lo>\d+(?:\.\d+)?)\s*(?P<u1>m|미터|㎡|m2|평)?\s*부터\s*(?P<hi>\d+(?:\.\d+)?)\s*(?P<u2>m|미터|㎡|m2|평)?\s*까지",
-    r"(?P<lo>\d+(?:\.\d+)?)\s*(?P<u1>m|미터|㎡|m2|평)?\s*사이\s*(?P<hi>\d+(?:\.\d+)?)",
+    rf"(?P<lo>\d+(?:\.\d+)?)\s*(?P<u1>{_RANGE_UNIT})?\s*(?P<lo_rel>이상|초과|부터)\s*(?P<hi>\d+(?:\.\d+)?)\s*(?P<u2>{_RANGE_UNIT})?\s*(?P<hi_rel>이하|미만|까지|사이)",
+    rf"(?P<lo>\d+(?:\.\d+)?)\s*(?P<u1>{_RANGE_UNIT})?\s*부터\s*(?P<hi>\d+(?:\.\d+)?)\s*(?P<u2>{_RANGE_UNIT})?\s*까지",
+    rf"(?P<lo>\d+(?:\.\d+)?)\s*(?P<u1>{_RANGE_UNIT})?\s*사이\s*(?P<hi>\d+(?:\.\d+)?)",
 )
 SORT_ASC = ("낮은", "작은", "오래된", "낮은 순", "작은 순", "오래된 순")
 SORT_DESC = ("높은", "큰", "최신", "높은 순", "큰 순", "최신 순", "가장 높", "가장 큰")
@@ -29,11 +30,43 @@ METRIC_MAP = {
     "건축면적": "building_area_m2",
     "건물면적": "building_area_m2",
     "대지면적": "site_area_m2",
+    "면적": "gross_floor_area_m2",
     "지상층": "ground_floors",
     "층수": "ground_floors",
     "용도": "usage",
+    "건폐율": "building_coverage_ratio",
+    "용적율": "floor_area_ratio",
+    "용적률": "floor_area_ratio",
+    "위반": "violation_status",
+    "사용승인": "approval_date",
+    "허가일": "approval_date",
 }
-OUTPUT_HINTS = ("이름", "건물명", "지번", "법정동", "용도", "높이", "연면적", "건축면적")
+OUTPUT_FIELD_MAP = {
+    "이름": "name",
+    "건물명": "name",
+    "지번": "lot_address",
+    "법정동": "legal_dong",
+    "용도": "usage",
+    "높이": "height_m",
+    "연면적": "gross_floor_area_m2",
+    "건축면적": "building_area_m2",
+    "층수": "ground_floors",
+    "건폐율": "building_coverage_ratio",
+    "용적율": "floor_area_ratio",
+}
+OUTPUT_HINTS = (
+    "이름",
+    "건물명",
+    "지번",
+    "법정동",
+    "용도",
+    "높이",
+    "연면적",
+    "건축면적",
+    "층수",
+    "건폐율",
+    "용적율",
+)
 COMPARE_PATTERNS = (
     r"(?P<left>건축면적|건물면적|연면적|대지면적|높이).{0,6}(?P<rel>보다 큰|보다 작은|보다 높은|보다 낮은).{0,6}(?P<right>건축면적|건물면적|연면적|대지면적|높이)",
     r"(?P<left>건축면적|건물면적|연면적|대지면적|높이).{0,4}(?P<right>건축면적|건물면적|연면적|대지면적|높이).{0,4}(?P<rel>보다 큰|보다 작은|보다 높은|보다 낮은)",

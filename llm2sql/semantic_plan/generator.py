@@ -125,10 +125,11 @@ def extract_plan_hints(question: str) -> dict[str, Any]:
                 "unit": "m2" if schema_unit in {"㎡", "m2"} else ("m" if schema_unit == "m" else "floor"),
             }
             )
-    between = _extract_between(q)
-    if between:
-        numerics = [item for item in numerics if item["field"] != between["field"]]
-        numerics.append(between)
+    range_nums = _extract_range_numerics(q)
+    if range_nums:
+        ranged_fields = {item["field"] for item in range_nums}
+        numerics = [item for item in numerics if item["field"] not in ranged_fields]
+        numerics.extend(range_nums)
     if not any(item["field"] == "ground_floors" for item in numerics):
         floor_m = re.search(r"(\d+)\s*층\s*(이상|이하|초과|미만|넘는)", q)
         if floor_m:
@@ -274,7 +275,6 @@ def try_heuristic_plan(question: str, hints: dict[str, Any] | None = None) -> Se
     compare = _extract_field_compare(q)
     if compare is not None:
         filters.append(compare)
-        predicate = filter_to_predicate(compare)
     if hints.get("structure"):
         filters.append(
             FilterSpec(field="structure", operator="contains", value=hints["structure"])
@@ -535,25 +535,54 @@ def _aggregate_function(question: str) -> str:
     return "avg"
 
 
-def _extract_between(question: str) -> dict[str, Any] | None:
+def _extract_range_numerics(question: str) -> list[dict[str, Any]]:
     from llm2sql.query_understanding.contract import extract_contract
 
     contract = extract_contract(question)
     if not contract.ranges:
-        return None
+        return []
     span = contract.ranges[0]
     field = span.meta.get("field") or "height_m"
-    unit = "m2" if field.endswith("m2") else "m"
-    return {
-        "field": field,
-        "operator": "between",
-        "value": span.meta.get("low"),
-        "value2": span.meta.get("high"),
-        "unit": unit,
-    }
+    unit = (
+        "m2"
+        if str(field).endswith("m2")
+        else ("floor" if field == "ground_floors" else "m")
+    )
+    lo_rel = span.meta.get("lo_rel") or "이상"
+    hi_rel = span.meta.get("hi_rel") or "이하"
+    lo_op = {"초과": "gt", "이상": "gte", "부터": "gte"}.get(lo_rel, "gte")
+    hi_op = {"미만": "lt", "이하": "lte", "까지": "lte", "사이": "lte"}.get(hi_rel, "lte")
+    if lo_op == "gte" and hi_op == "lte":
+        return [
+            {
+                "field": field,
+                "operator": "between",
+                "value": span.meta.get("low"),
+                "value2": span.meta.get("high"),
+                "unit": unit,
+            }
+        ]
+    return [
+        {
+            "field": field,
+            "operator": lo_op,
+            "value": span.meta.get("low"),
+            "unit": unit,
+        },
+        {
+            "field": field,
+            "operator": hi_op,
+            "value": span.meta.get("high"),
+            "unit": unit,
+        },
+    ]
 
 
 def _guess_kind(question: str) -> str:
+    from llm2sql.domain import wants_map_display
+
+    if wants_map_display(question):
+        return "count"
     if any(k in question for k in ("용도별", "층수별", "층별", "분포", "구성")):
         return "distribution"
     if any(k in question for k in AGG_MAP) or (

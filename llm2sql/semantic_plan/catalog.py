@@ -11,8 +11,30 @@ ADMIN_TABLE = "BND_ADM_DONG_PG"
 BASIC_ZONE_TABLE = "TL_KODIS_BAS_26_202507"
 INDUSTRIAL_TABLE = "AL_D060_00_20250804"
 
-_TEXT_OPS = ("eq", "neq", "contains", "in", "is_null", "is_not_null")
-_NUM_OPS = ("eq", "neq", "gt", "gte", "lt", "lte", "between", "is_null", "is_not_null")
+_TEXT_OPS = ("eq", "neq", "contains", "in", "not_in", "is_null", "is_not_null")
+_NUM_OPS = ("eq", "neq", "gt", "gte", "lt", "lte", "between", "in", "not_in", "is_null", "is_not_null")
+_DATE_OPS = ("eq", "neq", "gt", "gte", "lt", "lte", "between", "is_null", "is_not_null")
+
+_ENTITY_ALIASES = {
+    "building": "building",
+    "admin_area": "admin_area",
+    "basic_zone": "basic_zone",
+    "industrial_complex": "industrial_complex",
+}
+_FIELD_ALIASES = {
+    "height_m": "height_m",
+    "gross_floor_area_m2": "gross_floor_area_m2",
+    "building_area_m2": "building_area_m2",
+    "site_area_m2": "site_area_m2",
+    "ground_floors": "ground_floors",
+    "legal_dong": "legal_dong",
+    "lot_address": "lot_address",
+    "building_coverage_ratio": "building_coverage_ratio",
+    "floor_area_ratio": "floor_area_ratio",
+    "violation_status": "violation_status",
+    "building_dong_name": "building_dong_name",
+    "approval_date": "approval_date",
+}
 
 
 @dataclass(frozen=True)
@@ -62,6 +84,27 @@ def _text(
     )
 
 
+def _date(
+    key: str,
+    entity: str,
+    table: str,
+    column: str,
+    label: str,
+) -> SemanticField:
+    return SemanticField(
+        key=key,
+        entity=entity,
+        table=table,
+        column=column,
+        data_type="text",
+        label=label,
+        allowed_ops=_DATE_OPS,
+        sortable=True,
+        groupable=True,
+        aggregatable=False,
+    )
+
+
 def _num(
     key: str,
     entity: str,
@@ -107,6 +150,13 @@ ENTITIES: dict[str, SemanticEntity] = {
         id_field="id",
         label="기초구역",
     ),
+    "industrial_complex": SemanticEntity(
+        key="industrial_complex",
+        default_table=INDUSTRIAL_TABLE,
+        geometry_column="geometry",
+        id_field="id",
+        label="산업단지",
+    ),
 }
 
 BUILDING_FIELDS: dict[str, SemanticField] = {
@@ -131,6 +181,21 @@ BUILDING_FIELDS: dict[str, SemanticField] = {
     ),
     "basement_floors": _num(
         "basement_floors", "building", BUILDING_TABLE, "A27", "지하층수", "floor"
+    ),
+    "building_coverage_ratio": _num(
+        "building_coverage_ratio", "building", BUILDING_TABLE, "A17", "건폐율", "%"
+    ),
+    "floor_area_ratio": _num(
+        "floor_area_ratio", "building", BUILDING_TABLE, "A18", "용적율", "%"
+    ),
+    "violation_status": _text(
+        "violation_status", "building", BUILDING_TABLE, "A20", "위반건축물여부"
+    ),
+    "building_dong_name": _text(
+        "building_dong_name", "building", BUILDING_TABLE, "A25", "건물동명"
+    ),
+    "approval_date": _date(
+        "approval_date", "building", BUILDING_TABLE, "A13", "사용승인일자"
     ),
     "geometry": SemanticField(
         key="geometry",
@@ -163,6 +228,25 @@ ADMIN_FIELDS: dict[str, SemanticField] = {
     ),
 }
 
+INDUSTRIAL_FIELDS: dict[str, SemanticField] = {
+    "id": _text("id", "industrial_complex", INDUSTRIAL_TABLE, "A0", "산업단지 식별자", groupable=False),
+    "name": _text("name", "industrial_complex", INDUSTRIAL_TABLE, "A8", "산업단지명"),
+    "alt_name": _text("alt_name", "industrial_complex", INDUSTRIAL_TABLE, "A9", "산업단지 별칭"),
+    "type": _text("type", "industrial_complex", INDUSTRIAL_TABLE, "A6", "산업단지 유형"),
+    "geometry": SemanticField(
+        key="geometry",
+        entity="industrial_complex",
+        table=INDUSTRIAL_TABLE,
+        column="geometry",
+        data_type="geometry",
+        label="산업단지 공간정보",
+        allowed_ops=(),
+        sortable=False,
+        groupable=False,
+        aggregatable=False,
+    ),
+}
+
 BASIC_ZONE_FIELDS: dict[str, SemanticField] = {
     "id": _text("id", "basic_zone", BASIC_ZONE_TABLE, "BAS_ID", "기초구역ID"),
     "area_m2": _num(
@@ -187,6 +271,7 @@ FIELDS_BY_ENTITY: dict[str, dict[str, SemanticField]] = {
     "building": BUILDING_FIELDS,
     "admin_area": ADMIN_FIELDS,
     "basic_zone": BASIC_ZONE_FIELDS,
+    "industrial_complex": INDUSTRIAL_FIELDS,
 }
 
 ALLOWED_TABLES = frozenset(
@@ -198,7 +283,15 @@ ALLOWED_COLUMNS = frozenset(
     for field in fields.values()
 )
 CANONICAL_ALIASES = frozenset(
-    {"count", "n", *BUILDING_FIELDS, *ADMIN_FIELDS, *BASIC_ZONE_FIELDS}
+    {
+        "count",
+        "n",
+        *BUILDING_FIELDS,
+        *ADMIN_FIELDS,
+        *BASIC_ZONE_FIELDS,
+        *INDUSTRIAL_FIELDS,
+        *_FIELD_ALIASES,
+    }
 )
 
 DEFAULT_LIST_SELECT = (
@@ -217,20 +310,27 @@ AREA_FIELD_KEYS = frozenset(
 
 
 def get_entity(key: str) -> SemanticEntity:
-    entity = ENTITIES.get(key)
+    resolved = _ENTITY_ALIASES.get(key, key)
+    entity = ENTITIES.get(resolved)
     if entity is None:
         raise UnknownSemanticFieldError(f"unknown entity: {key}")
     return entity
 
 
 def get_field(entity: str, key: str) -> SemanticField:
-    fields = FIELDS_BY_ENTITY.get(entity)
+    resolved_entity = _ENTITY_ALIASES.get(entity, entity)
+    fields = FIELDS_BY_ENTITY.get(resolved_entity)
     if fields is None:
         raise UnknownSemanticFieldError(f"unknown entity: {entity}")
-    field = fields.get(key)
+    resolved_key = _FIELD_ALIASES.get(key, key)
+    field = fields.get(resolved_key)
     if field is None:
         raise UnknownSemanticFieldError(f"unknown field: {entity}.{key}")
     return field
+
+
+get_field = get_field
+get_entity = get_entity
 
 
 def catalog_prompt_text(*, entity: str = "building") -> str:
@@ -245,7 +345,7 @@ def catalog_prompt_text(*, entity: str = "building") -> str:
     lines.extend(
         [
             "",
-            "supported operators: eq, neq, gt, gte, lt, lte, contains, in, between",
+            "supported operators: eq, neq, gt, gte, lt, lte, contains, in, not_in, between",
             "supported spatial relations: covered_by, within, intersects, touches, buffer, nearest, overlap_ratio, within_distance, outside_distance",
             "supported query_kind: count, list, rank, aggregate, distribution",
             "spatial_mode auto: 구/법정동은 주소 속성, 행정전용 동은 경계",

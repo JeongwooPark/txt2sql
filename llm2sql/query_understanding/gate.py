@@ -5,6 +5,13 @@ from __future__ import annotations
 from llm2sql.domain import USAGE_ALIASES, extract_usages
 from llm2sql.query_understanding.contract import QueryContract
 from llm2sql.semantic_plan.models import SemanticQueryPlan
+from llm2sql.semantic_plan.predicate_utils import (
+    effective_predicate,
+    has_field_compare,
+    has_op,
+    has_operator,
+    range_bounds,
+)
 
 
 def accept_heuristic_plan(contract: QueryContract, plan: SemanticQueryPlan) -> bool:
@@ -20,35 +27,26 @@ def accept_heuristic_plan(contract: QueryContract, plan: SemanticQueryPlan) -> b
         and not contract.unresolved_spans
     ):
         return False
+    pred = effective_predicate(plan)
     if any(span.kind == "or" for span in contract.boolean_ops):
-        if not _or_bound(contract.question, plan):
+        if not _or_bound(contract.question, plan, pred):
             return False
     if any(span.kind == "not" for span in contract.boolean_ops):
-        if not any(item.operator == "neq" for item in plan.filters):
-            return False
-        if plan.predicate is None or plan.predicate.op != "not":
+        has_not = has_op(pred, "not") or any(item.operator == "neq" for item in plan.filters)
+        if not has_not:
             return False
     if contract.comparisons:
-        if not any(item.value_field for item in plan.filters):
+        if not (
+            has_field_compare(pred) or any(item.value_field for item in plan.filters)
+        ):
             return False
     if contract.ranges:
-        if not any(item.operator == "between" for item in plan.filters):
+        if not _range_filters_bound(contract, plan, pred):
             return False
-        for span in contract.ranges:
-            match = next(
-                (
-                    item
-                    for item in plan.filters
-                    if item.field == span.meta.get("field") and item.operator == "between"
-                ),
-                None,
-            )
-            if match is None or match.value is None or match.value2 is None:
-                return False
     if contract.aggregations:
-        wanted = [span.value for span in contract.aggregations]
-        got = [item.function for item in plan.aggregations]
-        if not got or got[0] not in wanted:
+        wanted = {span.value for span in contract.aggregations}
+        got = {item.function for item in plan.aggregations}
+        if not got or not wanted.issubset(got):
             return False
         if contract.groups and not plan.group_by:
             return False
@@ -65,8 +63,34 @@ def accept_heuristic_plan(contract: QueryContract, plan: SemanticQueryPlan) -> b
     return True
 
 
-def _or_bound(question: str, plan: SemanticQueryPlan) -> bool:
-    if plan.predicate is not None and plan.predicate.op == "or" and len(plan.predicate.args or []) >= 2:
+def _range_filters_bound(
+    contract: QueryContract,
+    plan: SemanticQueryPlan,
+    pred,
+) -> bool:
+    for span in contract.ranges:
+        field = span.meta.get("field")
+        low, high = range_bounds(pred, field) if field else (None, None)
+        if low is not None and high is not None:
+            continue
+        if has_operator(pred, "between"):
+            continue
+        items = [item for item in plan.filters if item.field == field]
+        between = next((item for item in items if item.operator == "between"), None)
+        if between is not None:
+            if between.value is None or between.value2 is None:
+                return False
+            continue
+        ops = {item.operator for item in items}
+        if not (ops & {"gte", "gt"} and ops & {"lte", "lt"}):
+            return False
+        if any(item.value is None for item in items if item.operator in {"gte", "gt", "lte", "lt"}):
+            return False
+    return True
+
+
+def _or_bound(question: str, plan: SemanticQueryPlan, pred) -> bool:
+    if has_op(pred, "or"):
         return True
     aliases = [alias for alias in USAGE_ALIASES if alias in question]
     mapped = list(dict.fromkeys(USAGE_ALIASES[alias] for alias in aliases))

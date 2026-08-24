@@ -1,0 +1,10 @@
+{
+  "phase": "13-16",
+  "temporal": "approval_date catalog field; validator allows age questions when approval_date is bound; Settings.reference_date=2025-07-04",
+  "plan_to_sql": "verify_plan_to_sql blocks execute on dropped OR/NOT/predicate/aggregate/spatial nodes",
+  "timeouts": "Settings.llm_timeout_s=20, db_statement_timeout_ms=15000",
+  "holdout": "tests/semantic_plan/test_metamorphic_holdout.py (AND subset, BETWEEN bounds)",
+  "full_500_rerun": false,
+  "reason": "question file SHA256 and q500_gold_eval.json lineage adopted; promotion score deferred until after structure gates",
+  "pytest_full": {"passed": 137, "failed": 0}
+}

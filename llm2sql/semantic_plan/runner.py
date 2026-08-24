@@ -17,6 +17,7 @@ from llm2sql.semantic_plan.models import (
     SemanticPlanGenerationError,
     SemanticQueryPlan,
 )
+from llm2sql.semantic_plan.plan_sql_verifier import verify_plan_to_sql
 from llm2sql.semantic_plan.normalizer import normalize_semantic_plan
 from llm2sql.semantic_plan.validator import validate_semantic_plan
 from llm2sql.session import SessionContext
@@ -111,7 +112,17 @@ def run_semantic_plan(
 
     emit("plan_compile", "Semantic Plan → SQL 컴파일 완료", sql=compiled.sql)
     from llm2sql.semantic_plan.sql_equivalence import verify_plan_sql_equivalence
+    from llm2sql.semantic_plan.plan_sql_verifier import verify_plan_to_sql
 
+    drop_errors = verify_plan_to_sql(checked.plan, compiled)
+    if drop_errors:
+        emit("plan_fallback", f"Plan-SQL 노드 누락: {drop_errors}")
+        return _fallback(
+            "sql_semantic_mismatch",
+            ",".join(drop_errors),
+            semantic_plan=checked.plan,
+            sql=compiled.sql,
+        )
     eq_errors = verify_plan_sql_equivalence(checked.plan, compiled.sql)
     if eq_errors:
         emit("plan_fallback", f"Plan-SQL 의미 불일치: {eq_errors}")

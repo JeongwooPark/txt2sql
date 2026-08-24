@@ -1,0 +1,21 @@
+{
+  "phase": 1,
+  "root_causes_supported": [
+    "PREDICATE_DROPPED",
+    "BOOLEAN_OR_DROPPED",
+    "BOOLEAN_NOT_DROPPED",
+    "RANGE_BOUND_DROPPED",
+    "OUTPUT_SHAPE_MISMATCH",
+    "ENTITY_SELECTION_ERROR",
+    "SPATIAL_TARGET_DROPPED",
+    "FOLLOWUP_CONTEXT_LOST",
+    "EXECUTION_TIMEOUT"
+  ],
+  "eval_item_fields_added": [
+    "root_causes",
+    "stage_latency_ms",
+    "selected_route",
+    "compiled_sql"
+  ],
+  "tests": "tests/evaluation/test_taxonomy.py + tests/semantic_plan/test_followup_and_eval.py"
+}

@@ -21,7 +21,9 @@ _MAX_GROUP = 2
 _MAX_AGG = 4
 _MAX_ORDER = 3
 _MAX_LIMIT = 1000
-_V1_ENTITIES = frozenset({"building"})
+_V1_ENTITIES = frozenset(
+    {"building", "admin_area", "basic_zone", "industrial_complex"}
+)
 _V1_SPATIAL = frozenset(
     {
         "within",
@@ -74,7 +76,9 @@ def validate_semantic_plan(
         return _fallback(plan, str(exc), score - 0.4)
 
     if looks_like_age_question(question) or any(h in question for h in AGE_HINTS):
-        return _fallback(plan, "unsupported_coverage: building age / 사용승인", score - 0.5)
+        has_approval = any(item.field == "approval_date" for item in plan.filters)
+        if not has_approval:
+            return _fallback(plan, "unsupported_coverage: building age / 사용승인", score - 0.5)
 
     if "면적" in question and not any(
         k in question for k in ("연면적", "건축면적", "건물면적", "대지면적")

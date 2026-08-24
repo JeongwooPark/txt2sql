@@ -7,6 +7,7 @@ from typing import Any
 from llm2sql.evaluation.plan_compare import classify_plan_errors, plans_match
 from llm2sql.evaluation.results import compare_result_sets
 from llm2sql.evaluation.schema import EvalItemResult, GoldPlanCase
+from llm2sql.evaluation.taxonomy import classify_root_causes
 from llm2sql.semantic_plan.models import SemanticQueryPlan
 
 
@@ -76,5 +77,7 @@ def evaluate_case(
             "gold_clarify": gold_clarify,
             "sql_executed": sql_executed,
             "latency_ms": latency_ms,
+            "root_causes": classify_root_causes(unique, timed_out="Q02" in unique),
+            "selected_route": predicted_route,
         }
     )

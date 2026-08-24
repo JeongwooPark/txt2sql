@@ -1,0 +1,42 @@
+{
+  "phase": 0,
+  "recorded_at": "2026-08-24",
+  "git": {
+    "branch": "master",
+    "head": "2bd714fb84c866104de483517db9668abd0032b6",
+    "head_oneline": "2bd714f docs(plan): [STEP-25] refresh progress after master verification"
+  },
+  "question_files": {
+    "json": "docs/평가문항_500.json",
+    "json_sha256": "73786531eac4188bdaa328c2674e9db1c01fb26f5d7afaf612d1fa0bdad03788",
+    "json_bytes": 399082,
+    "md": "docs/평가문항_500.md",
+    "md_sha256": "8b5883228dc36c46a849fde4b99689b7174d16cc15e9c9793b8af822582da335",
+    "md_bytes": 319326,
+    "n_questions": 500,
+    "id_head": "N001",
+    "id_n100": "N100",
+    "id_q101": "Q101",
+    "id_tail": "Q500"
+  },
+  "q500_baseline": {
+    "artifact": "artifacts/evaluation/q500_gold_eval.json",
+    "when": "2026-08-24 12:53:09",
+    "total": 500,
+    "passed": 198,
+    "failed": 302,
+    "accuracy_pct": 39.6,
+    "timeout_s": 60,
+    "full_500_rerun": false
+  },
+  "pytest": {
+    "command": "uv run pytest -q",
+    "passed": 137,
+    "failed": 0
+  },
+  "historical_baselines_not_head": [
+    "artifacts/evaluation/baseline_summary.json",
+    "artifacts/evaluation/baseline_semantic_errors.json",
+    "artifacts/evaluation/variant_a_off.json"
+  ]
+}

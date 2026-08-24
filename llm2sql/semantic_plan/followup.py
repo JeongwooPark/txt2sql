@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from llm2sql.domain import extract_gu, extract_place, has_anaphora, looks_like_standalone_question
 from llm2sql.semantic_plan.generator import extract_plan_hints
+from llm2sql.semantic_plan.migrate import filter_to_predicate
 from llm2sql.semantic_plan.models import (
     FilterSpec,
     OrderSpec,
@@ -19,6 +20,7 @@ from llm2sql.semantic_plan.models import (
     ScopeSpec,
     SemanticQueryPlan,
 )
+from llm2sql.semantic_plan.predicate_utils import and_predicates
 from llm2sql.session import SessionContext
 
 
@@ -53,7 +55,9 @@ def is_semantic_plan_followup(question: str, session: SessionContext | None) -> 
     events = parse_followup_events(q)
     if delta is None and not events:
         return False
-    if has_anaphora(q) or any(k in q for k in ("그중", "그 중", "이 중", "그중에")):
+    if has_anaphora(q) or any(
+        k in q for k in ("그중", "그 중", "이 중", "이중에", "이 중에", "그중에")
+    ):
         return True
     if extract_gu(q) or extract_place(q):
         return False
@@ -144,6 +148,9 @@ def apply_plan_delta(base: SemanticQueryPlan, delta: PlanDelta) -> SemanticQuery
         ]
         filters.append(spec)
     data["filters"] = [item.model_dump() for item in filters]
+    extras = [filter_to_predicate(spec) for spec in delta.add_filters]
+    merged_pred = and_predicates([base.predicate, *extras])
+    data["predicate"] = merged_pred.model_dump() if merged_pred is not None else None
 
     if delta.change_sort is not None:
         data["order_by"] = [item.model_dump() for item in delta.change_sort]

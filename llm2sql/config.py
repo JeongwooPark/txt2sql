@@ -72,6 +72,9 @@ class Settings:
     ollama_chat_model: str = ""
     ollama_plan_digest: str = ""
     ollama_embed_digest: str = ""
+    llm_timeout_s: float = 20.0
+    db_statement_timeout_ms: int = 15000
+    reference_date: str = "2025-07-04"
 
     def planner_model(self) -> str:
         return (self.ollama_plan_model or self.ollama_model).strip()
@@ -265,6 +268,26 @@ class Settings:
             ollama_embed_digest=str(
                 _pick(data, "ollama_embed_digest", "OLLAMA_EMBED_DIGEST", default="")
             ).strip(),
+            llm_timeout_s=float(
+                _pick(data, "llm_timeout_s", "LLM_TIMEOUT_S", default=20)
+            ),
+            db_statement_timeout_ms=int(
+                _pick(
+                    data,
+                    "db_statement_timeout_ms",
+                    "DB_STATEMENT_TIMEOUT_MS",
+                    default=15000,
+                )
+            ),
+            reference_date=str(
+                _pick(
+                    data,
+                    "reference_date",
+                    "REFERENCE_DATE",
+                    default="2025-07-04",
+                )
+            ).strip()
+            or "2025-07-04",
         )
 
 

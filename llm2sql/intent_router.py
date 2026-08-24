@@ -26,6 +26,7 @@ from llm2sql.domain import (
     _NAME_STOP,
     age_date_predicate,
     busan_gu_code,
+    calendar_year_predicate_sql,
     d198_table_for_gu,
     extract_age_compare,
     extract_age_years,
@@ -40,6 +41,7 @@ from llm2sql.domain import (
     looks_like_age_question,
     looks_like_building_name_lookup,
     looks_like_measure_threshold,
+    wants_map_display,
     _FALSE_DONG,
     place_a4_predicate,
     sane_floor_area_sql,
@@ -379,9 +381,32 @@ def _rel_op(rel: str) -> str:
         return ">"
     if rel == "미만":
         return "<"
-    if rel == "이하":
+    if rel in ("이하", "까지", "사이"):
         return "<="
     return ">="
+
+
+def _parse_lo_hi_range(
+    q: str,
+    prefix: str,
+    schema_unit: str,
+) -> tuple[tuple[str, str], tuple[str, str]] | None:
+    """((lo_op, lo_sql), (hi_op, hi_sql)) — N 이상 M 미만 등 한 지표 구간."""
+    m = re.search(
+        rf"{prefix}"
+        rf"(\d+(?:\.\d+)?)\s*{UNIT_TOKEN}\s*"
+        r"(이상|초과|부터)\s*"
+        rf"(\d+(?:\.\d+)?)\s*{UNIT_TOKEN}\s*"
+        r"(이하|미만|까지|사이)",
+        q,
+    )
+    if not m:
+        return None
+    lo = convert_for_schema(m.group(1), m.group(2), schema_unit)
+    hi = convert_for_schema(m.group(4), m.group(5), schema_unit)
+    if lo is None or hi is None or lo.canonical >= hi.canonical:
+        return None
+    return (_rel_op(m.group(3)), lo.sql), (_rel_op(m.group(6)), hi.sql)
 
 
 def _parse_area_threshold(q: str) -> tuple[str, str, str] | None:
@@ -408,30 +433,80 @@ def _parse_area_threshold(q: str) -> tuple[str, str, str] | None:
     return None
 
 
+def _parse_area_predicates(q: str) -> tuple[str, list[str]] | None:
+    """(order_col, extras) — 단일 임계 또는 구간."""
+    if "기초구역" in q:
+        return None
+    for label, col in _AREA_METRICS:
+        pair = _parse_lo_hi_range(q, rf"{re.escape(label)}\s*(?:이|가)?\s*", "㎡")
+        if pair is None:
+            continue
+        (lo_op, lo_v), (hi_op, hi_v) = pair
+        return col, [f'"{col}" {lo_op} {lo_v}', f'"{col}" {hi_op} {hi_v}']
+    parsed = _parse_area_threshold(q)
+    if parsed is None:
+        return None
+    col, op, area = parsed
+    return col, [f'"{col}" {op} {area}']
+
+
 def _wants_threshold_list(q: str) -> bool:
     return any(k in q for k in _AREA_LISTISH) and not any(
         k in q for k in _AREA_COUNTISH
     )
 
 
+def _route_map_display(q: str) -> RoutedQuery | None:
+    """「건물데이터를 표시하라」→ 건수 SQL. 지도는 COUNT를 피처로 올린다."""
+    if not wants_map_display(q):
+        return None
+    if "산업단지" in q or "기초구역" in q:
+        return None
+    place = extract_place(q)
+    gu = extract_gu(q)
+    if not place and not gu:
+        return None
+    extra: list[str] = []
+    usage = extract_usage(q)
+    if usage:
+        extra.append(f"\"A9\" = '{usage}'")
+    year_sql = calendar_year_predicate_sql(q, col="A13")
+    if year_sql:
+        extra.append(year_sql)
+    if gu and (not place or str(place).endswith(("구", "군"))):
+        where = [place_a4_predicate(gu), *extra]
+        sql = (
+            'SELECT COUNT(*) AS cnt\n'
+            'FROM "AL_D010_26_20250704"\n'
+            f'WHERE {" AND ".join(where)};'
+        )
+        return RoutedQuery("building_map_display", sql)
+    kind, sql = scoped_count_sql(place, gu, extra)
+    if kind == "none":
+        return None
+    return RoutedQuery("building_map_display", sql)
+
+
 def _route_measure_threshold(
     q: str,
     *,
-    col: str,
-    op: str,
-    value: str,
+    extras: list[str],
+    order_col: str,
     list_intent: str,
     count_intent: str,
 ) -> RoutedQuery | None:
     """동·구 수치 임계 — 목록 또는 건수."""
     place = extract_place(q)
     gu = extract_gu(q)
-    extra = [f'"{col}" {op} {value}']
+    extra = list(extras)
     usage = extract_usage(q)
     if usage:
         extra.append(f'"A9" = \'{usage}\'')
+    year_sql = calendar_year_predicate_sql(q, col="A13")
+    if year_sql:
+        extra.append(year_sql)
     kind, sql = (
-        scoped_list_sql(place, gu, extra, order_col=col)
+        scoped_list_sql(place, gu, extra, order_col=order_col)
         if _wants_threshold_list(q)
         else scoped_count_sql(place, gu, extra)
     )
@@ -443,15 +518,14 @@ def _route_measure_threshold(
 
 
 def _route_building_area_threshold(q: str) -> RoutedQuery | None:
-    parsed = _parse_area_threshold(q)
+    parsed = _parse_area_predicates(q)
     if parsed is None:
         return None
-    col, op, area = parsed
+    col, extras = parsed
     return _route_measure_threshold(
         q,
-        col=col,
-        op=op,
-        value=area,
+        extras=extras,
+        order_col=col,
         list_intent="building_area_threshold_list",
         count_intent="building_area_threshold_count",
     )
@@ -502,15 +576,19 @@ def _parse_floor_threshold(q: str) -> tuple[str, str] | None:
 
 
 def _route_building_height_threshold(q: str) -> RoutedQuery | None:
-    parsed = _parse_height_threshold(q)
-    if parsed is None:
-        return None
-    op, meters = parsed
+    pair = _parse_lo_hi_range(q, r"높이[가이]?\s*", "m") if "높이" in q else None
+    if pair is not None:
+        extras = [f'"A16" {pair[0][0]} {pair[0][1]}', f'"A16" {pair[1][0]} {pair[1][1]}']
+    else:
+        parsed = _parse_height_threshold(q)
+        if parsed is None:
+            return None
+        op, meters = parsed
+        extras = [f'"A16" {op} {meters}']
     return _route_measure_threshold(
         q,
-        col="A16",
-        op=op,
-        value=meters,
+        extras=extras,
+        order_col="A16",
         list_intent="building_height_threshold_list",
         count_intent="building_height_count",
     )
@@ -562,16 +640,38 @@ def _route_building_structure(q: str) -> RoutedQuery | None:
     return _count_sql(count_intent, _D010, where_sql)
 
 
-def _route_building_floor_threshold(q: str) -> RoutedQuery | None:
-    parsed = _parse_floor_threshold(q)
-    if parsed is None:
+def _parse_floor_range(q: str) -> tuple[tuple[str, str], tuple[str, str]] | None:
+    m = re.search(
+        r"(?:지상\s*층?|층수|지상층)[이가]?\s*(\d+)\s*층\s*(이상|초과|부터)\s*(\d+)\s*층\s*(이하|미만|까지|사이)",
+        q,
+    )
+    if not m:
+        m = re.search(
+            r"(\d+)\s*층\s*(이상|초과|부터)\s*(\d+)\s*층\s*(이하|미만|까지|사이)",
+            q,
+        )
+    if not m:
         return None
-    op, floors = parsed
+    lo, hi = int(m.group(1)), int(m.group(3))
+    if lo >= hi:
+        return None
+    return (_rel_op(m.group(2)), str(lo)), (_rel_op(m.group(4)), str(hi))
+
+
+def _route_building_floor_threshold(q: str) -> RoutedQuery | None:
+    pair = _parse_floor_range(q)
+    if pair is not None:
+        extras = [f'"A26" {pair[0][0]} {pair[0][1]}', f'"A26" {pair[1][0]} {pair[1][1]}']
+    else:
+        parsed = _parse_floor_threshold(q)
+        if parsed is None:
+            return None
+        op, floors = parsed
+        extras = [f'"A26" {op} {floors}']
     return _route_measure_threshold(
         q,
-        col="A26",
-        op=op,
-        value=floors,
+        extras=extras,
+        order_col="A26",
         list_intent="building_floor_threshold_list",
         count_intent="building_floor_count",
     )
@@ -654,6 +754,10 @@ def should_defer_compound_to_plan(q: str) -> bool:
         return True
     if "용도별" in q and any(k in q for k in ("개수", "건수", "분포", "구성")):
         return True
+    if any(k in q for k in (" 또는 ", " 혹은 ", "이거나", "제외", "아닌", "빼고")):
+        return True
+    if any(k in q for k in ("사이", "부터", "까지", "건폐율", "용적율", "용적률", "위반")):
+        return True
     return False
 
 
@@ -678,6 +782,11 @@ def try_route(
     spatial_hit = try_spatial_route(q)
     if spatial_hit is not None:
         return spatial_hit
+
+    # 지도 표출 — 카탈로그·SQP 주소 목록보다 우선
+    map_hit = _route_map_display(q)
+    if map_hit is not None:
+        return map_hit
 
     if should_defer_compound_to_plan(q):
         return None

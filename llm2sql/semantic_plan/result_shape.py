@@ -22,6 +22,21 @@ def diagnose_result_shape(
         errors.append("Q03")
     if plan.query_kind == "list" and len(rows) > 5000:
         errors.append("Q03")
+    if plan.query_kind in {"aggregate", "distribution"} and plan.aggregations and rows:
+        aliases = {
+            item.alias
+            or (f"{item.function}_{item.field}" if item.field else item.function)
+            for item in plan.aggregations
+        }
+        row0 = rows[0]
+        if aliases and not any(alias in row0 for alias in aliases):
+            numeric_cols = [k for k, v in row0.items() if isinstance(v, (int, float))]
+            if len(numeric_cols) < len(plan.aggregations):
+                errors.append("Q03")
+        for key in plan.group_by:
+            if key not in row0:
+                errors.append("Q03")
+                break
     if rows and all(all(v is None for v in row.values()) for row in rows):
         errors.append("Q03")
     return errors

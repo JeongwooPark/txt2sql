@@ -9,6 +9,7 @@ import sqlglot
 from sqlglot import exp
 
 from llm2sql.semantic_plan.models import PredicateSpec, SemanticQueryPlan
+from llm2sql.semantic_plan.predicate_utils import effective_predicate
 
 
 def _norm_ident(name: str) -> str:
@@ -54,20 +55,10 @@ def _node(node: exp.Expression | None) -> dict[str, Any] | None:
 
 
 def plan_boolean_tree(plan: SemanticQueryPlan) -> dict[str, Any] | None:
-    if plan.predicate is not None:
-        return _pred(plan.predicate)
-    if not plan.filters:
+    pred = effective_predicate(plan)
+    if pred is None:
         return None
-    if len(plan.filters) == 1:
-        spec = plan.filters[0]
-        return {"op": "cmp", "operator": spec.operator, "field": spec.field}
-    return {
-        "op": "and",
-        "args": [
-            {"op": "cmp", "operator": spec.operator, "field": spec.field}
-            for spec in plan.filters
-        ],
-    }
+    return _pred(pred)
 
 
 def _pred(pred: PredicateSpec) -> dict[str, Any]:
@@ -94,15 +85,18 @@ def verify_plan_sql_equivalence(plan: SemanticQueryPlan, sql: str) -> list[str]:
     if plan.query_kind == "count" and "COUNT(" not in upper:
         errors.append("P05")
     if plan.aggregations:
-        fn = plan.aggregations[0].function.upper()
-        if fn == "SUM" and "SUM(" not in upper:
-            errors.append("P05")
-        if fn == "AVG" and "AVG(" not in upper:
-            errors.append("P05")
-        if fn == "MAX" and "MAX(" not in upper:
-            errors.append("P05")
-        if fn == "MIN" and "MIN(" not in upper:
-            errors.append("P05")
+        for item in plan.aggregations:
+            fn = item.function.upper()
+            if fn == "SUM" and "SUM(" not in upper:
+                errors.append("P05")
+            if fn == "AVG" and "AVG(" not in upper:
+                errors.append("P05")
+            if fn == "MAX" and "MAX(" not in upper:
+                errors.append("P05")
+            if fn == "MIN" and "MIN(" not in upper:
+                errors.append("P05")
+            if fn == "COUNT" and "COUNT(" not in upper:
+                errors.append("P05")
     if plan.order_by:
         want = "ASC" if plan.order_by[0].direction == "asc" else "DESC"
         if want not in upper:

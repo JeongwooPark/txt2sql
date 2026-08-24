@@ -12,6 +12,7 @@ from llm2sql.semantic_plan.catalog import (
     ALLOWED_COLUMNS,
     ALLOWED_TABLES,
     BASIC_ZONE_TABLE,
+    BUILDING_TABLE,
     INDUSTRIAL_TABLE,
     get_entity,
     get_field,
@@ -24,6 +25,7 @@ from llm2sql.semantic_plan.models import (
     SemanticQueryPlan,
     UnknownSemanticFieldError,
 )
+from llm2sql.semantic_plan.predicate_utils import effective_predicate
 from llm2sql.units import sql_number
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -48,15 +50,22 @@ class CompiledSemanticQuery:
     params: list[object] = field(default_factory=list)
 
 
+_ENTITY_ALIAS = {
+    "building": "b",
+    "admin_area": "a",
+    "basic_zone": "z",
+    "industrial_complex": "i",
+}
+
+
 def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
-    if plan.entity != "building":
-        raise SemanticCompileError(f"v1 compiler supports building only: {plan.entity}")
     entity = get_entity(plan.entity)
-    alias = "b"
+    alias = _ENTITY_ALIAS.get(plan.entity, "t")
     tables = [entity.default_table]
     joins: list[str] = []
     where: list[str] = []
     uses_boundary = False
+    compiled_nodes: list[str] = []
 
     place = plan.scope.place if plan.scope else None
     spatial_mode = plan.scope.spatial_mode if plan.scope else "auto"
@@ -75,45 +84,41 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
 
     if place and place.name.strip() and place.name.strip() not in spatial_places:
         name = place.name.strip()
-        want_boundary = spatial_mode == "boundary" or (
-            spatial_mode == "auto" and uses_admin_boundary(name)
-        )
-        if want_boundary:
-            uses_boundary = True
-            if ADMIN_TABLE not in tables:
-                tables.append(ADMIN_TABLE)
-            joins.append(
-                f"JOIN {_ident(ADMIN_TABLE, physical=True)} a "
-                f"ON ST_Intersects({alias}.geometry, a.geometry)"
-            )
-            where.append(_admin_name_sql("a", name))
-            where.append("a.\"ADM_CD\" LIKE '21%'")
+        if plan.entity != "building":
+            where.append(_entity_place_sql(alias, plan.entity, name))
         else:
-            where.append(_a4_place_sql(alias, name))
+            want_boundary = spatial_mode == "boundary" or (
+                spatial_mode == "auto" and uses_admin_boundary(name)
+            )
+            if want_boundary:
+                uses_boundary = True
+                if ADMIN_TABLE not in tables:
+                    tables.append(ADMIN_TABLE)
+                joins.append(
+                    f"JOIN {_ident(ADMIN_TABLE, physical=True)} a "
+                    f"ON ST_Intersects({alias}.geometry, a.geometry)"
+                )
+                where.append(_admin_name_sql("a", name))
+                where.append("a.\"ADM_CD\" LIKE '21%'")
+            else:
+                where.append(_a4_place_sql(alias, name))
 
     height_used = False
     params: list[object] = []
-    if plan.predicate is not None:
-        validate_predicate(plan.predicate)
-        clause, used_height, pred_params = _predicate_sql(alias, plan.entity, plan.predicate)
+    pred = effective_predicate(plan)
+    if pred is not None:
+        validate_predicate(pred)
+        clause, used_height, pred_params = _predicate_sql(alias, plan.entity, pred)
         where.append(clause)
         height_used = height_used or used_height
         params.extend(pred_params)
-    else:
-        for spec in plan.filters:
-            clause, used_height = _filter_sql(alias, plan.entity, spec)
-            where.append(clause)
-            height_used = height_used or used_height
-            if spec.value is not None:
-                params.append(spec.value)
-            if spec.value2 is not None:
-                params.append(spec.value2)
+        compiled_nodes.extend(_predicate_node_ids(pred))
 
     if plan.query_kind in {"rank", "list"} and any(
         item.field == "height_m" for item in plan.order_by
     ):
         height_used = True
-    if height_used:
+    if height_used and plan.entity == "building":
         where.append(_sane_height_sql(alias))
 
     select_sql = _select_sql(alias, plan)
@@ -150,6 +155,14 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
 
     _assert_safe_sql(sql)
     extra = dict(plan.model_dump().get("extra") or {})
+    extra["compile_trace"] = {
+        "entity": plan.entity,
+        "predicate_nodes": compiled_nodes,
+        "aggregations": [item.function for item in plan.aggregations],
+        "group_fields": list(plan.group_by),
+        "spatial_relations": [item.relation for item in plan.spatial_relations],
+        "filters_merged": bool(plan.filters) and plan.predicate is not None,
+    }
     if plan.spatial_relations:
         extra.setdefault("distinct_policy", "identity_if_spatial_join")
     return CompiledSemanticQuery(
@@ -182,7 +195,14 @@ def _select_sql(alias: str, plan: SemanticQueryPlan) -> str:
 
     keys = list(plan.select)
     if not keys:
-        keys = ["name", "legal_dong", "lot_address"]
+        if plan.entity == "admin_area":
+            keys = ["name"]
+        elif plan.entity == "basic_zone":
+            keys = ["id", "gu_name"]
+        elif plan.entity == "industrial_complex":
+            keys = ["name"]
+        else:
+            keys = ["name", "legal_dong", "lot_address"]
     pieces = []
     for key in keys:
         field = get_field(plan.entity, key)
@@ -236,11 +256,15 @@ def _order_sql(alias: str, plan: SemanticQueryPlan) -> str:
     if not plan.order_by:
         return ""
     bits = []
+    agg_aliases = {item.alias for item in plan.aggregations if item.alias}
     for item in plan.order_by:
-        field = get_field(plan.entity, item.field)
-        expr = _col(alias, field.column)
-        if field.data_type == "number":
-            expr = f"{expr}::float8"
+        if item.field in agg_aliases or item.field in {"count", "n"}:
+            expr = _ident(item.field)
+        else:
+            field = get_field(plan.entity, item.field)
+            expr = _col(alias, field.column)
+            if field.data_type == "number":
+                expr = f"{expr}::float8"
         direction = "DESC" if item.direction == "desc" else "ASC"
         nulls = "NULLS FIRST" if item.nulls == "first" else "NULLS LAST"
         bits.append(f"{expr} {direction} {nulls}")
@@ -286,17 +310,26 @@ def _predicate_sql(alias: str, entity: str, pred: PredicateSpec) -> tuple[str, b
         return sql, height_used, params
     if pred.operator == "between":
         left, height_used, params = _operand_sql(alias, entity, pred.left)
-        low = _literal(pred.right.value if pred.right else None, "number")
-        # between as two bounds lives in migrate; keep safety
-        return f"{left} >= {low}", height_used, params
-    if pred.operator == "in":
+        raw = pred.right.value if pred.right else None
+        if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+            low, high = raw[0], raw[1]
+        else:
+            raise SemanticCompileError("between requires [low, high] literal")
+        params.extend([low, high])
+        return (
+            f"{left} BETWEEN {_literal(low, 'number')} AND {_literal(high, 'number')}",
+            height_used,
+            params,
+        )
+    if pred.operator in {"in", "not_in"}:
         left, height_used, params = _operand_sql(alias, entity, pred.left)
         values = pred.right.value if pred.right else []
         if not isinstance(values, (list, tuple)):
             values = [values]
         lits = ", ".join(_literal(v, "text") for v in values)
         params.extend(list(values))
-        return f"{left} IN ({lits})", height_used, params
+        kw = "IN" if pred.operator == "in" else "NOT IN"
+        return f"{left} {kw} ({lits})", height_used, params
     left_sql, h1, p1 = _operand_sql(alias, entity, pred.left)
     right_sql, h2, p2 = _operand_sql(alias, entity, pred.right)
     op = _OPS.get(pred.operator)
@@ -321,6 +354,10 @@ def _filter_sql(alias: str, entity: str, spec: FilterSpec) -> tuple[str, bool]:
         return f"{col} IS NULL", height_used
     if spec.operator == "is_not_null":
         return f"{col} IS NOT NULL", height_used
+    if spec.operator == "not_in":
+        values = spec.value if isinstance(spec.value, (list, tuple)) else [spec.value]
+        lits = ", ".join(_literal(v, field.data_type) for v in values)
+        return f"{col} NOT IN ({lits})", height_used
     if spec.operator == "in":
         values = spec.value if isinstance(spec.value, (list, tuple)) else [spec.value]
         lits = ", ".join(_literal(v, field.data_type) for v in values)
@@ -379,20 +416,21 @@ def _apply_spatial_relations(
         place_name = (
             target.place.name.strip() if target.place and target.place.name else None
         )
+        target_entity = getattr(target, "entity", None) or "admin_area"
         if policy.kind == "predicate":
             if not place_name:
                 raise SemanticCompileError(f"{rel.relation} requires a place target")
             used_places.add(place_name)
             d_alias = "a" if not admin_alias_used else f"a{index}"
             admin_alias_used = True
-            if ADMIN_TABLE not in tables:
-                tables.append(ADMIN_TABLE)
+            table, name_clause = _spatial_target_sql(target_entity, d_alias, place_name)
+            if table not in tables:
+                tables.append(table)
             joins.append(
-                f"JOIN {_ident(ADMIN_TABLE, physical=True)} {d_alias} "
+                f"JOIN {_ident(table, physical=True)} {d_alias} "
                 f"ON {policy.postgis_fn}({alias}.geometry, {d_alias}.geometry)"
             )
-            where.append(_admin_name_sql(d_alias, place_name))
-            where.append(f"{d_alias}.\"ADM_CD\" LIKE '21%'")
+            where.append(name_clause)
             uses_boundary = True
             continue
         if policy.kind in {"distance", "distance_outside"}:
@@ -550,6 +588,42 @@ def _admin_name_sql(alias: str, place: str) -> str:
         f"({col} = {_literal(place, 'text')} OR "
         f"{col} ~ {_literal('^' + stem + '[0-9]+동$', 'text')})"
     )
+
+
+def _entity_place_sql(alias: str, entity: str, place: str) -> str:
+    if entity == "admin_area":
+        return _admin_name_sql(alias, place)
+    if entity == "basic_zone":
+        return f'{alias}."SIG_KOR_NM" LIKE {_literal("%" + place + "%", "text")}'
+    if entity == "industrial_complex":
+        pat = _literal("%" + place + "%", "text")
+        return f'({alias}."A8" ILIKE {pat} OR {alias}."A9" ILIKE {pat})'
+    return _a4_place_sql(alias, place)
+
+
+def _spatial_target_sql(entity: str, alias: str, place: str) -> tuple[str, str]:
+    if entity == "basic_zone":
+        return BASIC_ZONE_TABLE, _entity_place_sql(alias, entity, place)
+    if entity == "industrial_complex":
+        return INDUSTRIAL_TABLE, _entity_place_sql(alias, entity, place)
+    if entity == "building":
+        return BUILDING_TABLE, _a4_place_sql(alias, place)
+    clause = _admin_name_sql(alias, place)
+    if entity == "admin_area":
+        clause = f"{clause} AND {alias}.\"ADM_CD\" LIKE '21%'"
+    return ADMIN_TABLE, clause
+
+
+def _predicate_node_ids(pred: PredicateSpec) -> list[str]:
+    from llm2sql.semantic_plan.predicate_utils import walk_predicate
+
+    out: list[str] = []
+    for index, node in enumerate(walk_predicate(pred)):
+        if node.op == "cmp" and node.left and node.left.field:
+            out.append(f"{node.left.field}:{node.operator}:{index}")
+        else:
+            out.append(f"{node.op}:{index}")
+    return out
 
 
 def _sane_height_sql(alias: str) -> str:

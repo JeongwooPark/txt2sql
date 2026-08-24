@@ -47,6 +47,10 @@ class EvalItemResult(BaseModel):
     sql_executed: bool | None = None
     latency_ms: int | None = None
     notes: str = ""
+    root_causes: list[str] = Field(default_factory=list)
+    stage_latency_ms: dict[str, int] = Field(default_factory=dict)
+    selected_route: str | None = None
+    compiled_sql: str | None = None
 
 
 class EvalSummary(BaseModel):

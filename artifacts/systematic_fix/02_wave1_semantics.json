@@ -1,0 +1,8 @@
+{
+  "phase": "2-5",
+  "contract": "output binding, OR operands, greedy numeric binding, coverage includes outputs",
+  "effective_predicate": "filters AND predicate; compiler/gate/verifier/sql_equivalence/followup share helper",
+  "compiler": "BETWEEN low AND high, NOT IN, nested parentheses",
+  "verifier": "nested OR/NOT walk, aggregate set, range bounds",
+  "pytest_focused": "51 passed before full suite"
+}

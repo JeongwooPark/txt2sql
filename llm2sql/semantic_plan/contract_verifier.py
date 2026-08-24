@@ -6,6 +6,14 @@ from dataclasses import dataclass, field
 
 from llm2sql.query_understanding.contract import QueryContract, extract_contract
 from llm2sql.semantic_plan.models import PlanConfidence, SemanticQueryPlan
+from llm2sql.semantic_plan.predicate_utils import (
+    effective_predicate,
+    has_field_compare,
+    has_op,
+    has_operator,
+    predicate_fields,
+    range_bounds,
+)
 
 
 @dataclass
@@ -37,7 +45,12 @@ def verify_contract(
             hard_fail=False,
         )
 
-    entity_score = 1.0 if plan.entity == "building" else 0.4
+    entity_score = 1.0 if plan.entity in {
+        "building",
+        "admin_area",
+        "basic_zone",
+        "industrial_complex",
+    } else 0.4
     if contract.places:
         place_ok = bool(plan.scope and plan.scope.place and plan.scope.place.name)
         scope_score = 1.0 if place_ok else 0.0
@@ -46,9 +59,9 @@ def verify_contract(
     else:
         scope_score = 1.0
 
+    pred = effective_predicate(plan)
     pred_fields = {item.field for item in plan.filters}
-    if plan.predicate:
-        pred_fields |= _predicate_fields(plan.predicate)
+    pred_fields |= predicate_fields(pred)
     pred_fields |= {item.field for item in plan.aggregations if item.field}
     pred_fields |= set(plan.select)
     pred_fields |= set(plan.group_by)
@@ -58,32 +71,38 @@ def verify_contract(
 
     pred_score = 1.0
     if any(span.kind == "or" for span in contract.boolean_ops):
-        if not (plan.predicate and plan.predicate.op == "or"):
+        if not has_op(pred, "or"):
             pred_score = 0.0
             reasons.append("P04")
     if any(span.kind == "not" for span in contract.boolean_ops):
-        has_not = any(item.operator == "neq" for item in plan.filters)
-        if plan.predicate and plan.predicate.op == "not":
-            has_not = True
+        has_not = has_op(pred, "not") or any(item.operator == "neq" for item in plan.filters)
         if not has_not:
             pred_score = 0.0
             reasons.append("P04")
     if contract.ranges:
-        has_between = any(item.operator == "between" for item in plan.filters)
-        if not has_between:
+        range_ok = has_operator(pred, "between")
+        if not range_ok:
+            for span in contract.ranges:
+                field = span.meta.get("field")
+                low, high = range_bounds(pred, field) if field else (None, None)
+                if low is None or high is None:
+                    range_ok = False
+                    break
+                range_ok = True
+        if not range_ok:
             pred_score = min(pred_score, 0.0)
             reasons.append("P03")
     if contract.comparisons:
-        has_ff = any(item.value_field for item in plan.filters)
+        has_ff = has_field_compare(pred) or any(item.value_field for item in plan.filters)
         if not has_ff:
             pred_score = 0.0
             reasons.append("P03")
 
     agg_score = 1.0
     if contract.aggregations:
-        wanted = [span.value for span in contract.aggregations]
-        got = [item.function for item in plan.aggregations]
-        if not got or got[0] not in wanted:
+        wanted = {span.value for span in contract.aggregations}
+        got = {item.function for item in plan.aggregations}
+        if not got or not wanted.issubset(got):
             agg_score = 0.0
             reasons.append("P05")
         if contract.groups and not plan.group_by:

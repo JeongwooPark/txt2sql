@@ -65,6 +65,10 @@ class UnknownSemanticFieldError(SemanticPlanError):
     """catalog에 없는 semantic field."""
 
 
+UnknownSemanticFieldError = UnknownSemanticFieldError
+SemanticCompileError = SemanticCompileError
+
+
 class PlaceSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
