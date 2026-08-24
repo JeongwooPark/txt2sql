@@ -1,0 +1,504 @@
+{
+  "when": "2026-08-25 07:48:02",
+  "baseline": {
+    "passed": 198,
+    "failed": 302,
+    "accuracy_pct": 39.6,
+    "source": "artifacts/evaluation/q500_gold_eval.json (2026-08-24 12:53)"
+  },
+  "current": {
+    "passed": 3,
+    "failed": 21,
+    "accuracy_pct": 12.5,
+    "elapsed_s": 26.1,
+    "timeout_s": 40
+  },
+  "cause_counts": {
+    "PREDICATE_DROPPED": 16,
+    "ENTITY_SELECTION_ERROR": 3,
+    "RANGE_BOUND_DROPPED": 2
+  },
+  "by_cat": {
+    "공간복합": {
+      "PREDICATE_DROPPED": 2
+    },
+    "미사용속성": {
+      "PREDICATE_DROPPED": 5,
+      "ENTITY_SELECTION_ERROR": 1
+    },
+    "집계비율": {
+      "ENTITY_SELECTION_ERROR": 2,
+      "RANGE_BOUND_DROPPED": 2,
+      "PREDICATE_DROPPED": 9
+    }
+  },
+  "by_kind": {
+    "group": {
+      "PREDICATE_DROPPED": 3,
+      "ENTITY_SELECTION_ERROR": 1
+    },
+    "list": {
+      "PREDICATE_DROPPED": 2
+    },
+    "scalar": {
+      "PREDICATE_DROPPED": 11,
+      "ENTITY_SELECTION_ERROR": 2,
+      "RANGE_BOUND_DROPPED": 2
+    }
+  },
+  "samples": {
+    "PREDICATE_DROPPED": [
+      {
+        "id": "Q200",
+        "q": "해운대구 용적율 상위 10개 공동주택의 이름·용적율·높이",
+        "gold": "1. A24=마린시티두산위브포세이돈, A4=부산광역시 해운대구 우동, A18=989.25, A16=162.58, A14=129,393.97 / 2. A24=해운대 경보이리스오션, A4=부산광역시 해운대구 중동, A18=977.47, A16=71.7, A14=23,328.42 / 3. A24=마린시티자이, A4=부산광역시 해운대구 우동, A18=953.79, A16=156.45, A14=48,627.2614 / 4. A24=현대아쿠아팰리스동백섬, A4=부산광역시 해운대구 우동, A18=935.71, A16=63.3, A14=14,205.42 / 5. A24=해운대 한솔 솔파크, A4=부산광역시 해운대구 우동, A18=916.03, A16=96.6, A14=42,892.436 / 6. A24=현대아파트, A4=부산광역시 해운대구 우동, A18=912.09, A16=52.3, A14=11,179.41 / 7. A24=해운대 비치베르빌, A4=부산광역시 해운대구 중동, A18=907.94, A16=99.15, A14=41,150.786 / 8. A24=현대 아쿠아팰리스 해운대, A4=부산광역시 해운대구 중동, A18=874.45, A16=95.7, A14=28,119.22 / 9. A24=아크로뷰, A4=부산광역시 해운대구 중동, A18=816.44, A16=56.02, A14=10,673.41 / 10. A24=삼영일리아, A4=부산광역시 해운대구 우동, A18=801.68, A16=46.7, A14=5,410.21",
+        "answer": "해운대구 공동주택의 용적율 상위 10개 건물은 용적율 1422.2%까지 달하는 대형 단지가 포함되어 있으며, 이는 대지면적과 연면적의 비율이 높아 용적률이 크게 기여한 것으로 보입니다. 용적율은 연면적을 대지면적으로 나눈 값으로, 건물의 규모가 크거나 밀집도가 높은 지역일수록 높은 수치를 보입니다. 또한, 건물의 높이와 층수도 상당히 다양하며, 최대 339.1m의 높이를 기록하는 건물도 포함되어 있습니다. /  / 이 내...",
+        "sql": "SELECT /   COUNT(*) AS cnt, /   ROUND(AVG(\"A14\")::numeric, 1) AS avg_area, /   ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY \"A14\")::numeric, 1) AS med_area, /   ROUND(MIN(\"A14\")::numeric, 1) AS min_area, /   ROUND(MAX(\"A14\")::numeric, 1) AS max_area, /   ROUND(AVG(\"A16\") FILTER (WHERE \"A16\" > 0 AND \"A16\" <= 600)::numeric, 1) AS avg_height, /   ROUND(MAX(\"A16\") FILTER (WHERE \"A16\" > 0 AND \"A16\" <= 600)::numeric, 1) AS max_height, /   ROUND(AVG(\"A26\")::numeric, 1) AS avg_floors, /   ROUND(MAX(\"A26\")::numeric, 0) AS max_floors, /   ROUND(AVG(\"A12\") FILTER ( /     WHERE \"A12\" > 0 AND \"A12\" <= 500000 /       AND (\"A14\" IS NULL OR \"A14\" <= 0 OR \"A12\" <= \"A14\" * 1.05 + 50) /   )::numeric, 1) AS avg_bldg_area, /   ROUND(AVG(CASE WHEN (\"A15\") > 10 AND (\"A14\") > 0 AND ((\"A14\")::numeric / (\"A...",
+        "route": "building_profile",
+        "reason": "list-top-missing 마린시티두산위브포세이돈",
+        "ms": 6542
+      },
+      {
+        "id": "Q201",
+        "q": "수영구 건폐율 상위 8개 숙박시설의 이름·건폐율·연면적",
+        "gold": "1. A24=없음, A4=부산광역시 수영구 광안동, A17=90.72, A14=585.92 / 2. A24=없음, A4=부산광역시 수영구 민락동, A17=83.1, A14=474.01 / 3. A24=없음, A4=부산광역시 수영구 광안동, A17=82.92, A14=1,216.99 / 4. A24=없음, A4=부산광역시 수영구 광안동, A17=79.86, A14=683.13 / 5. A24=호텔아쿠아펠리스, A4=부산광역시 수영구 광안동, A17=78.54, A14=18,228.2 / 6. A24=메종 드 센텀, A4=부산광역시 수영구 광안동, A17=77.86, A14=1,281.74 / 7. A24=골든벨모텔, A4=부산광역시 수영구 남천동, A17=77.09, A14=1,042.47 / 8. A24=호메르스관광호텔, A4=부산광역시 수영구 광안동, A17=76.59, A14=16,992.61",
+        "answer": "수영구의 숙박시설 중 건폐율 상위 8개 건물은 대부분 철근콘크리트구조로 되어 있으며, 평균 건폐율은 397.7%에 달합니다. 최고 건폐율은 1304.9%로, 대지면적 대비 매우 높은 건축면적을 보이는 경우가 있었습니다. 연면적은 평균 1612.4㎡로, 일부 건물에서는 18,228.2㎡에 이르는 대형 규모의 숙박시설도 포함되어 있습니다. /  / 이 내용을 차트로도 정리할 수 있어요. 차트로 보시겠어요?",
+        "sql": "SELECT /   COUNT(*) AS cnt, /   ROUND(AVG(\"A14\")::numeric, 1) AS avg_area, /   ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY \"A14\")::numeric, 1) AS med_area, /   ROUND(MIN(\"A14\")::numeric, 1) AS min_area, /   ROUND(MAX(\"A14\")::numeric, 1) AS max_area, /   ROUND(AVG(\"A16\") FILTER (WHERE \"A16\" > 0 AND \"A16\" <= 600)::numeric, 1) AS avg_height, /   ROUND(MAX(\"A16\") FILTER (WHERE \"A16\" > 0 AND \"A16\" <= 600)::numeric, 1) AS max_height, /   ROUND(AVG(\"A26\")::numeric, 1) AS avg_floors, /   ROUND(MAX(\"A26\")::numeric, 0) AS max_floors, /   ROUND(AVG(\"A12\") FILTER ( /     WHERE \"A12\" > 0 AND \"A12\" <= 500000 /       AND (\"A14\" IS NULL OR \"A14\" <= 0 OR \"A12\" <= \"A14\" * 1.05 + 50) /   )::numeric, 1) AS avg_bldg_area, /   ROUND(AVG(CASE WHEN (\"A15\") > 10 AND (\"A14\") > 0 AND ((\"A14\")::numeric / (\"A...",
+        "route": "building_profile",
+        "reason": "list-top-missing 호텔아쿠아펠리스",
+        "ms": 3079
+      },
+      {
+        "id": "Q220",
+        "q": "동구 지하층 합계와 지하층이 있는 건물 수",
+        "gold": "n=2,344; sum_basement=2,682",
+        "answer": "동구 건물은 모두 19,562채입니다.",
+        "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D010_26_20250704\" / WHERE \"A4\" LIKE '%동구%';",
+        "route": "building_place_count",
+        "reason": "scalar-mismatch hits=0 gold=[2344.0, 2682.0]",
+        "ms": 913
+      },
+      {
+        "id": "Q221",
+        "q": "남구 건물동명에 '상가'가 들어가는 건물 수와 평균 연면적",
+        "gold": "n=73; avg_gfa=2,129.7754",
+        "answer": "남구의 집계 결과입니다. 평균 연면적 3033.9318, 건수 2,587.",
+        "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%남구%' AND b.\"A25\" IS NOT NULL;",
+        "route": "semantic_plan_aggregate",
+        "reason": "scalar-mismatch hits=0 gold=[73.0, 2129.7754]",
+        "ms": 1078
+      },
+      {
+        "id": "Q222",
+        "q": "사하구 위반건축물 비율(위반/(위반+N))",
+        "gold": "pct_violate=1.5357",
+        "answer": "사하구의 집계 결과입니다. ratio_pct 0.928.",
+        "sql": "SELECT 100.0 * COUNT(*) FILTER (WHERE b.\"A20\" = 'Y')::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%사하구%';",
+        "route": "semantic_plan_aggregate",
+        "reason": "scalar-mismatch hits=0 gold=[1.5357]",
+        "ms": 851
+      },
+      {
+        "id": "Q239",
+        "q": "대연동 공동주택 층수 구간별 건수(1-5, 6-10, 11-20, 21+)",
+        "gold": "1. bin=1-5층, n=1,046 / 2. bin=11-20층, n=37 / 3. bin=21층이상, n=48 / 4. bin=6-10층, n=291",
+        "answer": "안내: 면적·높이 구간 통계는 현재 동래구·금정구 용도별건물 자료입니다. /  / 대연동 공동주택에 해당하는 데이터를 찾지 못했습니다. 조건을 바꿔 다시 질문해 주세요.",
+        "sql": "SELECT period, SUM(n) AS n / FROM ( / SELECT (FLOOR(\"A31\" / 1) * 1)::int AS period, COUNT(*) AS n / FROM \"AL_D198_26260_20250115\" / WHERE (\"A4\" LIKE '% 대연동' OR \"A4\" = '대연동') AND TRIM(COALESCE(\"A25\"::text, '')) = '공동주택' AND \"A31\" > 0 AND \"A31\" <= 80 / GROUP BY 1 / UNION ALL / SELECT (FLOOR(\"A31\" / 1) * 1)::int AS period, COUNT(*) AS n / FROM \"AL_D198_26410_20250115\" / WHERE (\"A4\" LIKE '% 대연동' OR \"A4\" = '대연동') AND TRIM(COALESCE(\"A25\"::text, '')) = '공동주택' AND \"A31\" > 0 AND \"A31\" <= 80 / GROUP BY 1 / ) AS value_parts / GROUP BY 1 / ORDER BY 1;",
+        "route": "d198_value_bins",
+        "reason": "group-mismatch",
+        "ms": 87
+      },
+      {
+        "id": "Q243",
+        "q": "중구 건물 중 높이 있는 건물의 평균·표준편차 높이",
+        "gold": "n=3,081; avg_h=13.8696; sd_h=9.8622",
+        "answer": "중구의 집계 결과입니다. 평균 높이 5.5195.",
+        "sql": "SELECT AVG(b.\"A16\"::float8) AS \"avg_height_m\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%중구%';",
+        "route": "semantic_plan_aggregate",
+        "reason": "scalar-mismatch hits=0 gold=[3081.0, 13.8696, 9.8622]",
+        "ms": 843
+      },
+      {
+        "id": "Q246",
+        "q": "우동 건물 중 높이 50m 이상 비율과 20층 이상 비율",
+        "gold": "pct_h50=2.3586; pct_fl20=1.7153",
+        "answer": "우동의 집계 결과입니다. ratio_pct 7.803.",
+        "sql": "SELECT 100.0 * COUNT(*) FILTER (WHERE (b.\"A16\"::float8 >= 50 AND b.\"A26\"::float8 >= 20))::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 우동' OR b.\"A4\" = '우동') AND b.\"A16\"::float8 > 0 AND b.\"A16\"::float8 <= 600 AND (b.\"A26\" IS NULL OR b.\"A16\"::float8 <= (b.\"A26\"::float8 * 8 + 30));",
+        "route": "semantic_plan_aggregate",
+        "reason": "scalar-mismatch hits=0 gold=[50.0, 2.3586, 20.0, 1.7153]",
+        "ms": 112
+      }
+    ],
+    "ENTITY_SELECTION_ERROR": [
+      {
+        "id": "Q223",
+        "q": "금정구 산지 비율(산 / 전체) %",
+        "gold": "pct_mountain=3.7068",
+        "answer": "현재 조회 가능한 데이터셋은 다음과 같습니다. / - GIS건물통합정보_부산광역시 (`AL_D010_26_20250704`) [건물] — GIS건물통합정보, 부산광역시, 2025년 07월 04일 자료 갱신 / - 용도별건물공간정보_부산광역시 동래구 (`AL_D198_26260_20250115`) [건물] — 용도별건물공간정보, 부산광역시 동래구, 2025년 01월 15일 자료 갱신 / - 용도별건물공간정보_부산광역시 금정...",
+        "sql": "",
+        "route": "meta_catalog",
+        "reason": "scalar-mismatch hits=0 gold=[3.7068]",
+        "ms": 4
+      },
+      {
+        "id": "Q230",
+        "q": "남구에서 공동주택이 전체 건물에서 차지하는 비율 %",
+        "gold": "pct=9.0305",
+        "answer": "현재 조회 가능한 데이터셋은 다음과 같습니다. / - GIS건물통합정보_부산광역시 (`AL_D010_26_20250704`) [건물] — GIS건물통합정보, 부산광역시, 2025년 07월 04일 자료 갱신 / - 용도별건물공간정보_부산광역시 동래구 (`AL_D198_26260_20250115`) [건물] — 용도별건물공간정보, 부산광역시 동래구, 2025년 01월 15일 자료 갱신 / - 용도별건물공간정보_부산광역시 금정...",
+        "sql": "",
+        "route": "meta_catalog",
+        "reason": "scalar-mismatch hits=0 gold=[9.0305]",
+        "ms": 4
+      },
+      {
+        "id": "Q242",
+        "q": "사상구 공장 구조별 건수와 평균 연면적 상위 6",
+        "gold": "1. structure=일반철골구조, n=3,063, avg_gfa=587.5672 / 2. structure=철근콘크리트구조, n=1,066, avg_gfa=893.2194 / 3. structure=블록구조, n=290, avg_gfa=189.182 / 4. structure=경량철골구조, n=278, avg_gfa=412.658 / 5. structure=벽돌구조, n=35, avg_gfa=105.9127 / 6. structure=기타조적구조, n=22, avg_gfa=99.1427",
+        "answer": "요청하신 「사상구 공장 구조별 건수와 평균 연면적 상위 6」에는 지금은 답하지 못했습니다. / 이유: - Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT. / 시도한 SQL: SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26...",
+        "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%사상구%' AND b.\"A9\" = '공장';",
+        "route": null,
+        "reason": "engine-fail:- Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT.",
+        "ms": 5
+      }
+    ],
+    "RANGE_BOUND_DROPPED": [
+      {
+        "id": "Q231",
+        "q": "영도구 15층 이상 건물 중 공동주택 비율 %",
+        "gold": "pct=91.716",
+        "answer": "영도구의 집계 결과입니다. ratio_pct 0.6051.",
+        "sql": "SELECT 100.0 * COUNT(*) FILTER (WHERE (b.\"A9\" = '공동주택' AND b.\"A26\"::float8 >= 15))::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%영도구%';",
+        "route": "semantic_plan_aggregate",
+        "reason": "scalar-mismatch hits=0 gold=[91.716]",
+        "ms": 1028
+      },
+      {
+        "id": "Q238",
+        "q": "장림동 공장 중 연면적 1000㎡ 이상 비율 %",
+        "gold": "pct=24.7444",
+        "answer": "장림동의 집계 결과입니다. ratio_pct 3.5889.",
+        "sql": "SELECT 100.0 * COUNT(*) FILTER (WHERE (b.\"A9\" = '공장' AND b.\"A14\"::float8 >= 1000))::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 장림동' OR b.\"A4\" = '장림동');",
+        "route": "semantic_plan_aggregate",
+        "reason": "scalar-mismatch hits=0 gold=[24.7444]",
+        "ms": 100
+      }
+    ]
+  },
+  "failed_items": [
+    {
+      "id": "Q200",
+      "cat": "미사용속성",
+      "kind": "list",
+      "q": "해운대구 용적율 상위 10개 공동주택의 이름·용적율·높이",
+      "gold": "1. A24=마린시티두산위브포세이돈, A4=부산광역시 해운대구 우동, A18=989.25, A16=162.58, A14=129,393.97 / 2. A24=해운대 경보이리스오션, A4=부산광역시 해운대구 중동, A18=977.47, A16=71.7, A14=23,328.42 / 3. A24=마린시티자이, A4=부산광역시 해운대구 우동, A18=953.79, A16=156.45, A14=48,627.2614 / 4. A24=현대아쿠아팰리스동백섬, A4=부산광역시 해운대구 우동, A18=935.71, A16=63.3, A14=14,205.42 / 5. A24=해운대 한솔 솔파크, A4=부산광역시 해운대구 우동, A18=916.03, A16=96.6, A14=42,892.436 / 6. A24=현대아파트, A4=부산광역시 해운대구 우동, A18=912.09, A16=52.3, A14=11,179.41 / 7. A24=해운대 비치베르빌, A4=부산광역시 해운대구 중동, A18=907.94, A16=99.15, A14=41,150.786 / 8. A24=현대 아쿠아팰리스 해운대, A4=부산광역시 해운대구 중동, A18=874.45, A16=95.7, A14=28,119.22 / 9. A24=아크로뷰, A4=부산광역시 해운대구 중동, A18=816.44, A16=56.02, A14=10,673.41 / 10. A24=삼영일리아, A4=부산광역시 해운대구 우동, A18=801.68, A16=46.7, A14=5,410.21",
+      "answer": "해운대구 공동주택의 용적율 상위 10개 건물은 용적율 1422.2%까지 달하는 대형 단지가 포함되어 있으며, 이는 대지면적과 연면적의 비율이 높아 용적률이 크게 기여한 것으로 보입니다. 용적율은 연면적을 대지면적으로 나눈 값으로, 건물의 규모가 크거나 밀집도가 높은 지역일수록 높은 수치를 보입니다. 또한, 건물의 높이와 층수도 상당히 다양하며, 최대 339.1m의 높이를 기록하는 건물도 포함되어 있습니다. /  / 이 내...",
+      "reason": "list-top-missing 마린시티두산위브포세이돈",
+      "route": "building_profile",
+      "ms": 6542,
+      "sql": "SELECT /   COUNT(*) AS cnt, /   ROUND(AVG(\"A14\")::numeric, 1) AS avg_area, /   ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY \"A14\")::numeric, 1) AS med_area, /   ROUND(MIN(\"A14\")::numeric, 1) AS min_area, /   ROUND(MAX(\"A14\")::numeric, 1) AS max_area, /   ROUND(AVG(\"A16\") FILTER (WHERE \"A16\" > 0 AND \"A16\" <= 600)::numeric, 1) AS avg_height, /   ROUND(MAX(\"A16\") FILTER (WHERE \"A16\" > 0 AND \"A16\" <= 600)::numeric, 1) AS max_height, /   ROUND(AVG(\"A26\")::numeric, 1) AS avg_floors, /   ROUND(MAX(\"A26\")::numeric, 0) AS max_floors, /   ROUND(AVG(\"A12\") FILTER ( /     WHERE \"A12\" > 0 AND \"A12\" <= 500000 /       AND (\"A14\" IS NULL OR \"A14\" <= 0 OR \"A12\" <= \"A14\" * 1.05 + 50) /   )::numeric, 1) AS avg_bldg_area, /   ROUND(AVG(CASE WHEN (\"A15\") > 10 AND (\"A14\") > 0 AND ((\"A14\")::numeric / (\"A...",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q201",
+      "cat": "미사용속성",
+      "kind": "list",
+      "q": "수영구 건폐율 상위 8개 숙박시설의 이름·건폐율·연면적",
+      "gold": "1. A24=없음, A4=부산광역시 수영구 광안동, A17=90.72, A14=585.92 / 2. A24=없음, A4=부산광역시 수영구 민락동, A17=83.1, A14=474.01 / 3. A24=없음, A4=부산광역시 수영구 광안동, A17=82.92, A14=1,216.99 / 4. A24=없음, A4=부산광역시 수영구 광안동, A17=79.86, A14=683.13 / 5. A24=호텔아쿠아펠리스, A4=부산광역시 수영구 광안동, A17=78.54, A14=18,228.2 / 6. A24=메종 드 센텀, A4=부산광역시 수영구 광안동, A17=77.86, A14=1,281.74 / 7. A24=골든벨모텔, A4=부산광역시 수영구 남천동, A17=77.09, A14=1,042.47 / 8. A24=호메르스관광호텔, A4=부산광역시 수영구 광안동, A17=76.59, A14=16,992.61",
+      "answer": "수영구의 숙박시설 중 건폐율 상위 8개 건물은 대부분 철근콘크리트구조로 되어 있으며, 평균 건폐율은 397.7%에 달합니다. 최고 건폐율은 1304.9%로, 대지면적 대비 매우 높은 건축면적을 보이는 경우가 있었습니다. 연면적은 평균 1612.4㎡로, 일부 건물에서는 18,228.2㎡에 이르는 대형 규모의 숙박시설도 포함되어 있습니다. /  / 이 내용을 차트로도 정리할 수 있어요. 차트로 보시겠어요?",
+      "reason": "list-top-missing 호텔아쿠아펠리스",
+      "route": "building_profile",
+      "ms": 3079,
+      "sql": "SELECT /   COUNT(*) AS cnt, /   ROUND(AVG(\"A14\")::numeric, 1) AS avg_area, /   ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY \"A14\")::numeric, 1) AS med_area, /   ROUND(MIN(\"A14\")::numeric, 1) AS min_area, /   ROUND(MAX(\"A14\")::numeric, 1) AS max_area, /   ROUND(AVG(\"A16\") FILTER (WHERE \"A16\" > 0 AND \"A16\" <= 600)::numeric, 1) AS avg_height, /   ROUND(MAX(\"A16\") FILTER (WHERE \"A16\" > 0 AND \"A16\" <= 600)::numeric, 1) AS max_height, /   ROUND(AVG(\"A26\")::numeric, 1) AS avg_floors, /   ROUND(MAX(\"A26\")::numeric, 0) AS max_floors, /   ROUND(AVG(\"A12\") FILTER ( /     WHERE \"A12\" > 0 AND \"A12\" <= 500000 /       AND (\"A14\" IS NULL OR \"A14\" <= 0 OR \"A12\" <= \"A14\" * 1.05 + 50) /   )::numeric, 1) AS avg_bldg_area, /   ROUND(AVG(CASE WHEN (\"A15\") > 10 AND (\"A14\") > 0 AND ((\"A14\")::numeric / (\"A...",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q220",
+      "cat": "미사용속성",
+      "kind": "scalar",
+      "q": "동구 지하층 합계와 지하층이 있는 건물 수",
+      "gold": "n=2,344; sum_basement=2,682",
+      "answer": "동구 건물은 모두 19,562채입니다.",
+      "reason": "scalar-mismatch hits=0 gold=[2344.0, 2682.0]",
+      "route": "building_place_count",
+      "ms": 913,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D010_26_20250704\" / WHERE \"A4\" LIKE '%동구%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q221",
+      "cat": "미사용속성",
+      "kind": "scalar",
+      "q": "남구 건물동명에 '상가'가 들어가는 건물 수와 평균 연면적",
+      "gold": "n=73; avg_gfa=2,129.7754",
+      "answer": "남구의 집계 결과입니다. 평균 연면적 3033.9318, 건수 2,587.",
+      "reason": "scalar-mismatch hits=0 gold=[73.0, 2129.7754]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1078,
+      "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%남구%' AND b.\"A25\" IS NOT NULL;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q222",
+      "cat": "미사용속성",
+      "kind": "scalar",
+      "q": "사하구 위반건축물 비율(위반/(위반+N))",
+      "gold": "pct_violate=1.5357",
+      "answer": "사하구의 집계 결과입니다. ratio_pct 0.928.",
+      "reason": "scalar-mismatch hits=0 gold=[1.5357]",
+      "route": "semantic_plan_aggregate",
+      "ms": 851,
+      "sql": "SELECT 100.0 * COUNT(*) FILTER (WHERE b.\"A20\" = 'Y')::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%사하구%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q223",
+      "cat": "미사용속성",
+      "kind": "scalar",
+      "q": "금정구 산지 비율(산 / 전체) %",
+      "gold": "pct_mountain=3.7068",
+      "answer": "현재 조회 가능한 데이터셋은 다음과 같습니다. / - GIS건물통합정보_부산광역시 (`AL_D010_26_20250704`) [건물] — GIS건물통합정보, 부산광역시, 2025년 07월 04일 자료 갱신 / - 용도별건물공간정보_부산광역시 동래구 (`AL_D198_26260_20250115`) [건물] — 용도별건물공간정보, 부산광역시 동래구, 2025년 01월 15일 자료 갱신 / - 용도별건물공간정보_부산광역시 금정...",
+      "reason": "scalar-mismatch hits=0 gold=[3.7068]",
+      "route": "meta_catalog",
+      "ms": 4,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q230",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "남구에서 공동주택이 전체 건물에서 차지하는 비율 %",
+      "gold": "pct=9.0305",
+      "answer": "현재 조회 가능한 데이터셋은 다음과 같습니다. / - GIS건물통합정보_부산광역시 (`AL_D010_26_20250704`) [건물] — GIS건물통합정보, 부산광역시, 2025년 07월 04일 자료 갱신 / - 용도별건물공간정보_부산광역시 동래구 (`AL_D198_26260_20250115`) [건물] — 용도별건물공간정보, 부산광역시 동래구, 2025년 01월 15일 자료 갱신 / - 용도별건물공간정보_부산광역시 금정...",
+      "reason": "scalar-mismatch hits=0 gold=[9.0305]",
+      "route": "meta_catalog",
+      "ms": 4,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q231",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "영도구 15층 이상 건물 중 공동주택 비율 %",
+      "gold": "pct=91.716",
+      "answer": "영도구의 집계 결과입니다. ratio_pct 0.6051.",
+      "reason": "scalar-mismatch hits=0 gold=[91.716]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1028,
+      "sql": "SELECT 100.0 * COUNT(*) FILTER (WHERE (b.\"A9\" = '공동주택' AND b.\"A26\"::float8 >= 15))::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%영도구%';",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q238",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "장림동 공장 중 연면적 1000㎡ 이상 비율 %",
+      "gold": "pct=24.7444",
+      "answer": "장림동의 집계 결과입니다. ratio_pct 3.5889.",
+      "reason": "scalar-mismatch hits=0 gold=[24.7444]",
+      "route": "semantic_plan_aggregate",
+      "ms": 100,
+      "sql": "SELECT 100.0 * COUNT(*) FILTER (WHERE (b.\"A9\" = '공장' AND b.\"A14\"::float8 >= 1000))::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 장림동' OR b.\"A4\" = '장림동');",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q239",
+      "cat": "집계비율",
+      "kind": "group",
+      "q": "대연동 공동주택 층수 구간별 건수(1-5, 6-10, 11-20, 21+)",
+      "gold": "1. bin=1-5층, n=1,046 / 2. bin=11-20층, n=37 / 3. bin=21층이상, n=48 / 4. bin=6-10층, n=291",
+      "answer": "안내: 면적·높이 구간 통계는 현재 동래구·금정구 용도별건물 자료입니다. /  / 대연동 공동주택에 해당하는 데이터를 찾지 못했습니다. 조건을 바꿔 다시 질문해 주세요.",
+      "reason": "group-mismatch",
+      "route": "d198_value_bins",
+      "ms": 87,
+      "sql": "SELECT period, SUM(n) AS n / FROM ( / SELECT (FLOOR(\"A31\" / 1) * 1)::int AS period, COUNT(*) AS n / FROM \"AL_D198_26260_20250115\" / WHERE (\"A4\" LIKE '% 대연동' OR \"A4\" = '대연동') AND TRIM(COALESCE(\"A25\"::text, '')) = '공동주택' AND \"A31\" > 0 AND \"A31\" <= 80 / GROUP BY 1 / UNION ALL / SELECT (FLOOR(\"A31\" / 1) * 1)::int AS period, COUNT(*) AS n / FROM \"AL_D198_26410_20250115\" / WHERE (\"A4\" LIKE '% 대연동' OR \"A4\" = '대연동') AND TRIM(COALESCE(\"A25\"::text, '')) = '공동주택' AND \"A31\" > 0 AND \"A31\" <= 80 / GROUP BY 1 / ) AS value_parts / GROUP BY 1 / ORDER BY 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q242",
+      "cat": "집계비율",
+      "kind": "group",
+      "q": "사상구 공장 구조별 건수와 평균 연면적 상위 6",
+      "gold": "1. structure=일반철골구조, n=3,063, avg_gfa=587.5672 / 2. structure=철근콘크리트구조, n=1,066, avg_gfa=893.2194 / 3. structure=블록구조, n=290, avg_gfa=189.182 / 4. structure=경량철골구조, n=278, avg_gfa=412.658 / 5. structure=벽돌구조, n=35, avg_gfa=105.9127 / 6. structure=기타조적구조, n=22, avg_gfa=99.1427",
+      "answer": "요청하신 「사상구 공장 구조별 건수와 평균 연면적 상위 6」에는 지금은 답하지 못했습니다. / 이유: - Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT. / 시도한 SQL: SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26...",
+      "reason": "engine-fail:- Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT.",
+      "route": null,
+      "ms": 5,
+      "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%사상구%' AND b.\"A9\" = '공장';",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q243",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "중구 건물 중 높이 있는 건물의 평균·표준편차 높이",
+      "gold": "n=3,081; avg_h=13.8696; sd_h=9.8622",
+      "answer": "중구의 집계 결과입니다. 평균 높이 5.5195.",
+      "reason": "scalar-mismatch hits=0 gold=[3081.0, 13.8696, 9.8622]",
+      "route": "semantic_plan_aggregate",
+      "ms": 843,
+      "sql": "SELECT AVG(b.\"A16\"::float8) AS \"avg_height_m\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%중구%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q246",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "우동 건물 중 높이 50m 이상 비율과 20층 이상 비율",
+      "gold": "pct_h50=2.3586; pct_fl20=1.7153",
+      "answer": "우동의 집계 결과입니다. ratio_pct 7.803.",
+      "reason": "scalar-mismatch hits=0 gold=[50.0, 2.3586, 20.0, 1.7153]",
+      "route": "semantic_plan_aggregate",
+      "ms": 112,
+      "sql": "SELECT 100.0 * COUNT(*) FILTER (WHERE (b.\"A16\"::float8 >= 50 AND b.\"A26\"::float8 >= 20))::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 우동' OR b.\"A4\" = '우동') AND b.\"A16\"::float8 > 0 AND b.\"A16\"::float8 <= 600 AND (b.\"A26\" IS NULL OR b.\"A16\"::float8 <= (b.\"A26\"::float8 * 8 + 30));",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q251",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "사상구 산업단지 안 공장 비율(단지내 공장 / 사상구 공장)",
+      "gold": "pct=42.1833",
+      "answer": "사상구의 집계 결과입니다. ratio_pct 40.6885.",
+      "reason": "scalar-mismatch hits=0 gold=[42.1833]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1094,
+      "sql": "SELECT 100.0 * COUNT(*) FILTER (WHERE b.\"A9\" = '공장')::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE EXISTS (SELECT 1 FROM \"AL_D060_00_20250804\" ind WHERE ST_Intersects(b.geometry, ind.geometry)) AND b.\"A4\" LIKE '%사상구%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q252",
+      "cat": "집계비율",
+      "kind": "group",
+      "q": "남구 숙박시설이 있는 법정동별 숙박시설 채수",
+      "gold": "1. dong=부산광역시 남구 대연동, n=28 / 2. dong=부산광역시 남구 문현동, n=19 / 3. dong=부산광역시 남구 용호동, n=10 / 4. dong=부산광역시 남구 감만동, n=4 / 5. dong=부산광역시 남구 용당동, n=4 / 6. dong=부산광역시 남구 우암동, n=2",
+      "answer": "남구 숙박시설은 모두 67채입니다.",
+      "reason": "group-mismatch",
+      "route": "building_usage_count",
+      "ms": 954,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D010_26_20250704\" / WHERE \"A4\" LIKE '%남구%' AND \"A9\" = '숙박시설';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q254",
+      "cat": "집계비율",
+      "kind": "group",
+      "q": "부산 구별 위반건축물 수 상위 8개 구",
+      "gold": "1. gu_name=강서구, n=1,288 / 2. gu_name=금정구, n=762 / 3. gu_name=사상구, n=716 / 4. gu_name=부산진구, n=652 / 5. gu_name=동래구, n=519 / 6. gu_name=기장군, n=483 / 7. gu_name=해운대구, n=473 / 8. gu_name=남구, n=430",
+      "answer": "부산광역시의 상위 건물 8건을 조회했습니다. / 1. 더#해운대아델리스 · 부산광역시 해운대구 우동 1436-1 · 연면적 162286.38㎡ / 2. 트럼프월드센텀 · 부산광역시 해운대구 우동 1498 · 연면적 125513.59㎡ / 3. 엘시티 · 부산광역시 해운대구 중동 1829 · 연면적 121396.5881㎡ / 4. 부산광역시 해운대구 우동 1514 / 5. 한일오르듀 · 부산광역시 해운대구 우동 1435-3...",
+      "reason": "group-label-missing",
+      "route": "semantic_plan_rank",
+      "ms": 680,
+      "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A14\"::float8 AS \"gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A20\" = 'Y' / ORDER BY b.\"A14\"::float8 DESC NULLS LAST / LIMIT 8;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q256",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "사하구 공장 연면적 상위 10% 경계값(90백분위)",
+      "gold": "p90_gfa=2,741.139; n=2,549",
+      "answer": "사하구 공장 중 연면적 상위 10곳은 다음과 같습니다. / 1) 지번 90 건물 — 부산광역시 사하구 구평동, 공장, 연면적 55,254.03㎡, 지상 2층 / 2) 「한국주철관공업(주)」 — 부산광역시 사하구 신평동, 공장, 연면적 36,727.37㎡, 지상 1층 / 3) 「다대동 1559 공장 (대선조선주식회사)」 — 부산광역시 사하구 다대동, 공장, 연면적 28,652.8㎡, 지상 1층 / 4) 지번 654-2 건물...",
+      "reason": "scalar-mismatch hits=1 gold=[90.0, 2741.139, 2549.0]",
+      "route": "building_rank_연면적",
+      "ms": 1169,
+      "sql": "SELECT \"A0\", \"A4\", \"A5\", \"A9\", \"A12\", \"A14\", \"A15\", \"A16\", \"A19\", \"A24\", \"A25\", \"A26\" / FROM \"AL_D010_26_20250704\" WHERE \"A4\" LIKE '%사하구%' AND \"A9\" = '공장' AND \"A14\" > 0 AND \"A14\" <= 2e+06 / ORDER BY \"A14\" DESC NULLS LAST / LIMIT 10;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q261",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "수영구 숙박시설 중 연면적 대비 건축면적 비(평균 A12/A14)",
+      "gold": "n=101; avg_ratio=0.2351",
+      "answer": "수영구의 집계 결과입니다. 평균 연면적 1612.3925, avg_building_area_m2 226.564.",
+      "reason": "scalar-mismatch hits=0 gold=[101.0, 0.2351]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1274,
+      "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\", /        AVG(b.\"A12\"::float8) AS \"avg_building_area_m2\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%수영구%' AND b.\"A9\" = '숙박시설';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q265",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "해운대구 공동주택 높이 합계(1~500m만)와 건수",
+      "gold": "n=2,883; sum_h=80,450.097",
+      "answer": "해운대구의 집계 결과입니다. sum_height_m 80009.717, 건수 2,876.",
+      "reason": "scalar-mismatch hits=0 gold=[2883.0, 80450.097]",
+      "route": "semantic_plan_aggregate",
+      "ms": 76,
+      "sql": "SELECT SUM(b.\"A16\"::float8) AS \"sum_height_m\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%해운대구%' AND (b.\"A9\" = '공동주택' AND b.\"A16\"::float8 BETWEEN 1 AND 500) AND b.\"A16\"::float8 > 0 AND b.\"A16\"::float8 <= 600 AND (b.\"A26\" IS NULL OR b.\"A16\"::float8 <= (b.\"A26\"::float8 * 8 + 30));",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q286",
+      "cat": "공간복합",
+      "kind": "scalar",
+      "q": "대연3동 안 교육연구시설 대지면적 합계",
+      "gold": "n=102; sum_land=4,493,737.873",
+      "answer": "대연3동의 집계 결과입니다. sum_site_area_m2 4493737.873.",
+      "reason": "scalar-mismatch hits=1 gold=[102.0, 4493737.873]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1103,
+      "sql": "SELECT SUM(b.\"A15\"::float8) AS \"sum_site_area_m2\" / FROM \"AL_D010_26_20250704\" b / JOIN \"BND_ADM_DONG_PG\" adm ON ST_Intersects(b.geometry, adm.geometry) / WHERE adm.\"ADM_NM\" = '대연3동' AND adm.\"ADM_CD\" LIKE '21%' AND b.\"A9\" = '교육연구시설' / LIMIT 3;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q298",
+      "cat": "공간복합",
+      "kind": "scalar",
+      "q": "북구 기초구역 면적 합계와 개수",
+      "gold": "n=154; sum_ar=39.7834",
+      "answer": "북구 기초구역의 면적 합계는 5.768㎡이며, 총 1개의 기초구역이 있습니다.",
+      "reason": "scalar-mismatch hits=0 gold=[154.0, 39.7834]",
+      "route": "bas_area_topn",
+      "ms": 990,
+      "sql": "SELECT \"BAS_AR\", \"BAS_ID\", \"SIG_KOR_NM\" / FROM \"TL_KODIS_BAS_26_202507\" / WHERE \"SIG_KOR_NM\" = '북구' / ORDER BY \"BAS_AR\" DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    }
+  ]
+}

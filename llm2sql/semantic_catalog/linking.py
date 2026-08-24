@@ -102,7 +102,12 @@ _POI_NAMES = (
 
 
 def retrieve_poi(question: str, *, top_k: int = 5) -> LinkResult:
-    cleaned = question.replace("기초구역", "").replace("구역", "")
+    cleaned = (
+        question.replace("기초구역", "")
+        .replace("구역", "")
+        .replace("광역시", "")
+        .replace("광역", "")
+    )
     if not any(token in cleaned for token in ("역", "터미널", "정류장")):
         return LinkResult((), False, 1.0)
     hits = []

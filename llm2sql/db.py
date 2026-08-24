@@ -85,11 +85,16 @@ def execute_query(
     sql: str,
     *,
     default_limit: int = 100,
+    statement_timeout_ms: int | None = None,
 ) -> list[dict[str, Any]]:
     assert_readonly_sql(sql)
     sql = ensure_limit(sql, default_limit=default_limit)
     try:
         with conn.cursor() as cur:
+            if statement_timeout_ms and statement_timeout_ms > 0:
+                cur.execute(
+                    f"SET LOCAL statement_timeout = {int(statement_timeout_ms)}"
+                )
             cur.execute(sql)
             if cur.description is None:
                 return []

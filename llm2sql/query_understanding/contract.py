@@ -55,12 +55,17 @@ class QueryContract(BaseModel):
 def extract_contract(question: str) -> QueryContract:
     q = question
     places = _with_value(find_all(q, ops.PLACE_PATTERN, "place"), "place")
+    places = _drop_false_places(q, places)
     metrics: list[Span] = []
     for text, field in ops.METRIC_MAP.items():
         for span in find_all(q, re.escape(text), "metric"):
             span.value = field
             metrics.append(span)
     metrics = dedupe_nested(metrics)
+    if "기초구역" in q:
+        for span in metrics:
+            if span.value == "gross_floor_area_m2":
+                span.value = "area_m2"
 
     aggregations: list[Span] = []
     for text, fn in ops.AGG_MAP.items():
@@ -86,6 +91,10 @@ def extract_contract(question: str) -> QueryContract:
     groups: list[Span] = []
     for hint in ops.GROUP_HINTS:
         groups.extend(find_all(q, re.escape(hint), "group"))
+    if "기초구역" in q:
+        for span in numbers + ranges:
+            if span.meta.get("field") == "gross_floor_area_m2":
+                span.meta["field"] = "area_m2"
 
     contract = QueryContract(
         question=q,
@@ -133,6 +142,19 @@ def extract_contract(question: str) -> QueryContract:
     return contract
 
 
+def _drop_false_places(question: str, spans: list[Span]) -> list[Span]:
+    """공동주택·시설 안의 '동' 조각은 장소가 아니다."""
+    kept: list[Span] = []
+    for span in spans:
+        after = question[span.end : span.end + 3]
+        if after.startswith(("주택", "시설", "차", "력", "원", "사")):
+            continue
+        if span.text in {"공동", "동"}:
+            continue
+        kept.append(span)
+    return kept
+
+
 def _with_value(spans: list[Span], key: str) -> list[Span]:
     for span in spans:
         span.value = span.text
@@ -154,6 +176,10 @@ def _extract_ranges(question: str) -> list[Span]:
                 or ("사이" if "사이" in match.group(0) else "까지"),
             }
             field = _nearest_metric(question, match.start())
+            if "층" in match.group(0) and "지하" not in match.group(0):
+                field = "ground_floors"
+            elif "층" in match.group(0) and "지하" in question[max(0, match.start() - 4) : match.start()]:
+                field = "basement_floors"
             if field:
                 meta["field"] = field
             found.append(

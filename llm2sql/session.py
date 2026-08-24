@@ -8,6 +8,15 @@ from typing import Any
 
 
 @dataclass
+class ResultAnchor:
+    entity: str = "building"
+    identity: str | None = None
+    row: dict[str, Any] = field(default_factory=dict)
+    rank: int | None = None
+    label: str | None = None
+
+
+@dataclass
 class SessionContext:
     last_question: str | None = None
     last_full_question: str | None = None
@@ -28,6 +37,7 @@ class SessionContext:
     last_semantic_plan_route: str | None = None
     last_plan_base: dict[str, Any] | None = None
     last_plan_events: list[dict[str, Any]] = field(default_factory=list)
+    result_anchors: list[ResultAnchor] = field(default_factory=list)
 
     def update_from_result(
         self,
@@ -76,16 +86,67 @@ class SessionContext:
         if isinstance(plan, dict):
             self.last_semantic_plan = dict(plan)
             self.last_semantic_plan_route = route or self.last_semantic_plan_route
+            self._coerce_count_display_plan(
+                self.last_semantic_plan,
+                str(result.get("sql") or ""),
+                str(result.get("answer") or ""),
+            )
             followup_like = any(k in question for k in ("그중", "그 중", "이 중", "그중에"))
             if not followup_like:
-                self.last_plan_base = dict(plan)
+                self.last_plan_base = dict(self.last_semantic_plan)
                 self.last_plan_events = []
         elif route and not route.startswith(("clarify_", "semantic_plan_")):
-            self.last_semantic_plan = None
-            self.last_semantic_plan_route = None
+            heur_plan = None
+            if result.get("ok") and (
+                (result.get("sql") or "").find("AL_D010") >= 0
+                or (result.get("sql") or "").find("AL_D198") >= 0
+            ):
+                try:
+                    from llm2sql.semantic_plan.generator import try_heuristic_plan
+
+                    heur = try_heuristic_plan(question)
+                    if heur is not None:
+                        usable = (not heur.requires_clarification) or bool(
+                            heur.filters or heur.scope or heur.predicate
+                        )
+                        if usable:
+                            heur_plan = heur.model_dump()
+                            heur_plan["requires_clarification"] = False
+                            heur_plan["ambiguities"] = []
+                except Exception:
+                    heur_plan = None
+            if heur_plan is not None:
+                self._coerce_count_display_plan(
+                    heur_plan,
+                    str(result.get("sql") or ""),
+                    str(result.get("answer") or ""),
+                )
+                self.last_semantic_plan = heur_plan
+                self.last_semantic_plan_route = (
+                    "semantic_plan_" + str(heur_plan.get("query_kind") or "count")
+                )
+                if not any(k in question for k in ("그중", "그 중", "이 중", "그중에")):
+                    self.last_plan_base = dict(heur_plan)
+                    self.last_plan_events = []
+            else:
+                self.last_semantic_plan = None
+                self.last_semantic_plan_route = None
         self.last_answer = result.get("answer")
         rows = list(result.get("rows") or [])
-        self.last_rows = rows
+        # 차트/확인 후속은 rows가 비어 있어도 직전 집계를 유지해 지표 재선택에 쓴다
+        keep_prev_rows = str(route or "").startswith(("chart_", "clarify_", "guide_"))
+        if rows or not keep_prev_rows:
+            self.last_rows = rows
+            self.result_anchors = [
+                ResultAnchor(
+                    entity="building",
+                    identity=str(row.get("A0") or row.get("id") or "") or None,
+                    row=dict(row),
+                    rank=i + 1,
+                    label=str(row.get("A24") or row.get("name") or "") or None,
+                )
+                for i, row in enumerate(rows[:20])
+            ]
         chart_payload = result.get("chart") or result.get("chart_spec")
         if result.get("chart_offer") and result.get("chart_spec"):
             self.pending_chart = dict(result["chart_spec"])
@@ -184,6 +245,24 @@ class SessionContext:
             guessed_u = extract_usage(question)
             if guessed_u:
                 self.usage = guessed_u
+
+    @staticmethod
+    def _coerce_count_display_plan(
+        plan: dict[str, Any], sql: str, answer: str
+    ) -> None:
+        """목록 SQL이 COUNT(*) OVER 또는 'N동입니다'면 후속용 count로 본다."""
+        if not isinstance(plan, dict):
+            return
+        over = bool(re.search(r"COUNT\s*\(\s*\*\s*\)\s+OVER", sql or "", re.I))
+        spoken = bool(
+            re.search(r"(모두\s*)?\d[\d,]*\s*(동|채|건)입니다", answer or "")
+        )
+        if not (over or spoken):
+            return
+        plan["query_kind"] = "count"
+        plan["select"] = []
+        plan["limit"] = None
+        plan["order_by"] = []
 
     def clear_focus(self) -> None:
         self.focus_row = None

@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 
 from llm2sql.db import assert_readonly_sql
-from llm2sql.domain import BUSAN_GU_CODES, extract_gu, extract_place
+from llm2sql.domain import BUSAN_GU_CODES, extract_gu, extract_place, extract_places, wants_map_display
 from llm2sql.spatial_templates import admin_dong_where
 
 _D010 = "AL_D010_26_20250704"
@@ -439,6 +439,9 @@ def _with_limit(sql: str, map_limit: int, *, keep_existing: bool) -> str:
 
 def boundary_sql(question: str) -> str | None:
     """건수·집계 질의의 필터 영역을 행정 경계로 그린다."""
+    multi = gu_boundary_union_sql(question)
+    if multi:
+        return multi
     place = extract_place(question)
     gu = extract_gu(question)
     if place and str(place).endswith("동"):
@@ -448,6 +451,23 @@ def boundary_sql(question: str) -> str | None:
     if place and (str(place).endswith("구") or str(place).endswith("군")):
         return _gu_boundary_sql(str(place))
     return None
+
+
+def gu_boundary_union_sql(question: str) -> str | None:
+    """질문의 구·군만 있을 때 경계 UNION. 동이 섞이면 None (건물 피처 유지)."""
+    places = extract_places(question)
+    if not places:
+        gu = extract_gu(question)
+        places = [gu] if gu else []
+    if not places:
+        return None
+    if any(str(p).endswith("동") for p in places):
+        return None
+    gus = [p for p in places if str(p).endswith(("구", "군"))]
+    if not gus:
+        return None
+    parts = [strip_sql(_gu_boundary_sql(g)) for g in gus[:3]]
+    return "\nUNION ALL\n".join(parts) + ";"
 
 
 def _dong_boundary_sql(place: str) -> str:
@@ -460,19 +480,27 @@ def _dong_boundary_sql(place: str) -> str:
 
 
 def _gu_boundary_sql(gu: str) -> str:
+    """구 경계. BND ADM_CD는 센서스(21…)라 법정동코드(26410)와 안 맞는다.
+
+    기초구역 SIG_CD(26410)·시군구명으로 합집합을 만든다.
+    """
     code = BUSAN_GU_CODES.get(gu)
     safe = gu.replace("'", "''")
+    geom = (
+        "ST_Multi(ST_CollectionExtract("
+        "ST_MakeValid(ST_UnaryUnion(ST_Collect(t.geometry))), 3))"
+    )
     if code:
-        return (
-            f"SELECT '{safe}' AS \"ADM_NM\", ST_Union(d.geometry) AS geometry\n"
-            f'FROM "{_BND}" d\n'
-            f"WHERE d.\"ADM_CD\" LIKE '{code}%';"
-        )
+        where = f't."SIG_CD" = \'{code}\''
+        sig = f"'{code}'"
+    else:
+        where = f't."SIG_KOR_NM" = \'{safe}\''
+        sig = "NULL"
     return (
-        f"SELECT d.\"ADM_CD\", d.\"ADM_NM\", d.geometry\n"
-        f'FROM "{_BND}" d\n'
-        f"WHERE d.\"ADM_NM\" LIKE '{safe}%'\n"
-        f"  AND d.\"ADM_CD\" LIKE '21%';"
+        f"SELECT '{safe}' AS \"SIG_KOR_NM\", {sig} AS \"SIG_CD\",\n"
+        f"       {geom} AS geometry\n"
+        f'FROM "{_BAS}" t\n'
+        f"WHERE {where} AND t.geometry IS NOT NULL"
     )
 
 
@@ -487,7 +515,21 @@ def plan_map_sql(
     if not ok or not is_map_route(route):
         return None
     title = _title(question, route)
+    if _profile_prefers_gu_boundary(route, question):
+        bounds = gu_boundary_union_sql(question) or boundary_sql(question)
+        if bounds:
+            return MapPlan(kind="boundary", sql=bounds, title=title)
     source = (sql or "").strip()
+    display = wants_map_display(question) or route == "building_map_display"
+    if display and source:
+        if is_aggregate_sql(source):
+            features = count_to_feature_sql(source, map_limit=map_limit)
+            if features:
+                return MapPlan(kind="features", sql=features, title=title)
+        stripped = _LIMIT_RE.sub("", strip_sql(source)).strip()
+        wrapped = ensure_geometry_select(stripped, map_limit=map_limit)
+        if wrapped:
+            return MapPlan(kind="features", sql=wrapped, title=title)
     if source and not is_aggregate_sql(source):
         wrapped = ensure_geometry_select(source, map_limit=map_limit)
         if wrapped:
@@ -569,3 +611,24 @@ def _title(question: str, route: str | None) -> str:
     if text:
         return text
     return route or "분석 결과"
+
+
+_PROFILE_BOUNDARY_ROUTES = frozenset(
+    {
+        "building_profile",
+        "building_profile_compare",
+    }
+)
+
+
+def _profile_prefers_gu_boundary(route: str | None, question: str) -> bool:
+    """구 전체 특성·비교는 건물 전체를 올리지 않고 구 경계만 그린다."""
+    if route not in _PROFILE_BOUNDARY_ROUTES:
+        return False
+    places = extract_places(question)
+    if not places:
+        gu = extract_gu(question)
+        places = [gu] if gu else []
+    if not places:
+        return False
+    return all(str(p).endswith(("구", "군")) for p in places)

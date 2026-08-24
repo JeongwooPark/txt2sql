@@ -35,7 +35,10 @@ def test_incomplete_or_does_not_execute_when_llm_disabled() -> None:
         allow_llm=False,
     )
     assert plan.requires_clarification is True
-    assert "heuristic_incomplete" in (plan.assumptions or [])
+    assert any(
+        item in (plan.assumptions or [])
+        for item in ("heuristic_incomplete", "or_incomplete")
+    )
 
 
 def test_simple_complete_heuristic_still_accepted() -> None:

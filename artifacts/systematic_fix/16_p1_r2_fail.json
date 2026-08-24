@@ -1,0 +1,330 @@
+{
+  "when": "2026-08-25 02:01:50",
+  "baseline": {
+    "passed": 198,
+    "failed": 302,
+    "accuracy_pct": 39.6,
+    "source": "artifacts/evaluation/q500_gold_eval.json (2026-08-24 12:53)"
+  },
+  "current": {
+    "passed": 13,
+    "failed": 10,
+    "accuracy_pct": 56.5,
+    "elapsed_s": 125.6,
+    "timeout_s": 40
+  },
+  "cause_counts": {
+    "PREDICATE_DROPPED": 6,
+    "ENTITY_SELECTION_ERROR": 2,
+    "FOLLOWUP_CONTEXT_LOST": 2,
+    "RANGE_BOUND_DROPPED": 1
+  },
+  "by_cat": {
+    "미사용속성": {
+      "PREDICATE_DROPPED": 1
+    },
+    "복합AND": {
+      "PREDICATE_DROPPED": 1
+    },
+    "비교연도": {
+      "ENTITY_SELECTION_ERROR": 1
+    },
+    "후속": {
+      "FOLLOWUP_CONTEXT_LOST": 2,
+      "PREDICATE_DROPPED": 3,
+      "ENTITY_SELECTION_ERROR": 1,
+      "RANGE_BOUND_DROPPED": 1
+    },
+    "후속앵커": {
+      "PREDICATE_DROPPED": 1
+    }
+  },
+  "by_kind": {
+    "count": {
+      "PREDICATE_DROPPED": 3,
+      "FOLLOWUP_CONTEXT_LOST": 2,
+      "RANGE_BOUND_DROPPED": 1
+    },
+    "group": {
+      "ENTITY_SELECTION_ERROR": 1,
+      "PREDICATE_DROPPED": 1
+    },
+    "scalar": {
+      "PREDICATE_DROPPED": 2,
+      "ENTITY_SELECTION_ERROR": 1
+    }
+  },
+  "samples": {
+    "PREDICATE_DROPPED": [
+      {
+        "id": "Q137",
+        "q": "동구 공동주택 중 지어진지 20년 넘고 지상 10층 이상인 채수",
+        "gold": "19채",
+        "answer": "동구의 조건에 해당하는 건물은 18건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%동구%' AND (b.\"A9\" = '공동주택' AND b.\"A26\"::float8 >= 10 AND (b.\"A13\"::text ~ '^[0-9]{4}') AND ((b.\"A13\"::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND b.\"A13\"::date <= DATE '2005-07-04') OR (b.\"A13\"::text ~ '^[0-9]{4}$' AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2005)));",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=19 pred=[18.0, 18.0]",
+        "ms": 1246
+      },
+      {
+        "id": "Q206",
+        "q": "동래구 위반건축물이면서 지어진지 30년 넘은 단독주택 채수",
+        "gold": "151채",
+        "answer": "동래구의 조건에 해당하는 건물은 148건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%동래구%' AND (b.\"A9\" = '단독주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND ((b.\"A13\"::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND b.\"A13\"::date <= DATE '1995-07-04') OR (b.\"A13\"::text ~ '^[0-9]{4}$' AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 1995)) AND b.\"A20\" = 'Y');",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=151 pred=[148.0, 148.0]",
+        "ms": 841
+      },
+      {
+        "id": "Q449",
+        "q": "영도구 지어진지 25년 넘은 공동주택 채수",
+        "gold": "610채",
+        "answer": "영도구의 조건에 해당하는 건물은 593건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%영도구%' AND (b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND ((b.\"A13\"::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND b.\"A13\"::date <= DATE '2000-07-04') OR (b.\"A13\"::text ~ '^[0-9]{4}$' AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000)));",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=610 pred=[593.0, 593.0]",
+        "ms": 17952
+      },
+      {
+        "id": "Q451",
+        "q": "평균 연면적",
+        "gold": "avg_gfa=11,510.4952; n=115",
+        "answer": "영도구의 집계 결과입니다. 평균 연면적 11564.7338.",
+        "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%영도구%' AND (b.\"A9\" = '공동주택' AND b.\"A26\"::float8 >= 10 AND (b.\"A13\"::text ~ '^[0-9]{4}') AND ((b.\"A13\"::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND b.\"A13\"::date <= DATE '2000-07-04') OR (b.\"A13\"::text ~ '^[0-9]{4}$' AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000)));",
+        "route": "semantic_plan_aggregate",
+        "reason": "scalar-mismatch hits=1 gold=[11510.4952, 115.0]",
+        "ms": 907
+      },
+      {
+        "id": "Q495",
+        "q": "법정동별 건수",
+        "gold": "1. dong=부산광역시 기장군 정관읍 모전리, n=64 / 2. dong=부산광역시 기장군 정관읍 달산리, n=23 / 3. dong=부산광역시 기장군 정관읍 용수리, n=19 / 4. dong=부산광역시 기장군 정관읍 매학리, n=16 / 5. dong=부산광역시 기장군 일광읍 삼성리, n=15 / 6. dong=부산광역시 기장군 철마면 고촌리, n=12 / 7. dong=부산광역시 기장군 기장읍 교리, n=10 / 8. dong=부산광역시 기장군 정관읍 방곡리, n=7 / 9. dong=부산광역시 기장군 일광읍 이천리, n=5 / 10. dong=부산광역시 기장군 기장읍 대라리, n=5 / 11. dong=부산광역시 기장군 기장읍 청강리, n=3 / 12. dong=부산광역시 기장군 정관읍 예림리, n=1",
+        "answer": "기장군의 조건에 해당하는 건물은 406건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%기장군%' AND (b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2010);",
+        "route": "semantic_plan_count",
+        "reason": "group-mismatch",
+        "ms": 65
+      },
+      {
+        "id": "Q496",
+        "q": "가장 높은 건물 이름과 법정동",
+        "gold": "A24=가화 일광타워; A4=부산광역시 기장군 일광읍 이천리; A16=95.05; A26=33",
+        "answer": "기장군의 상위 건물 1건을 조회했습니다. / 1. 가화 일광타워 · 높이 95.05m",
+        "sql": "SELECT b.\"A16\"::float8 AS \"height_m\", /        b.\"A24\" AS \"name\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%기장군%' AND (b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2010) AND b.\"A16\"::float8 > 0 AND b.\"A16\"::float8 <= 600 AND (b.\"A26\" IS NULL OR b.\"A16\"::float8 <= (b.\"A26\"::float8 * 8 + 30)) / ORDER BY b.\"A16\"::float8 DESC NULLS LAST / LIMIT 1;",
+        "route": "semantic_plan_rank",
+        "reason": "scalar-mismatch hits=1 gold=[24.0, 4.0, 16.0, 95.05]",
+        "ms": 68
+      }
+    ],
+    "ENTITY_SELECTION_ERROR": [
+      {
+        "id": "Q372",
+        "q": "금정구 사용승인 연도 구간별 공동주택 수(1970s~2010s)",
+        "gold": "1. decade=1,970, n=157 / 2. decade=1,980, n=352 / 3. decade=1,990, n=795 / 4. decade=2,000, n=796 / 5. decade=2,010, n=595",
+        "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+        "sql": "",
+        "route": "semantic_plan_clarify",
+        "reason": "group-mismatch",
+        "ms": 16917
+      },
+      {
+        "id": "Q452",
+        "q": "가장 오래된(사용승인 빠른) 건물명과 사용승인일",
+        "gold": "A24=대동대교맨션아파트; A13=1980-08-30; A4=부산광역시 영도구 대평동1가",
+        "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+        "sql": "",
+        "route": "semantic_plan_clarify",
+        "reason": "name-missing 대동대교맨션아파트",
+        "ms": 818
+      }
+    ],
+    "FOLLOWUP_CONTEXT_LOST": [
+      {
+        "id": "Q450",
+        "q": "그중 10층 이상만",
+        "gold": "115채",
+        "answer": "영도구의 조건에 해당하는 건물은 113건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%영도구%' AND (b.\"A9\" = '공동주택' AND b.\"A26\"::float8 >= 10 AND (b.\"A13\"::text ~ '^[0-9]{4}') AND ((b.\"A13\"::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND b.\"A13\"::date <= DATE '2000-07-04') OR (b.\"A13\"::text ~ '^[0-9]{4}$' AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000)));",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=115 pred=[113.0, 113.0]",
+        "ms": 3227
+      },
+      {
+        "id": "Q494",
+        "q": "그중 15층 이상만",
+        "gold": "180채",
+        "answer": "기장군 2010년 이후 사용승인 공동주택 중 15층 이상인 건물의 총 수는 406개입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%기장군%' AND (b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2010) AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4) >= '2010';",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=180 pred=[2010.0, 15.0, 406.0, 406.0]",
+        "ms": 4115
+      }
+    ],
+    "RANGE_BOUND_DROPPED": [
+      {
+        "id": "Q494",
+        "q": "그중 15층 이상만",
+        "gold": "180채",
+        "answer": "기장군 2010년 이후 사용승인 공동주택 중 15층 이상인 건물의 총 수는 406개입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%기장군%' AND (b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2010) AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4) >= '2010';",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=180 pred=[2010.0, 15.0, 406.0, 406.0]",
+        "ms": 4115
+      }
+    ]
+  },
+  "failed_items": [
+    {
+      "id": "Q137",
+      "cat": "복합AND",
+      "kind": "count",
+      "q": "동구 공동주택 중 지어진지 20년 넘고 지상 10층 이상인 채수",
+      "gold": "19채",
+      "answer": "동구의 조건에 해당하는 건물은 18건입니다.",
+      "reason": "count-mismatch gold=19 pred=[18.0, 18.0]",
+      "route": "semantic_plan_count",
+      "ms": 1246,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%동구%' AND (b.\"A9\" = '공동주택' AND b.\"A26\"::float8 >= 10 AND (b.\"A13\"::text ~ '^[0-9]{4}') AND ((b.\"A13\"::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND b.\"A13\"::date <= DATE '2005-07-04') OR (b.\"A13\"::text ~ '^[0-9]{4}$' AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2005)));",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q206",
+      "cat": "미사용속성",
+      "kind": "count",
+      "q": "동래구 위반건축물이면서 지어진지 30년 넘은 단독주택 채수",
+      "gold": "151채",
+      "answer": "동래구의 조건에 해당하는 건물은 148건입니다.",
+      "reason": "count-mismatch gold=151 pred=[148.0, 148.0]",
+      "route": "semantic_plan_count",
+      "ms": 841,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%동래구%' AND (b.\"A9\" = '단독주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND ((b.\"A13\"::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND b.\"A13\"::date <= DATE '1995-07-04') OR (b.\"A13\"::text ~ '^[0-9]{4}$' AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 1995)) AND b.\"A20\" = 'Y');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q372",
+      "cat": "비교연도",
+      "kind": "group",
+      "q": "금정구 사용승인 연도 구간별 공동주택 수(1970s~2010s)",
+      "gold": "1. decade=1,970, n=157 / 2. decade=1,980, n=352 / 3. decade=1,990, n=795 / 4. decade=2,000, n=796 / 5. decade=2,010, n=595",
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "reason": "group-mismatch",
+      "route": "semantic_plan_clarify",
+      "ms": 16917,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q449",
+      "cat": "후속앵커",
+      "kind": "count",
+      "q": "영도구 지어진지 25년 넘은 공동주택 채수",
+      "gold": "610채",
+      "answer": "영도구의 조건에 해당하는 건물은 593건입니다.",
+      "reason": "count-mismatch gold=610 pred=[593.0, 593.0]",
+      "route": "semantic_plan_count",
+      "ms": 17952,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%영도구%' AND (b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND ((b.\"A13\"::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND b.\"A13\"::date <= DATE '2000-07-04') OR (b.\"A13\"::text ~ '^[0-9]{4}$' AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000)));",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q450",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 10층 이상만",
+      "gold": "115채",
+      "answer": "영도구의 조건에 해당하는 건물은 113건입니다.",
+      "reason": "count-mismatch gold=115 pred=[113.0, 113.0]",
+      "route": "semantic_plan_count",
+      "ms": 3227,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%영도구%' AND (b.\"A9\" = '공동주택' AND b.\"A26\"::float8 >= 10 AND (b.\"A13\"::text ~ '^[0-9]{4}') AND ((b.\"A13\"::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND b.\"A13\"::date <= DATE '2000-07-04') OR (b.\"A13\"::text ~ '^[0-9]{4}$' AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000)));",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST"
+      ]
+    },
+    {
+      "id": "Q451",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "평균 연면적",
+      "gold": "avg_gfa=11,510.4952; n=115",
+      "answer": "영도구의 집계 결과입니다. 평균 연면적 11564.7338.",
+      "reason": "scalar-mismatch hits=1 gold=[11510.4952, 115.0]",
+      "route": "semantic_plan_aggregate",
+      "ms": 907,
+      "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%영도구%' AND (b.\"A9\" = '공동주택' AND b.\"A26\"::float8 >= 10 AND (b.\"A13\"::text ~ '^[0-9]{4}') AND ((b.\"A13\"::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND b.\"A13\"::date <= DATE '2000-07-04') OR (b.\"A13\"::text ~ '^[0-9]{4}$' AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000)));",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q452",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "가장 오래된(사용승인 빠른) 건물명과 사용승인일",
+      "gold": "A24=대동대교맨션아파트; A13=1980-08-30; A4=부산광역시 영도구 대평동1가",
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "reason": "name-missing 대동대교맨션아파트",
+      "route": "semantic_plan_clarify",
+      "ms": 818,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q494",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 15층 이상만",
+      "gold": "180채",
+      "answer": "기장군 2010년 이후 사용승인 공동주택 중 15층 이상인 건물의 총 수는 406개입니다.",
+      "reason": "count-mismatch gold=180 pred=[2010.0, 15.0, 406.0, 406.0]",
+      "route": "semantic_plan_count",
+      "ms": 4115,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%기장군%' AND (b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2010) AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4) >= '2010';",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED",
+        "FOLLOWUP_CONTEXT_LOST"
+      ]
+    },
+    {
+      "id": "Q495",
+      "cat": "후속",
+      "kind": "group",
+      "q": "법정동별 건수",
+      "gold": "1. dong=부산광역시 기장군 정관읍 모전리, n=64 / 2. dong=부산광역시 기장군 정관읍 달산리, n=23 / 3. dong=부산광역시 기장군 정관읍 용수리, n=19 / 4. dong=부산광역시 기장군 정관읍 매학리, n=16 / 5. dong=부산광역시 기장군 일광읍 삼성리, n=15 / 6. dong=부산광역시 기장군 철마면 고촌리, n=12 / 7. dong=부산광역시 기장군 기장읍 교리, n=10 / 8. dong=부산광역시 기장군 정관읍 방곡리, n=7 / 9. dong=부산광역시 기장군 일광읍 이천리, n=5 / 10. dong=부산광역시 기장군 기장읍 대라리, n=5 / 11. dong=부산광역시 기장군 기장읍 청강리, n=3 / 12. dong=부산광역시 기장군 정관읍 예림리, n=1",
+      "answer": "기장군의 조건에 해당하는 건물은 406건입니다.",
+      "reason": "group-mismatch",
+      "route": "semantic_plan_count",
+      "ms": 65,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%기장군%' AND (b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2010);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q496",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "가장 높은 건물 이름과 법정동",
+      "gold": "A24=가화 일광타워; A4=부산광역시 기장군 일광읍 이천리; A16=95.05; A26=33",
+      "answer": "기장군의 상위 건물 1건을 조회했습니다. / 1. 가화 일광타워 · 높이 95.05m",
+      "reason": "scalar-mismatch hits=1 gold=[24.0, 4.0, 16.0, 95.05]",
+      "route": "semantic_plan_rank",
+      "ms": 68,
+      "sql": "SELECT b.\"A16\"::float8 AS \"height_m\", /        b.\"A24\" AS \"name\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%기장군%' AND (b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2010) AND b.\"A16\"::float8 > 0 AND b.\"A16\"::float8 <= 600 AND (b.\"A26\" IS NULL OR b.\"A16\"::float8 <= (b.\"A26\"::float8 * 8 + 30)) / ORDER BY b.\"A16\"::float8 DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    }
+  ]
+}

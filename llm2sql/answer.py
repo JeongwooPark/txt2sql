@@ -18,12 +18,14 @@ from llm2sql.domain import (
     D198_BY_GU,
     d198_coverage_label,
     d198_table_for_gu,
+    extract_calendar_year,
     extract_gu,
     extract_place,
     extract_special_land,
     extract_structure,
     extract_usage,
     is_busan_wide,
+    wants_map_display,
 )
 from llm2sql.llm import chat, resolve_client
 from llm2sql.progress import TokenCallback
@@ -239,46 +241,82 @@ def _subject_phrase(question: str) -> str:
         parts.append(land[0])
 
     m = re.search(
-        r"(연면적|건물면적|건축면적|건축물면적|면적)\s*(?:이|가)?\s*(\d+(?:\.\d+)?)\s*"
-        rf"{UNIT_TOKEN}\s*(이상|이하|초과|미만|넘는)",
+        r"(연면적|건물면적|건축면적|건축물면적|면적)\s*(?:이|가)?\s*"
+        r"(\d+(?:\.\d+)?)\s*"
+        rf"{UNIT_TOKEN}\s*(이상|초과|부터)\s*"
+        r"(\d+(?:\.\d+)?)\s*"
+        rf"{UNIT_TOKEN}\s*(이하|미만|까지|사이)",
         question,
     )
     if m:
-        label, n, unit, rel = m.group(1), m.group(2), m.group(3), m.group(4)
+        label = m.group(1)
         metric = "건물면적" if ("건물" in label or "건축" in label) else "연면적"
-        shown = "초과" if rel == "넘는" else rel
-        converted = convert_for_schema(n, unit, "㎡")
-        amount = converted.label if converted else f"{n}㎡"
-        parts.append(f"{metric} {amount} {shown}")
+        lo = convert_for_schema(m.group(2), m.group(3), "㎡")
+        hi = convert_for_schema(m.group(5), m.group(6), "㎡")
+        lo_amt = lo.label if lo else f"{m.group(2)}㎡"
+        hi_amt = hi.label if hi else f"{m.group(5)}㎡"
+        parts.append(f"{metric} {lo_amt} {m.group(4)} {hi_amt} {m.group(7)}")
     else:
         m = re.search(
-            rf"높이[가이]?\s*(\d+(?:\.\d+)?)\s*{UNIT_TOKEN}\s*"
-            r"(이상|이하|초과|미만|넘는)?",
+            r"(연면적|건물면적|건축면적|건축물면적|면적)\s*(?:이|가)?\s*(\d+(?:\.\d+)?)\s*"
+            rf"{UNIT_TOKEN}\s*(이상|이하|초과|미만|넘는)",
             question,
         )
         if m:
-            rel = m.group(3) or "이상"
+            label, n, unit, rel = m.group(1), m.group(2), m.group(3), m.group(4)
+            metric = "건물면적" if ("건물" in label or "건축" in label) else "연면적"
             shown = "초과" if rel == "넘는" else rel
-            converted = convert_for_schema(m.group(1), m.group(2), "m")
-            amount = converted.label if converted else f"{m.group(1)}m"
-            parts.append(f"높이 {amount} {shown}")
+            converted = convert_for_schema(n, unit, "㎡")
+            amount = converted.label if converted else f"{n}㎡"
+            parts.append(f"{metric} {amount} {shown}")
         else:
-            hit = pyeong_threshold(question)
-            if hit is not None:
-                converted, rel = hit
-                shown = "초과" if rel == "넘는" else rel
-                parts.append(f"연면적 {converted.label} {shown}")
+            m = re.search(
+                rf"높이[가이]?\s*(\d+(?:\.\d+)?)\s*{UNIT_TOKEN}\s*"
+                r"(이상|초과|부터)\s*"
+                rf"(\d+(?:\.\d+)?)\s*{UNIT_TOKEN}\s*"
+                r"(이하|미만|까지|사이)",
+                question,
+            )
+            if m:
+                lo = convert_for_schema(m.group(1), m.group(2), "m")
+                hi = convert_for_schema(m.group(4), m.group(5), "m")
+                lo_amt = lo.label if lo else f"{m.group(1)}m"
+                hi_amt = hi.label if hi else f"{m.group(4)}m"
+                parts.append(f"높이 {lo_amt} {m.group(3)} {hi_amt} {m.group(6)}")
             else:
-                m = re.search(r"지상\s*층?[이]?\s*(\d+)\s*층", question)
+                m = re.search(
+                    rf"높이[가이]?\s*(\d+(?:\.\d+)?)\s*{UNIT_TOKEN}\s*"
+                    r"(이상|이하|초과|미만|넘는)?",
+                    question,
+                )
                 if m:
-                    rel = "이상"
-                    if "미만" in question:
-                        rel = "미만"
-                    elif "이하" in question:
-                        rel = "이하"
-                    elif "초과" in question or "넘는" in question:
-                        rel = "초과"
-                    parts.append(f"지상 {m.group(1)}층 {rel}")
+                    rel = m.group(3) or "이상"
+                    shown = "초과" if rel == "넘는" else rel
+                    converted = convert_for_schema(m.group(1), m.group(2), "m")
+                    amount = converted.label if converted else f"{m.group(1)}m"
+                    parts.append(f"높이 {amount} {shown}")
+                else:
+                    hit = pyeong_threshold(question)
+                    if hit is not None:
+                        converted, rel = hit
+                        shown = "초과" if rel == "넘는" else rel
+                        parts.append(f"연면적 {converted.label} {shown}")
+                    else:
+                        m = re.search(r"지상\s*층?[이]?\s*(\d+)\s*층", question)
+                        if m:
+                            rel = "이상"
+                            if "미만" in question:
+                                rel = "미만"
+                            elif "이하" in question:
+                                rel = "이하"
+                            elif "초과" in question or "넘는" in question:
+                                rel = "초과"
+                            parts.append(f"지상 {m.group(1)}층 {rel}")
+
+    year_hit = extract_calendar_year(question)
+    if year_hit is not None:
+        year, rel = year_hit
+        parts.append(f"{year}년 {rel}".strip() if rel else f"{year}년")
 
     if not parts:
         return "해당 조건"
@@ -635,6 +673,67 @@ def _natural_count(question: str, n: Any) -> str:
     return f"{subject}{_eun_neun(subject)} 모두 {n_s}{unit}입니다."
 
 
+def format_map_display_answer(
+    question: str,
+    *,
+    rows: list[dict[str, Any]],
+    map_info: dict[str, Any] | None = None,
+    include_map: bool = True,
+) -> str:
+    """「표시하라」질의: 주소 나열 대신 지도 표출 안내."""
+    place = extract_place(question) or extract_gu(question) or ""
+    usage = extract_usage(question)
+    bits = [p for p in (place, usage) if p]
+    if "건물" in question or "건축물" in question or not bits:
+        if "건물" not in "".join(bits):
+            bits.append("건물")
+    year_hit = extract_calendar_year(question)
+    if year_hit is not None:
+        year, rel = year_hit
+        bits.append(f"{year}년 {rel}".strip() if rel else f"{year}년")
+    subject = " ".join(bits) if bits else "해당 건물"
+    n: int | None = None
+    scalar = _scalar_from_rows(rows)
+    if scalar is not None:
+        try:
+            n = int(scalar)
+        except (TypeError, ValueError):
+            n = None
+    if n is None and rows:
+        n = _list_total(rows, len(rows))
+
+    if map_info and map_info.get("available"):
+        shown = int(map_info.get("feature_count") or 0)
+        if n and shown and n > shown:
+            return (
+                f"{subject} 데이터를 지도에 표출했습니다. "
+                f"전체 {n:,}동 가운데 {shown:,}동을 올렸습니다."
+            )
+        shown_n = shown or n
+        if shown_n:
+            return f"{subject} 데이터를 지도에 표출했습니다. ({shown_n:,}동)"
+        return f"{subject} 데이터를 지도에 표출했습니다."
+    if map_info and map_info.get("error"):
+        if n:
+            lead = f"{subject}{_eun_neun(subject)} {n:,}동입니다. "
+        else:
+            lead = f"{subject}을 조회했습니다. "
+        return lead + f"지도에는 올리지 못했습니다. ({map_info.get('error')})"
+    if not include_map:
+        if n:
+            return (
+                f"{subject}{_eun_neun(subject)} {n:,}동입니다. "
+                "지도 페이지에서 같은 질문을 하시면 위치가 표시됩니다."
+            )
+        return f"{subject}을 조회했습니다. 지도 페이지에서 위치를 확인할 수 있습니다."
+    if n:
+        return (
+            f"{subject} 데이터를 지도에 표출했습니다. "
+            f"조건에 해당하는 건물은 {n:,}동입니다."
+        )
+    return f"{subject} 데이터를 지도에 표출했습니다."
+
+
 def _prose_without_markdown_table(text: str) -> str:
     """웹 스트리밍용 — 파이프 표는 HTML로 그리므로 본문에서 뺀다."""
     raw = (text or "").replace("\r\n", "\n")
@@ -785,7 +884,12 @@ def _natural_threshold_list(
             continue
         val = row.get(col)
         shown = _fmt_area(val, question) if unit == "㎡" else f"{_fmt_number(val)}{unit}"
-        examples.append(f"「{name}」 {metric} {shown}")
+        example = f"「{name}」 {metric} {shown}"
+        if extract_calendar_year(question) is not None:
+            day = _row_approval_date(row)
+            if day:
+                example = f"{example} (사용승인 {_fmt_date_ko(day)})"
+        examples.append(example)
         if len(examples) >= 5:
             break
     lead = f"{subject}{_eun_neun(subject)} 모두 {total:,}동입니다."
@@ -1602,6 +1706,9 @@ def format_success_template(
             "조건을 바꿔 다시 질문해 주세요."
         )
 
+    if route == "building_map_display" or wants_map_display(question):
+        return format_map_display_answer(question, rows=rows, include_map=True)
+
     scalar = _scalar_from_rows(rows)
     single_metric = row_count == 1 and scalar is not None and len(rows[0]) <= 2
 
@@ -1787,6 +1894,15 @@ def format_success(
             rows=rows,
             row_count=row_count,
             route=route,
+        )
+        final = with_coverage_preface(answer, route, question)
+        if on_token is not None:
+            emit_text_chunks(final, on_token)
+        return final
+
+    if route == "building_map_display" or wants_map_display(question):
+        answer = format_map_display_answer(
+            question, rows=rows, include_map=True
         )
         final = with_coverage_preface(answer, route, question)
         if on_token is not None:

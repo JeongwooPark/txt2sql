@@ -28,10 +28,13 @@ from llm2sql.domain import (
     busan_gu_code,
     calendar_year_predicate_sql,
     d198_table_for_gu,
+    dong_requires_gu,
     extract_age_compare,
     extract_age_years,
     extract_building_name_candidate,
     extract_gu,
+    extract_industrial_name,
+    extract_industrial_names,
     extract_place,
     extract_special_land,
     extract_structure,
@@ -66,7 +69,21 @@ class RoutedQuery:
 
 _GU = GU_PATTERN
 _DONG = DONG_PATTERN
-_COUNT_HINT = ("몇", "개수", "건수", "채", "수", "세어", "구해", "알려", "조회", "얼마")
+_COUNT_HINT = (
+    "몇",
+    "개수",
+    "건수",
+    "채",
+    "채수",
+    "수",
+    "세어",
+    "구해",
+    "알려",
+    "조회",
+    "얼마",
+    "얼마나",
+    "되나요",
+)
 _LIST_HINT = (
     "무엇이 있어",
     "뭐가 있어",
@@ -143,6 +160,17 @@ def _a4_place_filters(place: str | None, gu: str | None) -> list[str]:
 def _d198_select_list() -> str:
     cols = ", ".join(f'"{c}"' for c in D198_SELECT_COLS)
     return f"SELECT {cols}"
+
+
+def _year_stats_has_other_metric(q: str) -> bool:
+    """층/면적/구조가 있으면 연도 분포 전용 라우트를 쓰지 않는다."""
+    if extract_structure(q):
+        return True
+    if _parse_floor_threshold(q) is not None or _parse_height_threshold(q) is not None:
+        return True
+    if _parse_area_threshold(q) is not None or _area_threshold_hits(q):
+        return True
+    return bool(re.search(r"\d+\s*층", q))
 
 
 def _d198_year_stats_sql(
@@ -258,7 +286,7 @@ def _route_d198_attr(
     if vbin is not None:
         return _d198_value_bin_sql(tables, where_sql, vbin)
     stats = parse_year_stats(q)
-    if stats is not None:
+    if stats is not None and not _year_stats_has_other_metric(q):
         return _d198_year_stats_sql(tables, where_sql, stats)
 
     order_col = parsed.order_col or "A19"
@@ -330,6 +358,10 @@ def _route_catalog_attr(q: str) -> RoutedQuery | None:
     select = f"SELECT {cols}"
     prefix = ds.intent_prefix
 
+    date_stats = _catalog_base_date_sql(q, parsed, where_sql)
+    if date_stats is not None:
+        return date_stats
+
     if parsed.rank:
         limit, intent = 1, f"{prefix}_rank"
     elif parsed.lookup:
@@ -347,6 +379,37 @@ def _route_catalog_attr(q: str) -> RoutedQuery | None:
         f"LIMIT {limit};"
     )
     return RoutedQuery(intent, sql)
+
+
+def _catalog_base_date_sql(q: str, parsed, where_sql: str):
+    """자료의 기준일 → MIN/MAX/COUNT. 행 목록이 아니다."""
+    if not any(k in q for k in ("기준일", "데이터기준일", "데이터기준일자")):
+        return None
+    if any(k in q for k in ("이후", "이전", "이래", "년까지")):
+        return None
+    if re.search(r"(19|20)\d{2}\s*년", q):
+        return None
+    ds = parsed.dataset
+    date_attr = next(
+        (
+            a
+            for a in ds.attrs
+            if a.kind == "date" and any(al in q for al in a.aliases)
+        ),
+        None,
+    )
+    if date_attr is None:
+        return None
+    col = date_attr.col
+    return RoutedQuery(
+        f"{ds.intent_prefix}_base_date",
+        (
+            f'SELECT MIN("{col}") AS min_base, MAX("{col}") AS max_base, '
+            f'COUNT(*) AS n\n'
+            f'FROM "{ds.table}"\n'
+            f"WHERE {where_sql};"
+        ),
+    )
 
 
 _AREA_METRICS = (
@@ -373,7 +436,18 @@ _AREA_LISTISH = (
     "건물명",
     "명칭",
 )
-_AREA_COUNTISH = ("몇", "건수", "개수", "채수", "수는", "개가", "채야", "몇개")
+_AREA_COUNTISH = (
+    "몇",
+    "건수",
+    "개수",
+    "채수",
+    "수는",
+    "개가",
+    "채야",
+    "몇개",
+    "건물 수",
+    "건물수",
+)
 
 
 def _rel_op(rel: str) -> str:
@@ -411,9 +485,30 @@ def _parse_lo_hi_range(
 
 def _parse_area_threshold(q: str) -> tuple[str, str, str] | None:
     """(col, op, value) — 면적 N 이상/이하. 기초구역 면적은 제외."""
+    hits = _area_threshold_hits(q)
+    if hits:
+        return hits[0]
+    hit = pyeong_threshold(q)
+    if hit is not None:
+        converted, rel = hit
+        return "A14", _rel_op(rel), converted.sql
+    return None
+
+
+def _area_threshold_hits(q: str) -> list[tuple[str, str, str]]:
+    """등장한 면적 필드별 (col, op, value_sql). 제네릭 '면적'은 구체 필드가 없을 때만."""
     if "기초구역" in q:
-        return None
+        return []
+    hits: list[tuple[str, str, str]] = []
+    seen: set[str] = set()
+    specific = any(
+        k in q for k in ("연면적", "건축면적", "건물면적", "대지면적", "건축물면적")
+    )
     for label, col in _AREA_METRICS:
+        if col in seen:
+            continue
+        if label == "면적" and specific:
+            continue
         m = re.search(
             rf"{label}\s*(?:이|가)?\s*(\d+(?:\.\d+)?)\s*"
             rf"{UNIT_TOKEN}\s*"
@@ -425,17 +520,17 @@ def _parse_area_threshold(q: str) -> tuple[str, str, str] | None:
         converted = convert_for_schema(m.group(1), m.group(2), "㎡")
         if converted is None:
             continue
-        return col, _rel_op(m.group(3)), converted.sql
-    hit = pyeong_threshold(q)
-    if hit is not None:
-        converted, rel = hit
-        return "A14", _rel_op(rel), converted.sql
-    return None
+        seen.add(col)
+        hits.append((col, _rel_op(m.group(3)), converted.sql))
+    return hits
 
 
 def _parse_area_predicates(q: str) -> tuple[str, list[str]] | None:
-    """(order_col, extras) — 단일 임계 또는 구간."""
+    """(order_col, extras) — 단일 필드 임계/구간만. 다중 면적 필드는 Plan으로."""
     if "기초구역" in q:
+        return None
+    hits = _area_threshold_hits(q)
+    if len({col for col, _, _ in hits}) >= 2:
         return None
     for label, col in _AREA_METRICS:
         pair = _parse_lo_hi_range(q, rf"{re.escape(label)}\s*(?:이|가)?\s*", "㎡")
@@ -447,7 +542,8 @@ def _parse_area_predicates(q: str) -> tuple[str, list[str]] | None:
     if parsed is None:
         return None
     col, op, area = parsed
-    return col, [f'"{col}" {op} {area}']
+    extras = [f'"{c}" {o} {v}' for c, o, v in hits] if hits else [f'"{col}" {op} {area}']
+    return col, extras
 
 
 def _wants_threshold_list(q: str) -> bool:
@@ -556,6 +652,9 @@ def _parse_floor_threshold(q: str) -> tuple[str, str] | None:
         return _rel_op(m.group(2)), m.group(1)
     m = re.search(r"(\d+)\s*층\s*(이상|이하|초과|미만|넘는)", q)
     if m:
+        prefix = q[max(0, m.start() - 4) : m.start()]
+        if "지하" in prefix:
+            return None
         return _rel_op(m.group(2)), m.group(1)
     if "지상" not in q and "층수" not in q:
         return None
@@ -721,13 +820,49 @@ def _looks_like_rank_ask(q: str) -> bool:
 
 def _numeric_families(q: str) -> set[str]:
     fam: set[str] = set()
-    if _parse_area_threshold(q) is not None:
+    area_hits = _area_threshold_hits(q)
+    area_cols = {col for col, _, _ in area_hits}
+    if len(area_cols) >= 2:
+        fam.add("area_multi")
+        for col in area_cols:
+            fam.add(f"area_{col}")
+    elif area_hits or _parse_area_threshold(q) is not None:
         fam.add("area")
     if _parse_height_threshold(q) is not None:
         fam.add("height")
     if _parse_floor_threshold(q) is not None:
         fam.add("floors")
+    if _has_temporal_metric(q):
+        fam.add("temporal")
     return fam
+
+
+def _has_temporal_metric(q: str) -> bool:
+    if "년대" in q or looks_like_age_question(q):
+        return True
+    try:
+        from llm2sql.query_understanding.temporal import parse_temporal_filters
+
+        return bool(parse_temporal_filters(q))
+    except Exception:
+        return False
+
+
+def _d198_exclusive_question(q: str) -> bool:
+    return any(
+        k in q
+        for k in (
+            "세부용도",
+            "주요용도",
+            "표제부",
+            "집합건축물",
+            "허가일",
+            "허가일자",
+            "용도분류",
+            "문교사회용",
+            "용도별건물",
+        )
+    )
 
 
 def should_defer_compound_to_plan(q: str) -> bool:
@@ -735,7 +870,7 @@ def should_defer_compound_to_plan(q: str) -> bool:
     if any(h in q for h in ("용도별건물", "AL_D198", "D198")):
         return False
     families = _numeric_families(q)
-    if len(families) >= 2:
+    if "area_multi" in families or len(families) >= 2:
         return True
     spatial_inside = any(
         k in q for k in ("안에", "내에", "내부", "안쪽", "경계 안", "경계안")
@@ -748,15 +883,151 @@ def should_defer_compound_to_plan(q: str) -> bool:
         "floors" in families or _looks_like_rank_ask(q) or families
     ):
         return True
+    if extract_special_land(q) and families:
+        return True
+    if "지하" in q and "지상" in q:
+        return True
+    if (
+        "area" in families
+        and not any(k in q for k in _AREA_COUNTISH)
+        and not _wants_threshold_list(q)
+    ):
+        return True
+    if re.search(r"지하.{0,12}\d+", q) and "지상" not in q:
+        return True
+    if any(k in q for k in ("건물동명", "동명이")) and families:
+        return True
     if any(k in q for k in ("평균", "합계")) and any(
         k in q for k in ("높이", "연면적", "건축면적", "대지면적", "층수", "지상")
     ):
         return True
     if "용도별" in q and any(k in q for k in ("개수", "건수", "분포", "구성")):
         return True
-    if any(k in q for k in (" 또는 ", " 혹은 ", "이거나", "제외", "아닌", "빼고")):
-        return True
+    if any(k in q for k in (" 또는 ", " 혹은 ", "이거나", "제외", "아닌", "빼고", "뺀")):
+        if not _d198_exclusive_question(q):
+            return True
     if any(k in q for k in ("사이", "부터", "까지", "건폐율", "용적율", "용적률", "위반")):
+        if not _d198_exclusive_question(q):
+            return True
+    if any(k in q for k in ("비율", "퍼센트", "몇%", "%씩", "몇 프로")):
+        return True
+    return False
+
+
+_METRIC_FAMILY_KEYS = (
+    ("높이", "고도"),
+    ("연면적",),
+    ("건축면적", "건물면적"),
+    ("건폐율",),
+    ("용적율", "용적률"),
+    ("지상층", "층수"),
+)
+
+
+def _legacy_must_yield_to_plan(question: str) -> bool:
+    """OR/NOT·다중집계·공간+속성은 부분 라우트 대신 Plan으로 넘긴다.
+
+    단일 구간(BETWEEN) 질의는 전용 레거시 라우트가 상·하한을 유지하므로 여기서 막지 않는다.
+    """
+    from llm2sql.query_understanding.contract import extract_contract
+
+    try:
+        contract = extract_contract(question)
+    except Exception:
+        return False
+    if any(span.kind == "or" for span in contract.boolean_ops):
+        if not _d198_exclusive_question(question):
+            return True
+    if any(span.kind == "not" for span in contract.boolean_ops):
+        if not _d198_exclusive_question(question):
+            return True
+    if len(contract.aggregations) >= 2 or contract.groups:
+        return True
+    spatial_cue = any(
+        k in question
+        for k in ("안에", "내에", "내부", "안쪽", "경계 안", "경계안", "산업단지")
+    )
+    has_attr = bool(
+        contract.metrics
+        or contract.ranges
+        or contract.comparisons
+        or contract.boolean_ops
+    )
+    if spatial_cue and has_attr:
+        if _catalog_owns_industrial(question) and not any(
+            k in question for k in ("건물", "공장", "창고", "채")
+        ):
+            return False
+        return True
+    from llm2sql.query_understanding.temporal import parse_temporal_filters
+
+    temporal = bool(parse_temporal_filters(question)) or "년대" in question or looks_like_age_question(
+        question
+    )
+    other_metric = any(
+        (span.value or span.meta.get("field"))
+        in {
+            "height_m",
+            "ground_floors",
+            "gross_floor_area_m2",
+            "building_area_m2",
+            "site_area_m2",
+            "structure",
+        }
+        for span in (contract.metrics + contract.numbers + contract.ranges)
+    ) or extract_structure(question) is not None
+    if temporal and other_metric:
+        return True
+    if len(contract.ranges) >= 2:
+        return True
+    family_hits = sum(
+        1 for keys in _METRIC_FAMILY_KEYS if any(k in question for k in keys)
+    )
+    if family_hits >= 2 and any(
+        k in question for k in ("이상", "이하", "초과", "미만", "사이", "~")
+    ):
+        return True
+    if any(k in question for k in ("건물동명", "동명이")):
+        return True
+    if extract_industrial_name(question) and any(
+        k in question for k in ("공장", "창고")
+    ):
+        return True
+    if "기초구역" in question and any(
+        k in question for k in ("이상", "이하", "초과", "미만")
+    ) and any(k in question for k in ("개수", "몇", "개야", "채수")):
+        return True
+    if re.search(r"(공장|창고시설|창고)[·･、,/]", question):
+        return True
+    if any(k in question for k in ("vs", "VS", "이상과 미만")):
+        return True
+    if any(k in question for k in ("주변", "이내", "반경", "중심에서")) and extract_usage(
+        question
+    ):
+        return True
+    if "이동사유별" in question or ("이동사유" in question and "별" in question):
+        return True
+    if looks_like_age_question(question) and not _d198_exclusive_question(question):
+        return True
+    if "주요용도별" in question or (
+        "주요용도" in question
+        and (
+            extract_structure(question) is not None
+            or any(k in question for k in ("상위", "별 건수", "용도별", "층"))
+        )
+    ):
+        return True
+    if "세부용도" in question and (
+        looks_like_age_question(question) or re.search(r"(?:19|20)\d{2}\s*년", question)
+    ):
+        return True
+    if "허가일" in question and "사용승인일" in question and "차이" in question:
+        return True
+    if "허가" in question and "년대" in question and any(
+        k in question for k in ("상업용", "주거용", "문교", "공공용")
+    ):
+        return True
+    if "지하층" in question and any(k in question for k in ("있는", "있")):
         return True
     return False
 
@@ -766,6 +1037,12 @@ def try_route(
     conn: psycopg.Connection | None = None,
 ) -> RoutedQuery | None:
     q = question.strip()
+    if _legacy_must_yield_to_plan(q):
+        return None
+
+    name_cmp = _route_building_name_set_compare(q)
+    if name_cmp is not None:
+        return name_cmp
 
     # 산업단지 관련 규칙 라우트 (건물명보다 우선)
     industrial = _route_buildings_in_industrial(q)
@@ -777,6 +1054,10 @@ def try_route(
     industrial = _route_industrial_count(q)
     if industrial is not None:
         return industrial
+
+    bas_rank = _route_basic_zone_area_rank(q)
+    if bas_rank is not None:
+        return bas_rank
 
     # 행정동·기초구역·건물 공간 연산 (속성 COUNT/행정구 오탐보다 우선)
     spatial_hit = try_spatial_route(q)
@@ -936,6 +1217,8 @@ def try_route(
             dong = None
     else:
         dong = m.group(1)
+    if dong and dong_requires_gu(dong) and extract_gu(q) is None:
+        dong = None
     if dong and _wants_count(q):
         from llm2sql.spatial_templates import building_in_dong_count_sql
 
@@ -1157,14 +1440,28 @@ def _route_place_building_count(q: str) -> RoutedQuery | None:
         return None
     if _has_place_buffer_hint(q):
         return None
+    if any(k in q for k in ("비율", "퍼센트", "몇%", "%씩")):
+        return None
 
     place = extract_place(q)
     gu = extract_gu(q)
+    if place and dong_requires_gu(place) and gu is None:
+        return None
     if not place and not gu:
+        if is_busan_wide(q):
+            return RoutedQuery(
+                "building_place_count",
+                f'SELECT COUNT(*) AS cnt\nFROM "{_D010}";',
+            )
         return None
 
     kind, sql = scoped_count_sql(place, gu)
     if kind == "none":
+        if is_busan_wide(q):
+            return RoutedQuery(
+                "building_place_count",
+                f'SELECT COUNT(*) AS cnt\nFROM "{_D010}";',
+            )
         return None
     intent = "building_in_dong_spatial" if kind == "admin" else "building_place_count"
     return RoutedQuery(intent, sql)
@@ -1179,6 +1476,8 @@ def _route_place_usage_count(
     if not usage or "산업단지" in q:
         return None
     if not _wants_count(q):
+        return None
+    if any(k in q for k in ("비율", "퍼센트", "몇%", "%씩")):
         return None
     if ("연면적" in q or "건물면적" in q or "대지면적" in q or "면적" in q) and any(
         k in q for k in ("이상", "이하", "초과", "미만", "넘는")
@@ -1408,6 +1707,17 @@ def _industrial_scope_sql(q: str) -> str:
 def _industrial_distinct_names_sql(scope: str) -> str:
     return (
         "SELECT DISTINCT name FROM (\n"
+        "  SELECT COALESCE(NULLIF(TRIM(\"A8\"), ''), NULLIF(TRIM(\"A9\"), '')) AS name\n"
+        '  FROM "AL_D060_00_20250804"\n'
+        f"  WHERE {scope}\n"
+        ") t\n"
+        "WHERE name IS NOT NULL AND BTRIM(name) <> ''"
+    )
+
+
+def _industrial_names_list_sql(scope: str) -> str:
+    return (
+        "SELECT DISTINCT name FROM (\n"
         '  SELECT TRIM("A8") AS name FROM "AL_D060_00_20250804"\n'
         f"  WHERE {scope} AND \"A8\" ILIKE '%산업단지%'\n"
         "  UNION\n"
@@ -1415,12 +1725,9 @@ def _industrial_distinct_names_sql(scope: str) -> str:
         f"  WHERE {scope} AND \"A9\" ILIKE '%산업단지%'\n"
         ") t\n"
         "WHERE name IS NOT NULL AND BTRIM(name) <> ''\n"
-        "  AND name <> '일반산업단지'"
+        "  AND name <> '일반산업단지'\n"
+        "ORDER BY name;"
     )
-
-
-def _industrial_names_sql(scope: str) -> str:
-    return _industrial_distinct_names_sql(scope) + "\nORDER BY name;"
 
 
 def _route_buildings_in_industrial(q: str) -> RoutedQuery | None:
@@ -1437,14 +1744,24 @@ def _route_buildings_in_industrial(q: str) -> RoutedQuery | None:
     if any(k in q for k in ("자료", "데이터셋", "테이블", "이름", "명칭")):
         return None
 
+    names = extract_industrial_names(q)
     gu = extract_gu(q)
     place = extract_place(q)
-    where_b: list[str] = [
+    intersect = (
         "EXISTS ("
         'SELECT 1 FROM "AL_D060_00_20250804" i '
         "WHERE ST_Intersects(b.geometry, i.geometry)"
-        ")"
-    ]
+    )
+    if names:
+        clauses = []
+        for name in names:
+            safe = name.replace("'", "''")
+            clauses.append(
+                f'(i."A8" ILIKE \'%{safe}%\' OR i."A9" ILIKE \'%{safe}%\')'
+            )
+        intersect += " AND (" + " OR ".join(clauses) + ")"
+    intersect += ")"
+    where_b: list[str] = [intersect]
     if place and place.endswith("동"):
         where_b.append(
             f'(b."A4" LIKE \'% {place}\' OR b."A4" = \'{place}\')'
@@ -1474,7 +1791,7 @@ def _route_industrial_count(q: str) -> RoutedQuery | None:
     if any(k in q for k in ("교차", "기초구역")):
         return None
     # 건물∩산업단지는 별도 라우트
-    if ("건물" in q or "건축물" in q) and any(
+    if any(k in q for k in ("건물", "건축물", "공장", "창고")) and any(
         k in q for k in ("내", "안", "속한", "포함", "교차")
     ):
         return None
@@ -1527,7 +1844,7 @@ def _route_industrial_names(q: str) -> RoutedQuery | None:
         return None
 
     scope = _industrial_scope_sql(q)
-    return RoutedQuery("industrial_names", _industrial_names_sql(scope))
+    return RoutedQuery("industrial_names", _industrial_names_list_sql(scope))
 
 
 def _route_building_name_lookup(q: str) -> RoutedQuery | None:
@@ -1600,6 +1917,8 @@ def _route_building_name_lookup(q: str) -> RoutedQuery | None:
 
 
 def _route_building_rank(q: str) -> RoutedQuery | None:
+    if "기초구역" in q:
+        return None
     metric_col = None
     metric_name = None
     has_super = any(k in q for k in _RANK_SUPERLATIVE)
@@ -1672,6 +1991,81 @@ def _route_building_rank(q: str) -> RoutedQuery | None:
             f"{where_sql}\n"
             f'ORDER BY "{metric_col}" DESC NULLS LAST\n'
             f"LIMIT {limit_n};"
+        ),
+    )
+
+
+def _route_basic_zone_area_rank(q: str) -> RoutedQuery | None:
+    """기초구역 면적 최대/상위. 건물 연면적 순위와 구분한다."""
+    if "기초구역" not in q:
+        return None
+    if any(k in q for k in ("건물", "건축물", "아파트", "주택")):
+        return None
+    if "교차" in q and any(k in q for k in ("개수", "몇", "채수")):
+        return None
+    if any(k in q for k in ("이상", "이하", "초과", "미만")) and any(
+        k in q for k in ("개수", "몇", "개야", "채수")
+    ):
+        return None
+    if not any(k in q for k in ("면적", "큰", "최대", "상위", "제일")):
+        return None
+    gu = extract_gu(q)
+    n = _extract_top_n(q, default=1)
+    limit_n = max(1, min(n, 20))
+    where = f'WHERE "SIG_KOR_NM" = \'{gu}\'\n' if gu else ""
+    value_only = any(k in q for k in ("면적값", "면적 값", "면적만", "얼마", "몇 제곱"))
+    wants_identity = any(
+        k in q for k in ("것은", "것은?", "것?", "아이디", "ID", "번호", "어디")
+    )
+    if value_only and not wants_identity:
+        return RoutedQuery(
+            "bas_area_topn_value",
+            (
+                'SELECT "BAS_AR" AS v\n'
+                'FROM "TL_KODIS_BAS_26_202507"\n'
+                f"{where}"
+                'ORDER BY "BAS_AR" DESC NULLS LAST\n'
+                f"LIMIT {limit_n};"
+            ),
+        )
+    return RoutedQuery(
+        "bas_area_topn",
+        (
+            'SELECT "BAS_AR", "BAS_ID", "SIG_KOR_NM"\n'
+            'FROM "TL_KODIS_BAS_26_202507"\n'
+            f"{where}"
+            'ORDER BY "BAS_AR" DESC NULLS LAST\n'
+            f"LIMIT {limit_n};"
+        ),
+    )
+
+
+def _route_building_name_set_compare(q: str) -> RoutedQuery | None:
+    """대학·POI 두 집합을 건물명 ILIKE COUNT로 비교한다. 좌표 추측 금지."""
+    if "비교" not in q:
+        return None
+    if not any(k in q for k in ("건물", "건축물", "채", "수")):
+        return None
+    match = re.search(
+        r"([가-힣A-Za-z0-9]+(?:대학교|대학|학교|병원|시장|역))"
+        r"\s*(?:와|과)\s*"
+        r"([가-힣A-Za-z0-9]+(?:대학교|대학|학교|병원|시장|역))",
+        q,
+    )
+    if not match:
+        return None
+    left, right = match.group(1), match.group(2)
+    if left == right:
+        return None
+    sl = left.replace("'", "''")
+    sr = right.replace("'", "''")
+    return RoutedQuery(
+        "building_name_set_compare",
+        (
+            "SELECT\n"
+            f"  COUNT(*) FILTER (WHERE \"A24\" ILIKE '%{sl}%') AS n1,\n"
+            f"  COUNT(*) FILTER (WHERE \"A24\" ILIKE '%{sr}%') AS n2\n"
+            'FROM "AL_D010_26_20250704";'
         ),
     )
 

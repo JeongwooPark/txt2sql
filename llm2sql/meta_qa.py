@@ -76,6 +76,10 @@ _DATA_QUERY_HINTS = (
     "이상",
     "가장 큰",
     "순위",
+    "비율",
+    "퍼센트",
+    "몇%",
+    "%",
 )
 
 _TABLE_ALIASES: dict[str, tuple[str, ...]] = {
@@ -180,11 +184,58 @@ def _asks_dataset_summary(q: str) -> bool:
     )
 
 
+def _asks_d198_where(q: str) -> bool:
+    """용도별건물공간정보의 구 커버리지 질문."""
+    if not any(k in q for k in ("용도별건물공간정보", "용도별건물")):
+        return False
+    return any(k in q for k in ("어디", "어느 구", "구까지", "어느 지역", "어느구"))
+
+
+def _answer_d198_where(conn: psycopg.Connection) -> MetaAnswer:
+    from llm2sql.domain import D198_BY_GU, D198_TABLES
+
+    tables = list(D198_TABLES) or list(D198_BY_GU.values())
+    if not tables:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT table_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name LIKE 'AL_D198%'
+                ORDER BY 1
+                """
+            )
+            tables = [str(r["table_name"]) for r in cur.fetchall()]
+    lines = [
+        f"{i}. table_name={name}"
+        for i, name in enumerate(tables, start=1)
+    ]
+    if D198_BY_GU:
+        lines.append(
+            "구 범위: " + ", ".join(f"{gu}={tbl}" for gu, tbl in D198_BY_GU.items())
+        )
+    return MetaAnswer(
+        intent="meta_d198_coverage",
+        answer="\n".join(lines) if lines else "용도별건물공간정보 테이블을 찾지 못했습니다.",
+        tables=tables,
+        rows=[{"table_name": name} for name in tables],
+    )
+
+
 def is_metadata_question(question: str) -> bool:
     """데이터 설명/속성 질의인지 판별 (집계·공간 조회와 구분)."""
     q = question.strip()
     if not q:
         return False
+    from llm2sql.domain import is_busan_wide
+
+    if _asks_d198_where(q):
+        return True
+    if is_busan_wide(q) and any(k in q for k in ("건물", "건축물")) and any(
+        k in q for k in ("몇", "수", "채", "건수")
+    ):
+        if not any(k in q for k in ("데이터", "테이블", "자료", "데이터셋", "스키마")):
+            return False
     # 카탈로그 개수: "사용가능한 데이터는 몇개야?"
     if _asks_catalog_count(q):
         return True
@@ -391,6 +442,9 @@ def answer_metadata_question(
 
     q = question.strip()
 
+    if _asks_d198_where(q):
+        return _answer_d198_where(conn)
+
     # 0) 사용 가능 데이터셋 개수
     if _asks_catalog_count(q):
         return _answer_catalog_count(conn)
@@ -446,7 +500,8 @@ def _asks_catalog(q: str) -> bool:
             "테이블 목록",
             "데이터 목록",
             "보유",
-            "전체",
+            "전체 데이터",
+            "데이터 전체",
             "목록",
             "리스트",
             "소개",

@@ -1,0 +1,54 @@
+N037	semantic_plan_clarify	count-mismatch gold=30773 pred=[]	부산광역시 공동주택은 몇 채야?
+N064	semantic_plan_clarify	name-missing 호텔아쿠아펠리스	그 건물 높이는?
+N069	semantic_plan_clarify	compare-name-missing 중동 18290000 숙박시설 (주식회사엘시티피이에프브이)	엘시티랑 엘크루 블루오션 중에 더 높은 건물은?
+N090	semantic_plan_clarify	count-mismatch gold=35 pred=[]	사하구 산업단지와 교차하는 기초구역은 몇 개야?
+Q188	clarify_column	count-mismatch gold=44 pred=[20.0, 10.0, 20.0]	부산진구 위반건축물(A20=Y) 중 공동주택은 몇 채야?
+Q205	semantic_plan_clarify	count-mismatch gold=243 pred=[]	남구 공동주택 중 건폐율 20~50%이고 용적율 150% 이상인 채수
+Q208	semantic_plan_clarify	count-mismatch gold=593 pred=[]	기장군 용적율이 0보다 크고 80% 미만인 공장 채수
+Q211	semantic_plan_clarify	scalar-mismatch hits=0 gold=[1216.0, 59.7314]	연제구 건폐율이 기록된 공동주택의 평균 건폐율과 건수
+Q219	semantic_plan_clarify	scalar-mismatch hits=0 gold=[2355.0, 247.399, 59.3335]	해운대구 공동주택 중 용적율과 건폐율이 모두 있는 건물의 평균 용적율·평균 건폐율
+Q226	semantic_plan_clarify	scalar-mismatch hits=0 gold=[3424.0, 23.4959, 12.0]	해운대구 공동주택 평균 높이와 중앙값 높이, 건수
+Q229	semantic_plan_clarify	scalar-mismatch hits=0 gold=[2549.0, 3086190.475, 1210.7456, 55254.03]	사하구 공장 연면적 합계와 평균, 최대
+Q235	semantic_plan_clarify	scalar-mismatch hits=0 gold=[8345.0, 798862.8524, 95.7295]	기장군 단독주택 건축면적 합계와 평균
+Q237	semantic_plan_clarify	scalar-mismatch hits=0 gold=[50.0, 103761.5099, 2075.2302, 73.8]	광안동 숙박시설 연면적 합계·평균·최대 높이
+Q241	semantic_plan_clarify	scalar-mismatch hits=0 gold=[237.0, 1393076.37, 11.4965]	북구 교육연구시설 대지면적 합계와 평균 높이
+Q244	semantic_plan_clarify	compare-num-missing	서구 공동주택 연면적 합계가 단독주택 연면적 합계보다 얼마나 큰가
+Q245	clarify_column	scalar-mismatch hits=0 gold=[27.0, 9360.0]	동구 용도 종류 수(distinct A9)와 가장 많은 용도 건수
+Q254	semantic_plan_clarify	group-label-missing	부산 구별 위반건축물 수 상위 8개 구
+Q257	semantic_plan_clarify	scalar-mismatch hits=0 gold=[0.0]	해운대구 아파트 중 높이 결측 비율 %
+Q260	semantic_plan_clarify	scalar-mismatch hits=0 gold=[2060.0, 17601.0, 8.5442]	북구 공동주택 지상층 합계와 평균
+Q272	semantic_plan_clarify	count-mismatch gold=2375 pred=[]	명지·녹산 국가산업단지 안 공장 또는 창고시설 채수
+Q273	semantic_plan_clarify	group-mismatch	센텀2지구 도시첨단산업단지와 교차하는 건물 용도별 건수
+Q274	semantic_plan_clarify	count-mismatch gold=35 pred=[]	사하구 산업단지와 교차하는 기초구역 개수
+Q282	semantic_plan_clarify	group-mismatch	신호지방산업단지 안 건물 용도별 건수 상위 6
+Q288	semantic_plan_clarify	scalar-mismatch hits=0 gold=[22.0, 876.0655]	모라도시첨단산업단지 안 건물 수와 평균 연면적
+Q293	semantic_plan_clarify	count-mismatch gold=10 pred=[]	부산 일반산업단지 도형 중 시군구코드가 강서구(26440)인 개수
+Q294	semantic_plan_clarify	group-mismatch	사상재생사업지구와 교차하는 건물 용도 상위 5
+Q327	semantic_plan_clarify	count-mismatch gold=81 pred=[]	동래구 명륜동 오피스텔 또는 사무소(세부용도) 채수
+Q384	semantic_plan_clarify	name-missing 엘시티	그중 가장 높은 건물의 이름과 지번
+Q388	semantic_plan_clarify	name-missing 호텔아쿠아펠리스	연면적이 가장 큰 것의 법정동과 지번
+Q400	semantic_plan_clarify	name-missing 르노코리아자동차(주)	연면적이 가장 큰 공장 이름
+Q408	semantic_plan_clarify	scalar-mismatch hits=0 gold=[5399.9514, 14.0]	남은 건물 평균 연면적
+Q423	semantic_plan_clarify	scalar-mismatch hits=0 gold=[405.0, 18.2667]	평균 지상층
+Q424	semantic_plan_clarify	name-missing 벽산아스타	가장 높은 건물명
+Q427	semantic_plan_clarify	scalar-mismatch hits=0 gold=[8318.7581, 320.0]	평균 건물연면적
+Q428	semantic_plan_clarify	list-top-missing 부곡동 푸르지오	연면적 상위 5 이름
+Q431	semantic_plan_clarify	group-mismatch	용도별 건수 상위 6
+Q432	semantic_plan_clarify	name-missing 대원플러스빌	연면적이 가장 큰 위반건축물 이름·용도
+Q440	semantic_plan_clarify	name-missing 청마 마이우스	용적율이 가장 큰 건물명
+Q451	semantic_plan_clarify	scalar-mismatch hits=0 gold=[11510.4952, 115.0]	평균 연면적
+Q460	semantic_plan_clarify	name-missing 중동 18290000 숙박시설 (주식회사엘시티피이에프브이)	가장 높은 건물의 건물동명과 지번
+Q467	semantic_plan_clarify	scalar-mismatch hits=0 gold=[9692.1343, 58.5903, 118.0]	평균 연면적과 평균 높이
+Q468	semantic_plan_clarify	list-top-missing 구서 협성 엠파이어	연면적 상위 3 이름
+Q475	semantic_plan_clarify	group-mismatch	세부용도 상위 5
+Q476	semantic_plan_clarify	scalar-mismatch hits=0 gold=[173.5, 27.0]	가장 높은 건물명
+Q477	clarify_place	list-top-missing 해운대케이씨씨스위첸	좌동 15층 이상 공동주택 이름과 층수
+Q478	clarify_place	count-mismatch gold=362 pred=[1.0, 2077.0, 2.0, 334.0, 1.0, 1.0]	그중 연면적 6000㎡ 이상만
+Q479	semantic_plan_clarify	scalar-mismatch hits=0 gold=[59.9616, 362.0]	평균 높이
+Q480	semantic_plan_clarify	name-missing 경남선경아파트	지번 알려줘(연면적 1위)
+Q487	semantic_plan_clarify	scalar-mismatch hits=0 gold=[23.2599, 65.344, 177.0]	평균 층수와 평균 높이
+Q488	semantic_plan_clarify	name-missing 대림쌍용강변타운	가장 높은 건물 이름
+Q491	semantic_plan_clarify	scalar-mismatch hits=0 gold=[12.7918, 29.0]	면적 합계
+Q492	semantic_plan_clarify	scalar-mismatch hits=0 gold=[48481.0, 1.5929]	면적 최대 기초구역번호
+Q495	semantic_plan_clarify	group-mismatch	법정동별 건수
+Q496	semantic_plan_clarify	name-missing 가화 일광타워	가장 높은 건물 이름과 법정동

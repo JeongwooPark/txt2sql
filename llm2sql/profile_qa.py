@@ -20,6 +20,7 @@ from llm2sql.domain import (
     extract_usage,
     extract_usages,
     fix_dual_particles,
+    has_anaphora,
     is_busan_wide,
     place_a4_predicate,
     with_topic,
@@ -319,6 +320,35 @@ def is_profile_question(question: str) -> bool:
 
     if is_rank_compare_question(q):
         return False
+    if has_anaphora(q) or any(
+        k in q for k in ("그중", "그 중", "그 건물", "해당 건물", "첫번째", "첫 번째")
+    ):
+        return False
+    if any(
+        k in q
+        for k in (
+            "몇 채",
+            "몇채",
+            "건수",
+            "채수",
+            "이상",
+            "이하",
+            "초과",
+            "미만",
+            "또는",
+            "혹은",
+            "이거나",
+        )
+    ):
+        return False
+    if any(k in q for k in ("평균", "합계", "총합")) and not any(
+        k in q for k in ("특징", "요약", "프로필", "분포", "구성")
+    ):
+        return False
+    if "비교" in q and re.search(
+        r"(대학교|대학|학교).{0,12}(와|과).{0,12}(대학교|대학|학교)", q
+    ):
+        return False
     # 법정동→행정동 비율 질의는 공간 분배 라우트
     if any(k in q for k in ("몇%", "몇 %", "퍼센트씩", "몇 퍼센트", "%씩", "몇 프로")):
         return False
@@ -340,13 +370,16 @@ def is_profile_question(question: str) -> bool:
         "구성",
         "경향",
         "대략",
-        "평균",
         "분석",
     )
     compare_hints = ("비교", "대비", "차이")
     has_summary = any(k in q for k in summary_hints) or _wants_far_focus(q)
     has_compare = any(k in q for k in compare_hints) or ("와" in q) or ("과" in q)
     if not has_summary and not has_compare:
+        return False
+    from llm2sql.domain import wants_map_display
+
+    if wants_map_display(q):
         return False
     places = extract_places(q)
     usages = extract_usages(q)
@@ -554,7 +587,7 @@ def _profile_from_where(
         if place:
             pred = place_a4_predicate(place)
             if alias:
-                pred = pred.replace('"A4"', 'b."A4"')
+                pred = pred.replace('"A4"', 'b."A4"').replace('"A3"', 'b."A3"')
             where.append(pred)
     if usage:
         where.append(f'{prefix}"A9" = \'{usage}\'')

@@ -23,6 +23,12 @@ def format_semantic_answer(
     if row_count == 0:
         return f"{prefix}조건에 해당하는 건물을 찾지 못했습니다."
 
+    from llm2sql.domain import wants_map_display
+    from llm2sql.answer import format_map_display_answer
+
+    if wants_map_display(question):
+        return format_map_display_answer(question, rows=rows, include_map=True)
+
     if plan.query_kind == "count":
         value = _first_number(rows, ("count", "n", "cnt"))
         shown = f"{int(value):,}" if value is not None else str(row_count)

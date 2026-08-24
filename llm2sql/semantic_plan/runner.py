@@ -169,7 +169,12 @@ def run_semantic_plan(
         }
 
     try:
-        rows = execute_query(conn, compiled.sql, default_limit=settings.default_limit)
+        rows = execute_query(
+            conn,
+            compiled.sql,
+            default_limit=settings.default_limit,
+            statement_timeout_ms=settings.db_statement_timeout_ms,
+        )
     except Exception as exc:
         emit("plan_fallback", f"실행 실패: {type(exc).__name__}")
         return _fallback(
@@ -186,10 +191,15 @@ def run_semantic_plan(
         emit("plan_validate", f"result shape warnings {shape_errors}")
 
     warnings = checked.warnings
-    if not rows and warnings:
+    blocking = [
+        item
+        for item in warnings
+        if item not in {"heuristic_plan", "plan_followup_delta", "plan_followup_event"}
+    ]
+    if not rows and blocking:
         return _fallback(
             "empty_with_warning",
-            "; ".join(warnings),
+            "; ".join(blocking),
             semantic_plan=checked.plan,
             sql=compiled.sql,
         )

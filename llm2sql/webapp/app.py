@@ -22,7 +22,10 @@ from llm2sql.data import create_data_router
 from llm2sql.map import create_map_router, start_cleanup_scheduler
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
 _SENTINEL = object()
+_CATALOG_JSON = DOCS_DIR / "kordb_catalog.json"
+_CATALOG_MD = DOCS_DIR / "kordb_필드카탈로그.md"
 
 
 class ChatRequest(BaseModel):
@@ -87,6 +90,30 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/download/kordb-catalog.json")
+    def download_kordb_catalog_json() -> FileResponse:
+        if not _CATALOG_JSON.is_file():
+            raise HTTPException(
+                status_code=404, detail="KorDB 카탈로그 JSON이 없습니다."
+            )
+        return FileResponse(
+            _CATALOG_JSON,
+            media_type="application/json; charset=utf-8",
+            filename="kordb_catalog.json",
+        )
+
+    @app.get("/download/kordb-catalog.md")
+    def download_kordb_catalog_md() -> FileResponse:
+        if not _CATALOG_MD.is_file():
+            raise HTTPException(
+                status_code=404, detail="KorDB 카탈로그 Markdown이 없습니다."
+            )
+        return FileResponse(
+            _CATALOG_MD,
+            media_type="text/markdown; charset=utf-8",
+            filename="kordb_field_catalog.md",
+        )
 
     @app.post("/api/session")
     def new_session() -> dict[str, str]:

@@ -1,0 +1,54 @@
+N069 HEUR=None route=semantic_plan_clarify reason=compare-name-missing 중동 18290000 숙박시설 (주식회사엘시티피이에프브이)
+  q=엘시티랑 엘크루 블루오션 중에 더 높은 건물은?
+  poi.clarify=False contract.places=['엘시'] groups=0 aggs=0
+N090 HEUR=None route=semantic_plan_clarify reason=count-mismatch gold=35 pred=[]
+  q=사하구 산업단지와 교차하는 기초구역은 몇 개야?
+  poi.clarify=False contract.places=['사하구', '기초구'] groups=0 aggs=0
+Q188 heur=count/building clar=False amb=[] spatial=0 val=ready err=[] hard=False cv=[] route=clarify_column reason=count-mismatch gold=44 pred=[20.0, 10.0, 20.0]
+  q=부산진구 위반건축물(A20=Y) 중 공동주택은 몇 채야?
+  scope=부산진구/gu
+Q244 heur=aggregate/building clar=False amb=[] spatial=0 val=clarify err=['P06', 'slot_below_threshold:aggregation'] hard=True cv=['P06', 'slot_below_threshold:aggregation'] route=semantic_plan_clarify reason=compare-num-missing
+  q=서구 공동주택 연면적 합계가 단독주택 연면적 합계보다 얼마나 큰가
+  scope=서구/gu
+Q245 HEUR=None route=clarify_column reason=scalar-mismatch hits=0 gold=[27.0, 9360.0]
+  q=동구 용도 종류 수(distinct A9)와 가장 많은 용도 건수
+  poi.clarify=False contract.places=['동구'] groups=0 aggs=0
+Q255 heur=aggregate/building clar=False amb=[] spatial=0 val=clarify err=['P06', 'slot_below_threshold:aggregation'] hard=True cv=['P06', 'slot_below_threshold:aggregation'] route=semantic_plan_clarify reason=compare-num-missing
+  q=금정구 2000년 이후 사용승인 공동주택 평균 층수가 1990년대보다 얼마나 높은가
+  scope=금정구/gu
+Q257 heur=aggregate/building clar=False amb=[] spatial=0 val=clarify err=['slot_below_threshold:fields'] hard=True cv=['slot_below_threshold:fields'] route=semantic_plan_clarify reason=scalar-mismatch hits=0 gold=[0.0]
+  q=해운대구 아파트 중 높이 결측 비율 %
+  scope=해운대구/gu
+Q272 heur=count/building clar=False amb=[] spatial=1 val=clarify err=['P07', 'slot_below_threshold:scope'] hard=True cv=['P07', 'slot_below_threshold:scope'] route=semantic_plan_clarify reason=count-mismatch gold=2375 pred=[]
+  q=명지·녹산 국가산업단지 안 공장 또는 창고시설 채수
+  spatial intersects ent=industrial_complex place=name='명지국가산업단지·녹산국가산업단지·명지,녹산국가산업단지' kind='unknown'
+Q273 HEUR=None route=semantic_plan_clarify reason=group-mismatch
+  q=센텀2지구 도시첨단산업단지와 교차하는 건물 용도별 건수
+  poi.clarify=False contract.places=['센텀2지구', '도시'] groups=1 aggs=0
+Q274 HEUR=None route=semantic_plan_clarify reason=count-mismatch gold=35 pred=[]
+  q=사하구 산업단지와 교차하는 기초구역 개수
+  poi.clarify=False contract.places=['사하구', '기초구'] groups=0 aggs=0
+Q282 HEUR=None route=semantic_plan_clarify reason=group-mismatch
+  q=신호지방산업단지 안 건물 용도별 건수 상위 6
+  poi.clarify=False contract.places=[] groups=1 aggs=0
+Q288 HEUR=None route=semantic_plan_clarify reason=scalar-mismatch hits=0 gold=[22.0, 876.0655]
+  q=모라도시첨단산업단지 안 건물 수와 평균 연면적
+  poi.clarify=False contract.places=['모라도시', '연면'] groups=0 aggs=1
+Q293 HEUR=None route=semantic_plan_clarify reason=count-mismatch gold=10 pred=[]
+  q=부산 일반산업단지 도형 중 시군구코드가 강서구(26440)인 개수
+  poi.clarify=False contract.places=['시군구', '강서구'] groups=0 aggs=0
+Q294 HEUR=None route=semantic_plan_clarify reason=group-mismatch
+  q=사상재생사업지구와 교차하는 건물 용도 상위 5
+  poi.clarify=False contract.places=['사상재생사업지구'] groups=0 aggs=0
+Q185 heur=count/building clar=False amb=[] spatial=0 val=ready err=[] hard=False cv=[] route=semantic_plan_count reason=count-mismatch gold=2143 pred=[5072.0, 5072.0]
+  q=사상구 공장 또는 자동차관련시설이면서 산업단지와 교차하는 건물 수
+  scope=사상구/gu
+Q271 heur=count/building clar=False amb=[] spatial=0 val=ready err=[] hard=False cv=[] route=None reason=engine-fail:- Industrial-park questions must use "AL_D060_00_20250804".
+  q=장림동 산업단지 안 공장 중 연면적 3000㎡ 이상인 채수
+  scope=장림동/legal_dong
+Q283 heur=list/building clar=False amb=[] spatial=0 val=ready err=[] hard=False cv=[] route=None reason=engine-fail:- Industrial-park questions must use "AL_D060_00_20250804".
+  q=강서구 산업단지 안 공장 중 연면적 5000㎡ 이상 이름
+  scope=강서구/gu
+Q300 heur=count/building clar=False amb=[] spatial=0 val=ready err=[] hard=False cv=[] route=semantic_plan_count reason=count-mismatch gold=173 pred=[260.0, 260.0]
+  q=명지동 건물 중 산업단지 안에 있으면서 연면적 2000㎡ 이상인 채수
+  scope=명지동/legal_dong

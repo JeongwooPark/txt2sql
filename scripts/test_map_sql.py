@@ -255,6 +255,23 @@ LIMIT 20;
         str(plan_cmp.sql if plan_cmp else "")[:240],
     )
 
+    plan_gu = plan_map_sql(
+        question="금정구와 사하구 건물의 특성을 비교하라",
+        sql=compare_sql,
+        route="building_profile_compare",
+        ok=True,
+    )
+    ok(
+        "gu profile compare uses district boundaries",
+        plan_gu is not None
+        and plan_gu.kind == "boundary"
+        and "금정구" in (plan_gu.sql if plan_gu else "")
+        and "사하구" in (plan_gu.sql if plan_gu else "")
+        and "AL_D010" not in (plan_gu.sql if plan_gu else "")
+        and "UNION ALL" in (plan_gu.sql if plan_gu else ""),
+        str(plan_gu.sql if plan_gu else "")[:300],
+    )
+
     plan_l = plan_map_sql(
         question="구서동에서 건물면적이 가장 큰 아파트는?",
         sql=list_sql,

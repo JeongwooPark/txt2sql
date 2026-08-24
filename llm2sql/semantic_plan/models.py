@@ -160,6 +160,9 @@ class AggregationSpec(BaseModel):
     function: AggregateFunction
     field: str | None = None
     alias: str | None = None
+    filter_field: str | None = None
+    filter_operator: FilterOperator | None = None
+    filter_value: Any | None = None
 
 
 class OrderSpec(BaseModel):

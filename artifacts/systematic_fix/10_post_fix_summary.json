@@ -1,0 +1,49 @@
+{
+  "when": "2026-08-24 21:21:25",
+  "pytest_structure_gate": {"passed": 132, "failed": 0},
+  "compare_to": {
+    "passed": 207,
+    "failed": 293,
+    "accuracy_pct": 41.4,
+    "elapsed_s": 2202.3,
+    "p95_ms": 19189,
+    "timeouts": 0,
+    "source": "artifacts/systematic_fix/05_full500.json (pre-fix baseline)"
+  },
+  "current": {
+    "passed": 263,
+    "failed": 237,
+    "accuracy_pct": 52.6,
+    "delta_passed": 56,
+    "elapsed_s": 1668.7,
+    "avg_ms": 3335,
+    "p50_ms": 875,
+    "p95_ms": 15687,
+    "max_ms": 40016,
+    "timeouts": 1,
+    "timeout_s": 40
+  },
+  "hotspot_before_after": {
+    "후속": {"before": "17/93 (18.3%)", "after": "21/93 (22.6%)"},
+    "논리OR": {"before": "1/12", "after": "5/12 (41.7%)"},
+    "논리NOT": {"before": "1/10", "after": "2/10 (20.0%)"},
+    "공간복합": {"before": "6/35", "after": "13/35 (37.1%)"},
+    "미사용속성": {"before": "6/40", "after": "9/40 (22.5%)"},
+    "복합AND": {"after": "43/50 (86.0%)"},
+    "건수": {"after": "9/9 (100%)"}
+  },
+  "fail_routes_now": {
+    "semantic_plan_clarify": 45,
+    "building_profile": 36,
+    "semantic_plan_aggregate": 24,
+    "semantic_plan_count": 18,
+    "semantic_plan_list": 10
+  },
+  "note": "06_failure_diagnosis 는 덮지 않음. 새 진단은 09_post_fix_diagnosis.",
+  "artifacts": {
+    "eval": "artifacts/evaluation/q500_gold_eval.json",
+    "copy": "artifacts/systematic_fix/08_post_fix500.json",
+    "diagnosis_json": "artifacts/systematic_fix/09_post_fix_diagnosis.json",
+    "diagnosis_md": "artifacts/systematic_fix/09_post_fix_diagnosis.md"
+  }
+}

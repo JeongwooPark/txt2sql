@@ -22,6 +22,18 @@ def test_range_span_indices() -> None:
     assert span.meta.get("field") == "height_m"
 
 
+def test_area_range_inclusive_exclusive() -> None:
+    q = "구서1동에서 면적이 1000이상 10000미만의 건물을 찾아라"
+    c = extract_contract(q)
+    assert c.ranges
+    span = c.ranges[0]
+    assert span.meta["low"] == 1000
+    assert span.meta["high"] == 10000
+    assert span.meta.get("lo_rel") == "이상"
+    assert span.meta.get("hi_rel") == "미만"
+    assert span.meta.get("field") == "gross_floor_area_m2"
+
+
 def test_spacing_and_particle_variants() -> None:
     a = extract_contract("수영구 건물 최대높이")
     b = extract_contract("수영구 건물 최대 높이")

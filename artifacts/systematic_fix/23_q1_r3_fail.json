@@ -1,0 +1,166 @@
+{
+  "when": "2026-08-25 07:33:07",
+  "baseline": {
+    "passed": 198,
+    "failed": 302,
+    "accuracy_pct": 39.6,
+    "source": "artifacts/evaluation/q500_gold_eval.json (2026-08-24 12:53)"
+  },
+  "current": {
+    "passed": 13,
+    "failed": 5,
+    "accuracy_pct": 72.2,
+    "elapsed_s": 42.6,
+    "timeout_s": 40
+  },
+  "cause_counts": {
+    "ENTITY_SELECTION_ERROR": 5
+  },
+  "by_cat": {
+    "비교": {
+      "ENTITY_SELECTION_ERROR": 1
+    },
+    "집계비율": {
+      "ENTITY_SELECTION_ERROR": 4
+    }
+  },
+  "by_kind": {
+    "compare": {
+      "ENTITY_SELECTION_ERROR": 3
+    },
+    "scalar": {
+      "ENTITY_SELECTION_ERROR": 2
+    }
+  },
+  "samples": {
+    "ENTITY_SELECTION_ERROR": [
+      {
+        "id": "N069",
+        "q": "엘시티랑 엘크루 블루오션 중에 더 높은 건물은?",
+        "gold": "name=중동 18290000 숙박시설 (주식회사엘시티피이에프브이); height_m=411.6 | name=엘시티, height_m=339.1 / name=르씨엘시티, height_m=57 / name=엘크루 블루오션, height_m=35.45",
+        "answer": "확인이 필요합니다. 질문을 완전히 해석하지 못해 확인이 필요합니다",
+        "sql": "",
+        "route": "semantic_plan_clarify",
+        "reason": "compare-name-missing 중동 18290000 숙박시설 (주식회사엘시티피이에프브이)",
+        "ms": 17492
+      },
+      {
+        "id": "Q244",
+        "q": "서구 공동주택 연면적 합계가 단독주택 연면적 합계보다 얼마나 큰가",
+        "gold": "apt_sum=1,953,917.88; detached_sum=819,131.1875; diff_sum=1,134,786.6925",
+        "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+        "sql": "",
+        "route": "semantic_plan_clarify",
+        "reason": "compare-num-missing",
+        "ms": 17
+      },
+      {
+        "id": "Q245",
+        "q": "동구 용도 종류 수(distinct A9)와 가장 많은 용도 건수",
+        "gold": "n_usage=27; max_usage_n=9,360",
+        "answer": "확인이 필요합니다. 질문을 완전히 해석하지 못해 확인이 필요합니다",
+        "sql": "",
+        "route": "semantic_plan_clarify",
+        "reason": "scalar-mismatch hits=0 gold=[27.0, 9360.0]",
+        "ms": 13412
+      },
+      {
+        "id": "Q255",
+        "q": "금정구 2000년 이후 사용승인 공동주택 평균 층수가 1990년대보다 얼마나 높은가",
+        "gold": "avg_fl_2000=7.6913; avg_fl_1990s=6.4428; diff_fl=1.2486",
+        "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+        "sql": "",
+        "route": "semantic_plan_clarify",
+        "reason": "compare-num-missing",
+        "ms": 3
+      },
+      {
+        "id": "Q257",
+        "q": "해운대구 아파트 중 높이 결측 비율 %",
+        "gold": "pct_null_h=0",
+        "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+        "sql": "",
+        "route": "semantic_plan_clarify",
+        "reason": "scalar-mismatch hits=0 gold=[0.0]",
+        "ms": 3310
+      }
+    ]
+  },
+  "failed_items": [
+    {
+      "id": "N069",
+      "cat": "비교",
+      "kind": "compare",
+      "q": "엘시티랑 엘크루 블루오션 중에 더 높은 건물은?",
+      "gold": "name=중동 18290000 숙박시설 (주식회사엘시티피이에프브이); height_m=411.6 | name=엘시티, height_m=339.1 / name=르씨엘시티, height_m=57 / name=엘크루 블루오션, height_m=35.45",
+      "answer": "확인이 필요합니다. 질문을 완전히 해석하지 못해 확인이 필요합니다",
+      "reason": "compare-name-missing 중동 18290000 숙박시설 (주식회사엘시티피이에프브이)",
+      "route": "semantic_plan_clarify",
+      "ms": 17492,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q244",
+      "cat": "집계비율",
+      "kind": "compare",
+      "q": "서구 공동주택 연면적 합계가 단독주택 연면적 합계보다 얼마나 큰가",
+      "gold": "apt_sum=1,953,917.88; detached_sum=819,131.1875; diff_sum=1,134,786.6925",
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_clarify",
+      "ms": 17,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q245",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "동구 용도 종류 수(distinct A9)와 가장 많은 용도 건수",
+      "gold": "n_usage=27; max_usage_n=9,360",
+      "answer": "확인이 필요합니다. 질문을 완전히 해석하지 못해 확인이 필요합니다",
+      "reason": "scalar-mismatch hits=0 gold=[27.0, 9360.0]",
+      "route": "semantic_plan_clarify",
+      "ms": 13412,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q255",
+      "cat": "집계비율",
+      "kind": "compare",
+      "q": "금정구 2000년 이후 사용승인 공동주택 평균 층수가 1990년대보다 얼마나 높은가",
+      "gold": "avg_fl_2000=7.6913; avg_fl_1990s=6.4428; diff_fl=1.2486",
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_clarify",
+      "ms": 3,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q257",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "해운대구 아파트 중 높이 결측 비율 %",
+      "gold": "pct_null_h=0",
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "reason": "scalar-mismatch hits=0 gold=[0.0]",
+      "route": "semantic_plan_clarify",
+      "ms": 3310,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    }
+  ]
+}

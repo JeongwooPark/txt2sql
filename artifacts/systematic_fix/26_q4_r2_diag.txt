@@ -1,0 +1,93 @@
+passed 17/35
+
+## PASS
+N096	d198_value_bins	금정구 주거용 연면적 크기별 수는?
+Q183	semantic_plan_count	연제구 업무시설 연면적 800㎡ 이상 5000㎡ 이하이고 높이 15~45m인 채수
+Q195	semantic_plan_count	우동에서 건물동명이 '101동'인 공동주택 채수
+Q270	semantic_plan_count	광안2동 주변 100m 이내 숙박시설 채수
+Q277	semantic_plan_count	구포1동 안 공장·창고 합산 채수
+Q280	semantic_plan_aggregate	해운대구 기초구역 이동사유별 개수
+Q291	semantic_plan_count	장안일반산업단지 안 공장 채수
+Q353	semantic_plan_count	수영구 광안동 숙박시설 연면적 80평 이상과 미만 채수
+Q160	semantic_plan_count	영도구에서 단독주택이 아니고 벽돌·블록구조도 아닌 건물 중 연면적 1000㎡ 이상 채수
+Q165	semantic_plan_count	사하구 공장 연면적 1000㎡ 이상 8000㎡ 이하이고 일반철골인 채수
+Q172	semantic_plan_count	장림동 공장 중 경량철골이 아닌 연면적 2500㎡ 이상 채수
+Q178	semantic_plan_count	강서구 동식물관련시설이 아니면서 산지(특수지)인 건물 중 연면적 500㎡ 이상 채수
+Q193	semantic_plan_count	사하구 일반지번이 아닌 건물 중 공장인 채수
+Q198	semantic_plan_count	북구 지하층이 있고 지상 5층 이상인 제2종근린생활시설 채수
+Q208	semantic_plan_count	기장군 용적율이 0보다 크고 80% 미만인 공장 채수
+Q214	semantic_plan_list	부산진구 용적율 400% 초과 건물 중 업무시설인 이름과 용적율
+Q216	semantic_plan_count	서구 위반건축물 중 높이 20m 이상인 채수
+
+## FAIL
+N016	meta_column_display	scalar-mismatch hits=0 gold=[4.0]
+  Q: 법정동명과 행정동명의 차이가 뭐야?
+  sql: 
+
+N097	building_age_count	count-mismatch gold=3021 pred=[2866.0, 2866.0]
+  Q: 안락동에서 지어진지 30년 넘은 건물은 몇 채야?
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D198_26260_20250115" / WHERE "A4" LIKE '%안락동%' AND "A34" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' AND "A34"::date <= (CURRENT_DATE - INTERVAL '30 years');
+
+Q225	building_special_land_count	count-mismatch gold=85 pred=[0.0, 0.0]
+  Q: 기장군 농수산 성격의 동식물관련시설 중 산지인 채수
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D010_26_20250704" / WHERE "A4" LIKE '%기장군%' AND ("A6"::text = '2' OR TRIM(COALESCE("A7", '')) = '산') AND "A9" = '동식물관련시설';
+
+Q279	semantic_plan_clarify	count-mismatch gold=16 pred=[]
+  Q: 남구 기초구역 중 면적(BAS_AR) 0.3 이상인 개수
+  sql: 
+
+Q358	semantic_plan_count	compare-num-missing
+  Q: 금정구 단독주택 경과 40년 이상 vs 10년 미만 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26410%' AND (b."A9" = '단독주택' AND (b."A13"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b."A13"::text, '[^0-9]', '', 'g'), 4)::int <= 1985);
+
+Q137	semantic_plan_count	count-mismatch gold=19 pred=[18.0, 18.0]
+  Q: 동구 공동주택 중 지어진지 20년 넘고 지상 10층 이상인 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26170%' AND (b."A9" = '공동주택' AND b."A26"::float8 >= 10 AND (b."A13"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b."A13"::text, '[^0-9]', '', 'g'), 4)::int <= 2005);
+
+Q206	semantic_plan_count	count-mismatch gold=151 pred=[148.0, 148.0]
+  Q: 동래구 위반건축물이면서 지어진지 30년 넘은 단독주택 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26260%' AND (b."A9" = '단독주택' AND (b."A13"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b."A13"::text, '[^0-9]', '', 'g'), 4)::int <= 1995 AND b."A20" = 'Y');
+
+Q105	semantic_plan_list	list-top-missing ？⑥?？댄?？？二？怨듭?
+  Q: 강서구 공장 중 일반철골구조이고 연면적 5000㎡ 이상인 건물명과 연면적
+  sql: SELECT b."A24" AS "name", /        b."A4" AS "legal_dong", /        b."A5" AS "lot_address", /        b."A14"::float8 AS "gross_floor_area_m2", /        b."A11" AS "structure", /        b."A9" AS "usage" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26440%' AND (b."A9" = '공
+
+Q151	semantic_plan_count	count-mismatch gold=449 pred=[447.0, 447.0]
+  Q: 연제구에서 공동주택 또는 단독주택이면서 높이 20m 이상인 건물 수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26470%' AND ((b."A9" = '공동주택' OR b."A9" = '단독주택') AND b."A16"::float8 >= 20) AND b."A16"::float8 > 0 AND b."A16"::float8 <= 600 AND (b."A26" IS NULL OR b."A16"::float8 <= (b."A26"::float8 * 8 + 30));
+
+Q156	semantic_plan_count	count-mismatch gold=98 pred=[91.0, 91.0]
+  Q: 동래구 건물 중 공동주택을 제외하고 높이 40m 이상인 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26260%' AND ((NOT b."A9" = '공동주택') AND b."A9" <> '공동주택' AND b."A16"::float8 >= 40) AND b."A16"::float8 > 0 AND b."A16"::float8 <= 600 AND (b."A26" IS NULL OR b."A16"::float8 <= (b."A26"::float8 * 8 + 3
+
+Q159	semantic_plan_count	count-mismatch gold=1043 pred=[1035.0, 1035.0]
+  Q: 부산진구 제1·2종근린생활시설을 뺀 건물 중 높이 25m 이상인 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26230%' AND ((NOT (b."A9" = '제1종근린생활시설' OR b."A9" = '제2종근린생활시설')) AND b."A16"::float8 >= 25) AND b."A16"::float8 > 0 AND b."A16"::float8 <= 600 AND (b."A26" IS NULL OR b."A16"::float8 <= (b."A26"::floa
+
+Q171	semantic_plan_count	count-mismatch gold=100 pred=[94.0, 94.0]
+  Q: 수영구에서 공동주택·단독주택을 제외한 높이 35m 이상 건물 수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26500%' AND ((NOT (b."A9" = '공동주택' OR b."A9" = '단독주택')) AND b."A16"::float8 >= 35) AND b."A16"::float8 > 0 AND b."A16"::float8 <= 600 AND (b."A26" IS NULL OR b."A16"::float8 <= (b."A26"::float8 * 8 + 3
+
+Q175	semantic_plan_count	count-mismatch gold=241 pred=[238.0, 238.0]
+  Q: 동래구 철근콘크리트 또는 철골철근콘크리트 구조이면서 높이 50m 이상인 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26260%' AND ((b."A11" ILIKE '%철근콘크리트%' OR b."A11" ILIKE '%철골철근콘크리트%') AND b."A16"::float8 >= 50) AND b."A16"::float8 > 0 AND b."A16"::float8 <= 600 AND (b."A26" IS NULL OR b."A16"::float8 <= (b."A26"::
+
+Q184	semantic_plan_count	count-mismatch gold=73 pred=[70.0, 70.0]
+  Q: 해운대구 위반건축물이 아니면서 높이 80m 이상인 공동주택 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26350%' AND (b."A9" = '공동주택' AND b."A16"::float8 >= 80 AND b."A20" <> 'Y') AND b."A16"::float8 > 0 AND b."A16"::float8 <= 600 AND (b."A26" IS NULL OR b."A16"::float8 <= (b."A26"::float8 * 8 + 30));
+
+Q202	semantic_plan_count	group-mismatch
+  Q: 부산 전체 위반건축물 중 높이 40m 이상인 구별 건수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE (b."A16"::float8 >= 40 AND b."A20" = 'Y') AND b."A16"::float8 > 0 AND b."A16"::float8 <= 600 AND (b."A26" IS NULL OR b."A16"::float8 <= (b."A26"::float8 * 8 + 30));
+
+Q215	semantic_plan_count	count-mismatch gold=9 pred=[182.0, 182.0]
+  Q: 강서구 건폐율 10% 미만이면서 연면적 3000㎡ 이상인 공장 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A3" LIKE '26440%' AND (b."A9" = '공장' AND b."A14"::float8 >= 3000 AND b."A17"::float8 < 10);
+
+Q267	semantic_plan_list	list-top-missing 구서동 유림 노르웨이 아침
+  Q: 구서1동 안에 있는 공동주택 중 지상 15층 이상인 이름과 층수
+  sql: SELECT b."A24" AS "name", /        b."A4" AS "legal_dong", /        b."A5" AS "lot_address", /        b."A26"::float8 AS "ground_floors", /        b."A9" AS "usage" / FROM "AL_D010_26_20250704" b / JOIN "BND_ADM_DONG_PG" adm ON ST_Intersects(b.geometry, adm.geometry) / WHERE adm.
+
+Q285	semantic_plan_count	count-mismatch gold=2 pred=[1.0, 107.0, 107.0]
+  Q: 우1동 중심에서 300m 이내 공동주택 중 높이 40m 이상 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / CROSS JOIN ( /   SELECT ST_Union(d.geometry) AS geom /   FROM "BND_ADM_DONG_PG" d /   WHERE d."ADM_NM" = '우1동' AND d."ADM_CD" LIKE '21%' / ) z / WHERE z.geom IS NOT NULL AND b.geometry && ST_Expand(z.geom, 0.0041) AND ST

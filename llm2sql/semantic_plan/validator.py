@@ -18,7 +18,7 @@ from llm2sql.semantic_plan.models import (
 _MAX_FILTERS = 6
 _MAX_SPATIAL = 2
 _MAX_GROUP = 2
-_MAX_AGG = 4
+_MAX_AGG = 8
 _MAX_ORDER = 3
 _MAX_LIMIT = 1000
 _V1_ENTITIES = frozenset(
@@ -77,11 +77,24 @@ def validate_semantic_plan(
 
     if looks_like_age_question(question) or any(h in question for h in AGE_HINTS):
         has_approval = any(item.field == "approval_date" for item in plan.filters)
-        if not has_approval:
-            return _fallback(plan, "unsupported_coverage: building age / 사용승인", score - 0.5)
+        has_year_group = any(
+            k in question for k in ("구간별", "년대별", "연도별", "s~", "s～")
+        )
+        if not has_approval and not has_year_group:
+            reason = (
+                "unsupported_coverage: 허가일은 D198만 지원"
+                if ("허가일" in question or "허가일자" in question)
+                and "사용승인" not in question
+                else "unsupported_coverage: building age / 사용승인"
+            )
+            return _fallback(plan, reason, score - 0.5)
 
-    if "면적" in question and not any(
-        k in question for k in ("연면적", "건축면적", "건물면적", "대지면적")
+    if (
+        "면적" in question
+        and "기초구역" not in question
+        and not any(
+            k in question for k in ("연면적", "건축면적", "건물면적", "대지면적")
+        )
     ):
         area_fields = [f.field for f in plan.filters if "area" in f.field]
         if not area_fields and not any("area" in s for s in plan.select):
@@ -128,9 +141,10 @@ def validate_semantic_plan(
                 score - 0.4,
             )
         if spec.operator in {"gt", "gte", "lt", "lte", "between"} and field.data_type != "number":
-            return _fallback(
-                plan, f"numeric operator on text field: {spec.field}", score - 0.4
-            )
+            if spec.field != "approval_date":
+                return _fallback(
+                    plan, f"numeric operator on text field: {spec.field}", score - 0.4
+                )
         if spec.operator == "contains" and field.data_type != "text":
             return _fallback(
                 plan, f"contains on non-text field: {spec.field}", score - 0.4
@@ -142,7 +156,14 @@ def validate_semantic_plan(
 
     if plan.scope and plan.scope.place and plan.scope.place.name.strip():
         place_status, place_error = _validate_place(plan.scope.place.name)
-        if place_status == "clarify":
+        inherited = any(
+            item in (plan.assumptions or [])
+            for item in ("plan_followup_delta", "plan_followup_event")
+        )
+        from llm2sql.domain import MULTI_GU_DONGS
+
+        unique_dong = plan.scope.place.name not in MULTI_GU_DONGS
+        if place_status == "clarify" and not inherited and not unique_dong:
             clarified = plan.model_copy(
                 update={
                     "requires_clarification": True,
@@ -156,7 +177,7 @@ def validate_semantic_plan(
                 warnings=warnings,
                 plan=clarified,
             )
-        if place_status == "fallback":
+        if place_status == "fallback" and not inherited:
             return _fallback(plan, place_error, score - 0.35)
 
     for rel in plan.spatial_relations:
@@ -184,6 +205,9 @@ def validate_semantic_plan(
             "nearest",
             "overlap_ratio",
         }:
+            target_ent = getattr(target, "entity", None)
+            if target_ent == "industrial_complex":
+                continue
             if target.place is None or not (target.place.name or "").strip():
                 return _fallback(plan, "spatial relation needs a place or lon/lat", score - 0.4)
 
@@ -197,21 +221,26 @@ def validate_semantic_plan(
 
     from llm2sql.semantic_catalog.linking import retrieve_poi
 
-    poi = retrieve_poi(question)
-    if poi.clarify:
-        clarified = plan.model_copy(
-            update={
-                "requires_clarification": True,
-                "ambiguities": list(plan.ambiguities) + ["ambiguous_poi"],
-            }
-        )
-        return PlanValidationResult(
-            status="clarify",
-            score=score - 0.4,
-            errors=["ambiguous_poi"],
-            warnings=warnings,
-            plan=clarified,
-        )
+    followup_plan = any(
+        item in (plan.assumptions or [])
+        for item in ("plan_followup_delta", "plan_followup_event")
+    )
+    if not followup_plan:
+        poi = retrieve_poi(question)
+        if poi.clarify:
+            clarified = plan.model_copy(
+                update={
+                    "requires_clarification": True,
+                    "ambiguities": list(plan.ambiguities) + ["ambiguous_poi"],
+                }
+            )
+            return PlanValidationResult(
+                status="clarify",
+                score=score - 0.4,
+                errors=["ambiguous_poi"],
+                warnings=warnings,
+                plan=clarified,
+            )
 
     if len(plan.filters) > _MAX_FILTERS:
         return _fallback(plan, "too many filters", score - 0.2)
@@ -249,7 +278,11 @@ def validate_semantic_plan(
 
     verified = verify_contract(question, plan)
     plan = plan.model_copy(update={"slot_confidence": verified.confidence})
-    if status == "ready" and verified.hard_fail:
+    followup_plan = any(
+        item in (plan.assumptions or [])
+        for item in ("plan_followup_delta", "plan_followup_event")
+    )
+    if status == "ready" and verified.hard_fail and not followup_plan:
         status = "clarify"
         errors.extend(verified.reasons)
         score = min(score, verified.confidence.overall)
@@ -280,6 +313,8 @@ def _validate_place(name: str) -> tuple[str, str]:
     if not (gaz.legal_dong or gaz.admin_dong or gaz.sigungu):
         return "ready", ""
     hits = find_places(text)
+    if text.endswith(("시", "도")) or text in {"부산광역시", "부산시", "부산"}:
+        return "ready", ""
     if not hits:
         # 구 단위 등 질문 조각만 온 경우는 허용하고 compiler가 A4 LIKE로 처리
         if text.endswith(("구", "군")):

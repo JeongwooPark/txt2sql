@@ -27,9 +27,15 @@ def chat(
     stream: bool = False,
     on_token: TokenCallback | None = None,
     response_format: str | dict[str, Any] | None = None,
+    timeout: float | None = None,
 ) -> str:
     """Ollama chat. stream이면 토큰마다 on_token을 호출하고 전체 문자열을 반환."""
     client = resolve_client(host=host, client=client)
+    if timeout is not None:
+        try:
+            client = client.__class__(host=getattr(client, "host", host), timeout=timeout)
+        except TypeError:
+            pass
     kwargs: dict[str, Any] = {
         "model": model,
         "messages": messages,

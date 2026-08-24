@@ -110,7 +110,7 @@ def scoped_list_sql(
     p = prefix
     sql = (
         f"SELECT {p}\"A0\", {p}\"A4\", {p}\"A5\", {p}\"A9\", {p}\"A12\", "
-        f"{p}\"A14\", {p}\"A16\", {p}\"A24\", {p}\"A26\",\n"
+        f"{p}\"A14\", {p}\"A16\", {p}\"A24\", {p}\"A26\", {p}\"A13\",\n"
         "       COUNT(*) OVER() AS total_n\n"
         f"FROM {frm}\n"
         f"WHERE {where_sql}\n"
@@ -260,6 +260,17 @@ def _join_op(op: str) -> str:
 def bas_dong_count_sql(place: str, op: str = "intersects") -> str:
     return (
         'SELECT COUNT(DISTINCT t."BAS_ID") AS cnt\n'
+        f'FROM "{_BAS}" t\n'
+        f'JOIN "{_BND}" d\n'
+        f"  ON t.geometry && d.geometry AND {_join_op(op)}\n"
+        f"WHERE {admin_dong_where(place)};"
+    )
+
+
+def bas_dong_count_and_max_sql(place: str, op: str = "intersects") -> str:
+    return (
+        'SELECT COUNT(DISTINCT t."BAS_ID") AS n,\n'
+        '       MAX(t."BAS_AR") AS max_ar\n'
         f'FROM "{_BAS}" t\n'
         f'JOIN "{_BND}" d\n'
         f"  ON t.geometry && d.geometry AND {_join_op(op)}\n"

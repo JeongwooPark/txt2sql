@@ -1,3 +1,4 @@
+from llm2sql.answer import _subject_phrase
 from llm2sql.intent_router import should_defer_compound_to_plan, try_route
 from llm2sql.semantic_plan.compiler import compile_semantic_plan
 from llm2sql.semantic_plan.generator import try_heuristic_plan
@@ -68,3 +69,25 @@ def test_router_list_when_names_requested() -> None:
     assert routed.intent == "building_area_threshold_list"
     assert "AS cnt" not in routed.sql
     assert "A24" in routed.sql
+
+
+def test_router_area_range_keeps_both_bounds() -> None:
+    q = "구서1동에서 면적이 1000이상 10000미만의 건물을 찾아라"
+    assert not should_defer_compound_to_plan(q)
+    routed = try_route(q)
+    assert routed is not None
+    assert routed.intent == "building_area_threshold_list"
+    assert '>= 1000' in routed.sql or '>=1000' in routed.sql
+    assert '< 10000' in routed.sql or '<10000' in routed.sql
+    assert '>= 10000' not in routed.sql
+    phrase = _subject_phrase(q)
+    assert "1000㎡ 이상" in phrase
+    assert "10000㎡ 미만" in phrase
+
+
+def test_router_height_range_keeps_both_bounds() -> None:
+    q = "부산진구 높이 50m 이상 100m 이하 건물 목록"
+    routed = try_route(q)
+    assert routed is not None
+    assert '"A16" >= 50' in routed.sql
+    assert '"A16" <= 100' in routed.sql

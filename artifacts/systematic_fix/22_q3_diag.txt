@@ -1,0 +1,24 @@
+Q200 building_profile list-top-missing 마린시티두산위브포세이돈 | 해운대구 용적율 상위 10개 공동주택의 이름·용적율·높이
+Q201 building_profile list-top-missing 호텔아쿠아펠리스 | 수영구 건폐율 상위 8개 숙박시설의 이름·건폐율·연면적
+Q220 building_place_count scalar-mismatch hits=0 gold=[2344.0, 2682.0] | 동구 지하층 합계와 지하층이 있는 건물 수
+Q221 semantic_plan_aggregate scalar-mismatch hits=0 gold=[73.0, 2129.7754] | 남구 건물동명에 '상가'가 들어가는 건물 수와 평균 연면적
+Q222 semantic_plan_aggregate scalar-mismatch hits=0 gold=[1.5357] | 사하구 위반건축물 비율(위반/(위반+N))
+Q223 meta_catalog scalar-mismatch hits=0 gold=[3.7068] | 금정구 산지 비율(산 / 전체) %
+Q227 None engine-fail:- Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT. | 수영구 건물 용도별 평균 연면적 상위 10개 용도
+Q230 meta_catalog scalar-mismatch hits=0 gold=[9.0305] | 남구에서 공동주택이 전체 건물에서 차지하는 비율 %
+Q231 semantic_plan_aggregate scalar-mismatch hits=0 gold=[91.716] | 영도구 15층 이상 건물 중 공동주택 비율 %
+Q232 None engine-fail:- Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT. | 부산진구 용도별 평균 높이(높이 있는 건물만) 상위 8
+Q237 None engine-fail:too many aggregations | 광안동 숙박시설 연면적 합계·평균·최대 높이
+Q238 semantic_plan_aggregate scalar-mismatch hits=0 gold=[24.7444] | 장림동 공장 중 연면적 1000㎡ 이상 비율 %
+Q239 d198_value_bins group-mismatch | 대연동 공동주택 층수 구간별 건수(1-5, 6-10, 11-20, 21+)
+Q242 None engine-fail:- Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT. | 사상구 공장 구조별 건수와 평균 연면적 상위 6
+Q243 semantic_plan_aggregate scalar-mismatch hits=0 gold=[3081.0, 13.8696, 9.8622] | 중구 건물 중 높이 있는 건물의 평균·표준편차 높이
+Q246 semantic_plan_aggregate scalar-mismatch hits=0 gold=[50.0, 2.3586, 20.0, 1.7153] | 우동 건물 중 높이 50m 이상 비율과 20층 이상 비율
+Q251 None engine-fail:- Industrial-park questions must use "AL_D060_00_20250804". | 사상구 산업단지 안 공장 비율(단지내 공장 / 사상구 공장)
+Q252 building_usage_count group-mismatch | 남구 숙박시설이 있는 법정동별 숙박시설 채수
+Q254 semantic_plan_rank group-label-missing | 부산 구별 위반건축물 수 상위 8개 구
+Q256 building_rank_연면적 scalar-mismatch hits=1 gold=[90.0, 2741.139, 2549.0] | 사하구 공장 연면적 상위 10% 경계값(90백분위)
+Q261 semantic_plan_aggregate scalar-mismatch hits=0 gold=[101.0, 0.2351] | 수영구 숙박시설 중 연면적 대비 건축면적 비(평균 A12/A14)
+Q265 semantic_plan_aggregate scalar-mismatch hits=0 gold=[2883.0, 80450.097] | 해운대구 공동주택 높이 합계(1~500m만)와 건수
+Q286 semantic_plan_aggregate scalar-mismatch hits=1 gold=[102.0, 4493737.873] | 대연3동 안 교육연구시설 대지면적 합계
+Q298 bas_area_topn scalar-mismatch hits=0 gold=[154.0, 39.7834] | 북구 기초구역 면적 합계와 개수

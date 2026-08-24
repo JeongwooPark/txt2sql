@@ -510,6 +510,14 @@ def looks_like_year_stats_question(question: str) -> bool:
     q = _normalize_usage_typos(question.strip())
     if not q:
         return False
+    if re.search(r"년대인", q) or (
+        re.search(r"((?:19|20)\d{2})\s*년대", q)
+        and any(k in q for k in ("몇 채", "몇채", "채수", "건수", "것은 몇"))
+        and "별" not in q
+        and "분포" not in q
+        and "단위" not in q
+    ):
+        return False
     countish = any(
         k in q for k in ("수", "몇", "건수", "채수", "통계", "분포")
     )
@@ -521,8 +529,16 @@ def looks_like_year_stats_question(question: str) -> bool:
         for k in ("건립", "지어", "준공", "사용승인", "건설", "건축")
     )
     if by_year and (countish or built):
+        if re.search(r"\d+\s*층", q) or any(
+            k in q for k in ("연면적", "건축면적", "높이", "철근", "구조")
+        ):
+            return False
         return True
     if by_bin and (countish or built):
+        if re.search(r"\d+\s*층", q) or any(
+            k in q for k in ("연면적", "건축면적", "높이", "철근", "구조")
+        ):
+            return False
         return True
     return False
 
@@ -1119,6 +1135,28 @@ def _parse_numeric(q: str, parsed: D198Parsed, named: bool) -> None:
         )
         parsed.order_col = parsed.order_col or col
         seen_cols.add(col)
+    if "A31" not in seen_cols:
+        floor_m = re.search(
+            r"지상\s*(?:층수?)?[이가]?\s*(\d+)\s*층\s*(이상|이하|초과|미만|넘는)",
+            q,
+        )
+        if floor_m is None:
+            floor_m = re.search(
+                r"(\d+)\s*층\s*(이상|이하|초과|미만|넘는)",
+                q,
+            )
+            if floor_m and "지하" in q[max(0, floor_m.start() - 4) : floor_m.start()]:
+                floor_m = None
+        if floor_m is not None:
+            n, rel = floor_m.group(1), floor_m.group(2)
+            _add_filter(
+                parsed,
+                "A31",
+                f'"A31" {_rel_op(rel)} {n}',
+                f"지상층 {n}층 {rel}",
+            )
+            parsed.order_col = parsed.order_col or "A31"
+            seen_cols.add("A31")
     if "A19" not in seen_cols:
         hit = pyeong_threshold(q)
         if hit is not None:
@@ -1160,6 +1198,17 @@ def _parse_dates(q: str, parsed: D198Parsed) -> None:
                 mentioned = True
             else:
                 continue
+        decade_m = re.search(r"((?:19|20)\d)0\s*년대", q)
+        if decade_m:
+            start = int(decade_m.group(1) + "0")
+            col = attr.col
+            sql = (
+                f'"{col}"::text ~ \'^[0-9]{{4}}\' AND '
+                f"LEFT(regexp_replace(\"{col}\"::text, '[^0-9]', '', 'g'), 4)::int "
+                f"BETWEEN {start} AND {start + 9}"
+            )
+            _add_filter(parsed, col, sql, f"{attr.label} {start}년대")
+            continue
         m = re.search(
             rf"(?:19|20)\d{{2}}\s*년\s*(이후|이전|이래|까지)?",
             q,
@@ -1205,6 +1254,7 @@ def _parse_values(q: str, parsed: D198Parsed, named: bool) -> None:
                 candidates.append((len(alias), attr, alias, stored))
     candidates.sort(key=lambda x: x[0], reverse=True)
     used_spans: list[tuple[int, int]] = []
+    grouped: dict[str, list[tuple[str, str]]] = {}
     for _, attr, alias, stored in candidates:
         start = q.find(alias)
         if start < 0:
@@ -1232,7 +1282,12 @@ def _parse_values(q: str, parsed: D198Parsed, named: bool) -> None:
             pred = _like(attr.col, stored.rstrip("구조"))
             if attr.col == "A23":
                 pred = f"\"A23\" ILIKE '%{_sql_str(stored.rstrip('구조'))}%'"
-        _add_filter(parsed, attr.col, pred, f"{attr.label} {stored}")
+        grouped.setdefault(attr.col, []).append((pred, f"{attr.label} {stored}"))
+    for col, items in grouped.items():
+        preds = [p for p, _ in items]
+        labels = [lb for _, lb in items]
+        sql = preds[0] if len(preds) == 1 else "(" + " OR ".join(preds) + ")"
+        _add_filter(parsed, col, sql, " 또는 ".join(labels))
 
 
 def _parse_codes_ids(q: str, parsed: D198Parsed) -> None:

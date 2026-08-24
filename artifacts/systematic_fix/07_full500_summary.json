@@ -1,0 +1,40 @@
+{
+  "when": "2026-08-24 16:19:09",
+  "pytest": {"passed": 142, "failed": 0},
+  "baseline": {"passed": 198, "failed": 302, "accuracy_pct": 39.6, "p95_ms": 60007, "timeout_gt_60s": 40},
+  "current": {
+    "passed": 207,
+    "failed": 293,
+    "accuracy_pct": 41.4,
+    "delta_passed": 9,
+    "elapsed_s": 2202.3,
+    "avg_ms": 4403,
+    "p50_ms": 962,
+    "p95_ms": 19189,
+    "max_ms": 28827,
+    "timeouts": 0,
+    "timeout_s": 40
+  },
+  "gaps_closed": [
+    "RouteCapability: OR/NOT/multi-agg/spatial+attr yield to semantic plan",
+    "DB SET LOCAL statement_timeout + engine connect options",
+    "Ollama Client timeout (llm_timeout_s=20)",
+    "stage_latency_ms / selected_route on ask result",
+    "1990s / calendar year / building-age -> approval_date filters",
+    "follow-up extract_contract numeric/range + result anchors"
+  ],
+  "remaining_hotspots": [
+    "후속 17/93 (18.3%)",
+    "논리OR 1/12",
+    "논리NOT 1/10",
+    "공간복합 6/35",
+    "미사용속성 6/40",
+    "clarify_unknown_term stealing simple counts"
+  ],
+  "artifacts": {
+    "eval": "artifacts/evaluation/q500_gold_eval.json",
+    "copy": "artifacts/systematic_fix/05_full500.json",
+    "diagnosis_json": "artifacts/systematic_fix/06_failure_diagnosis.json",
+    "diagnosis_md": "artifacts/systematic_fix/06_failure_diagnosis.md"
+  }
+}

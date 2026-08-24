@@ -261,6 +261,8 @@ Head 메뉴 **데이터 관리**에서 기존 레이어를 갱신하고 신규 �
 | `GET` | `/api/data/tables/{name}/parse` | AL_ 코드 → 추천 메타데이터 |
 | `POST` | `/api/data/metadata` | 표시명·설명 저장. `new_table_name`이면 테이블명 변경 |
 | `POST` | `/api/data/upload` | Shapefile ZIP (`shapefile` 필드) |
+| `GET` | `/download/kordb-catalog.json` | KorDB 필드 카탈로그 JSON (비밀번호 없음) |
+| `GET` | `/download/kordb-catalog.md` | 같은 내용의 Markdown |
 | `GET` | `/api/health` | 웹 프로세스 상태 |
 | `POST` | `/api/session` | 새 `session_id` |
 | `POST` | `/api/chat` | SSE 질의. `include_map`이 true일 때만 지도 발행 |

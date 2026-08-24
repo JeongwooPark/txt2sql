@@ -49,22 +49,80 @@ USAGE_ALIASES: dict[str, str] = {
     "창고시설": "창고시설",
     "학교": "교육연구시설",
     "교육연구시설": "교육연구시설",
+    "제2종근린생활시설": "제2종근린생활시설",
+    "제1종근린생활시설": "제1종근린생활시설",
     "근린생활": "제1종근린생활시설",
     "업무시설": "업무시설",
     "판매시설": "판매시설",
     "숙박": "숙박시설",
     "숙박시설": "숙박시설",
+    "위락시설": "위락시설",
+    "위락": "위락시설",
+    "노유자시설": "노유자시설",
+    "노유자": "노유자시설",
+    "위험물저장및처리시설": "위험물저장및처리시설",
+    "위험물저장": "위험물저장및처리시설",
+    "위험물": "위험물저장및처리시설",
+    "자동차관련시설": "자동차관련시설",
+    "자동차관련": "자동차관련시설",
+    "문화및집회시설": "문화및집회시설",
+    "의료시설": "의료시설",
+    "운동시설": "운동시설",
+    "수련시설": "수련시설",
+    "운수시설": "운수시설",
     "종교": "종교시설",
     "종교시설": "종교시설",
     "공공시설물": "공공용시설",
     "공공시설": "공공용시설",
     "공공용시설": "공공용시설",
+    "분뇨쓰레기처리시설": "분뇨쓰레기처리시설",
+    "분뇨.쓰레기처리시설": "분뇨쓰레기처리시설",
+    "분뇨·쓰레기처리시설": "분뇨쓰레기처리시설",
+    "분뇨 쓰레기처리시설": "분뇨쓰레기처리시설",
+    "쓰레기처리시설": "분뇨쓰레기처리시설",
+    "동식물관련시설": "동식물관련시설",
+    "동.식물관련시설": "동식물관련시설",
+    "교정및군사시설": "교정및군사시설",
+    "방송통신시설": "방송통신시설",
+    "발전시설": "발전시설",
+    "묘지관련시설": "묘지관련시설",
+    "관광휴게시설": "관광휴게시설",
+    "가설건축물": "가설건축물",
+    "장례식장": "장례식장",
 }
+
+# D198 세부용도(A27)·용도분류(A29). unknown-term 제외용. D010 A9에 강제 바인딩하지 않는다.
+DETAIL_USAGE_ALIASES: dict[str, str] = {
+    "오피스텔": "오피스텔",
+    "사무소": "사무소",
+    "다가구주택": "다가구주택",
+    "다세대주택": "다세대주택",
+    "일반음식점": "일반음식점",
+    "소매점": "소매점",
+    "학원": "학원",
+}
+USAGE_CLASS_ALIASES: dict[str, str] = {
+    "문교사회용": "문교사회용",
+    "공공용": "공공용",
+    "주거용": "주거용",
+    "상업용": "상업용",
+    "공업용": "공업용",
+    "농수산용": "농수산용",
+}
+
+# 구 없이 실행하면 동음이의가 섞이는 행정/법정 동명.
+MULTI_GU_DONGS = frozenset({"중앙동"})
 
 USAGE_PATTERN = (
     r"(아파트|공동주택|연립주택|단독주택|공장|창고시설|창고|"
-    r"교육연구시설|업무시설|판매시설|숙박시설|종교시설|"
-    r"공공시설물|공공시설|공공용시설)"
+    r"교육연구시설|제2종근린생활시설|제1종근린생활시설|"
+    r"업무시설|판매시설|숙박시설|위락시설|노유자시설|"
+    r"위험물저장및처리시설|자동차관련시설|문화및집회시설|"
+    r"의료시설|운동시설|수련시설|운수시설|종교시설|"
+    r"공공시설물|공공시설|공공용시설|"
+    r"분뇨쓰레기처리시설|분뇨·쓰레기처리시설|분뇨\.쓰레기처리시설|"
+    r"동식물관련시설|교정및군사시설|방송통신시설|발전시설|"
+    r"묘지관련시설|관광휴게시설|가설건축물|장례식장)"
 )
 USAGE_RE = re.compile(USAGE_PATTERN)
 
@@ -80,19 +138,52 @@ STRUCTURE_ALIASES: dict[str, str] = {
     "조적구조": "%조적%",
     "벽돌구조": "%벽돌%",
     "목구조": "%목%",
+    "경량철골구조": "%경량철골%",
+    "경량철골": "%경량철골%",
+    "일반철골구조": "%일반철골%",
+    "일반철골": "%일반철골%",
     "철골구조": "%철골%",
+    "블록구조": "%블록%",
+    "블럭구조": "%블럭%",
     "조적": "%조적%",
     "벽돌": "%벽돌%",
+    "블록": "%블록%",
+    "블럭": "%블럭%",
     "철골": "%철골%",
 }
 
 
 def extract_structure(question: str) -> tuple[str, str] | None:
     """질문의 구조 표현 → (표시명, A11 ILIKE 패턴)."""
+    found = extract_structures(question)
+    return found[0] if found else None
+
+
+def extract_structures(question: str) -> list[tuple[str, str]]:
+    """질문에 등장하는 구조 표현을 긴 별칭 우선·비중첩으로 모은다."""
+    q = question or ""
+    spans: list[tuple[int, int, str, str]] = []
     for alias in sorted(STRUCTURE_ALIASES, key=len, reverse=True):
-        if alias in question:
-            return alias, STRUCTURE_ALIASES[alias]
-    return None
+        start = 0
+        while True:
+            i = q.find(alias, start)
+            if i < 0:
+                break
+            spans.append((i, i + len(alias), alias, STRUCTURE_ALIASES[alias]))
+            start = i + len(alias)
+    spans.sort(key=lambda item: item[0])
+    occupied: list[tuple[int, int]] = []
+    found: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for s, e, alias, pattern in spans:
+        if any(not (e <= a or s >= b) for a, b in occupied):
+            continue
+        occupied.append((s, e))
+        if alias in seen:
+            continue
+        seen.add(alias)
+        found.append((alias, pattern))
+    return found
 
 
 def extract_special_land(question: str) -> tuple[str, str] | None:
@@ -262,6 +353,63 @@ def extract_usage(question: str) -> str | None:
     """질문의 용도 별칭 → DB 건축물용도명(A9). 여러 개면 첫 번째."""
     usages = extract_usages(question)
     return usages[0] if usages else None
+
+
+_GENERIC_INDUSTRIAL = frozenset(
+    {
+        "산업단지",
+        "국가산업단지",
+        "일반산업단지",
+        "지방산업단지",
+        "도시첨단산업단지",
+        "농공단지",
+        "자유무역지역",
+    }
+)
+
+
+def extract_industrial_name(question: str) -> str | None:
+    """고유 단지명. 유형명(국가산업단지 등)만 있으면 None."""
+    names = extract_industrial_names(question)
+    return names[0] if names else None
+
+
+def extract_industrial_names(question: str) -> list[str]:
+    """병렬 고유명(명지·녹산)과 단일 단지명을 모은다."""
+    q = question or ""
+    found: list[str] = []
+    parallel = re.search(
+        r"([가-힣0-9]{2,20})\s*[·･、,/]\s*([가-힣0-9]{2,20})\s*"
+        r"((?:국가|일반|지방)?산업단지)",
+        q,
+    )
+    if parallel:
+        suffix = parallel.group(3)
+        left, right = parallel.group(1), parallel.group(2)
+        for stem in (left + suffix, right + suffix, f"{left},{right}{suffix}"):
+            if stem not in found and stem not in _GENERIC_INDUSTRIAL:
+                found.append(stem)
+    for match in re.finditer(r"([가-힣0-9]{2,30}산업단지)", q):
+        name = match.group(1)
+        if name in _GENERIC_INDUSTRIAL:
+            continue
+        if name not in found:
+            found.append(name)
+    for match in re.finditer(
+        r"([가-힣0-9]{2,20})\s+((?:국가|일반|지방|도시첨단)산업단지)",
+        q,
+    ):
+        spaced = f"{match.group(1)} {match.group(2)}"
+        combined = match.group(1) + match.group(2)
+        for name in (spaced, combined):
+            if name not in found and name not in _GENERIC_INDUSTRIAL:
+                found.append(name)
+    return found
+
+
+def dong_requires_gu(name: str | None) -> bool:
+    """구 없이 실행하면 동음이의가 섞이는 동명."""
+    return bool(name) and name in MULTI_GU_DONGS
 
 
 _BUILDING_KIND_HINTS = (
@@ -476,6 +624,18 @@ _NAME_STOP = frozenset(
         "건물면적",
         "면적",
         "중에",
+        "이중에",
+        "이중",
+        "이후",
+        "이전",
+        "이래",
+        "지어진",
+        "지은",
+        "표시하라",
+        "표시",
+        "표출",
+        "년도별",
+        "각년도별",
         "이상",
         "이하",
         "초과",
@@ -678,6 +838,10 @@ def looks_like_building_name_lookup(question: str) -> bool:
         return False
     if looks_like_measure_threshold(q):
         return False
+    if extract_calendar_year(q) is not None and any(
+        k in q for k in ("지어", "준공", "사용승인", "이후", "이전", "이래", "까지")
+    ):
+        return False
     if any(k in q for k in ("평균", "합계", "용도별", "분포")):
         return False
     # 주관 형용사는 건물명이 아니라 clarify 경로로 보낸다
@@ -713,6 +877,8 @@ def looks_like_building_name_lookup(question: str) -> bool:
             "얼마나",
         )
     )
+    if countish and extract_usage(q):
+        return False
     if place_hit and countish and (
         extract_usage(q)
         or any(k in q for k in ("건물", "건축물"))
@@ -775,6 +941,8 @@ def looks_like_building_name_lookup(question: str) -> bool:
         "결과",
     }:
         return False
+    if any(k in q for k in ("차이", "크기별", "용도별", "사유별", "이동사유", "몇 채", "채수", "세부용도", "주요용도", "용도분류")):
+        return False
     compact = name.replace(" ", "")
     if len(compact) < 2:
         return False
@@ -807,12 +975,18 @@ def looks_like_building_name_lookup(question: str) -> bool:
 def extract_usages(question: str) -> list[str]:
     """질문에 등장하는 용도들을 순서대로 (중복 제거)."""
     found: list[str] = []
+    q = question or ""
+    if re.search(
+        r"제1\s*[·･、,/]\s*2종|제1종\s*[·･、,/]\s*제?2종|제1·2종",
+        q,
+    ):
+        found.extend(["제1종근린생활시설", "제2종근린생활시설"])
     # 긴 별칭 우선 매칭을 위해 위치 기반으로 스캔
     spans: list[tuple[int, int, str]] = []
     for alias in sorted(USAGE_ALIASES, key=len, reverse=True):
         start = 0
         while True:
-            i = question.find(alias, start)
+            i = q.find(alias, start)
             if i < 0:
                 break
             mapped = USAGE_ALIASES[alias]
@@ -829,10 +1003,46 @@ def extract_usages(question: str) -> list[str]:
     return found
 
 
+def extract_detail_usages(question: str) -> list[str]:
+    """D198 세부용도명(A27) 별칭."""
+    return _alias_hits(question, DETAIL_USAGE_ALIASES)
+
+
+def extract_usage_classes(question: str) -> list[str]:
+    """D198 용도분류명(A29) 별칭."""
+    return _alias_hits(question, USAGE_CLASS_ALIASES)
+
+
+def _alias_hits(question: str, aliases: dict[str, str]) -> list[str]:
+    q = question or ""
+    found: list[str] = []
+    spans: list[tuple[int, int, str]] = []
+    for alias in sorted(aliases, key=len, reverse=True):
+        start = 0
+        while True:
+            i = q.find(alias, start)
+            if i < 0:
+                break
+            spans.append((i, i + len(alias), aliases[alias]))
+            start = i + len(alias)
+    spans.sort(key=lambda item: item[0])
+    occupied: list[tuple[int, int]] = []
+    for s, e, mapped in spans:
+        if any(not (e <= a or s >= b) for a, b in occupied):
+            continue
+        occupied.append((s, e))
+        if mapped not in found:
+            found.append(mapped)
+    return found
+
+
 def place_a4_predicate(place: str) -> str:
-    """AL_D010 A4 필터 SQL 조각."""
+    """AL_D010 위치 필터. 구·군은 법정동코드(A3) 접두를 쓴다."""
     if place.endswith(("동", "가", "리", "로")):
         return f'("A4" LIKE \'% {place}\' OR "A4" = \'{place}\')'
+    code = BUSAN_GU_CODES.get(place)
+    if code:
+        return f'"A3" LIKE \'{code}%\''
     return f'"A4" LIKE \'%{place}%\''
 
 
@@ -939,6 +1149,27 @@ def extract_calendar_year(question: str) -> tuple[int, str | None] | None:
     if not m:
         return None
     return int(m.group(1)), m.group(2)
+
+
+def calendar_year_predicate_sql(
+    question: str,
+    *,
+    col: str = "A13",
+    prefix: str = "",
+) -> str | None:
+    """사용승인·허가일 텍스트 컬럼에 대한 달력 연도 SQL."""
+    hit = extract_calendar_year(question)
+    if hit is None:
+        return None
+    year, rel = hit
+    qcol = f'{prefix}"{col}"'
+    yexpr = f"LEFT(regexp_replace({qcol}::text, '[^0-9]', '', 'g'), 4)"
+    valid = f"({qcol}::text ~ '^[0-9]{{4}}')"
+    if rel in {"이후", "이래"}:
+        return f"{valid} AND {yexpr} >= '{year}'"
+    if rel in {"이전", "까지"}:
+        return f"{valid} AND {yexpr} < '{year}'"
+    return f"{valid} AND {yexpr} = '{year}'"
 
 
 def extract_age_years(question: str) -> int | None:
@@ -1129,6 +1360,14 @@ _ANAPHORA_HINTS = (
     "그 건물",
     "그 아파트",
     "해당 아파트",
+    "이중에",
+    "이 중에",
+    "이 중",
+    "그중",
+    "그중에",
+    "그 집합",
+    "그 공장",
+    "남은 건물",
     "앞의",
     "방금",
     "아까",
@@ -1141,6 +1380,48 @@ def has_anaphora(question: str) -> bool:
     if q.startswith(("그", "해당", "앞", "방금", "아까", "이 ", "저 ")):
         return True
     return any(h in q for h in _ANAPHORA_HINTS)
+
+
+_MAP_DISPLAY_HINTS = (
+    "지도에 표시",
+    "지도에 표출",
+    "지도에 보여",
+    "지도에 그려",
+    "지도에 올려",
+    "맵에 표시",
+    "맵에 보여",
+    "데이터를 표시",
+    "데이터를 표출",
+    "데이터 표시",
+    "데이터 표출",
+    "건물데이터를 표시",
+    "건물 데이터를 표시",
+    "건물을 표시",
+    "건물을 표출",
+    "표시하라",
+    "표시해라",
+    "표시해줘",
+    "표시 해줘",
+    "표출하라",
+    "표출해줘",
+    "표출해 줘",
+)
+
+
+def wants_map_display(question: str) -> bool:
+    """건물·공간 데이터를 목록이 아니라 지도에 그리라는 요청."""
+    q = (question or "").strip()
+    if not q:
+        return False
+    if any(k in q for k in ("차트", "그래프", "표시명")):
+        return False
+    if any(k in q for k in _MAP_DISPLAY_HINTS):
+        return True
+    if re.search(r"(건물|건축물|아파트).{0,16}(표시|표출)", q):
+        return True
+    if re.search(r"(표시|표출).{0,12}(지도|맵)", q):
+        return True
+    return False
 
 
 def looks_like_standalone_question(question: str) -> bool:

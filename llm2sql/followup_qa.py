@@ -10,7 +10,14 @@ import psycopg
 from psycopg.rows import dict_row
 
 from llm2sql.answer import fmt_value
-from llm2sql.domain import has_anaphora, looks_like_standalone_question
+from llm2sql.domain import (
+    calendar_year_predicate_sql,
+    extract_calendar_year,
+    extract_gu,
+    extract_place,
+    has_anaphora,
+    looks_like_standalone_question,
+)
 from llm2sql.session import SessionContext
 from llm2sql.units import with_pyeong
 
@@ -354,6 +361,8 @@ _SUBSET_HINTS = (
     "그 중",
     "그중",
     "이 중",
+    "이중에",
+    "이 중에",
     "이 가운데",
     "그 가운데",
     "중에서",
@@ -476,6 +485,8 @@ def is_subset_followup(question: str, session: SessionContext | None) -> bool:
         return False
     if _subset_order(q, session) is not None:
         return True
+    if hinted and extract_calendar_year(q) is not None:
+        return True
     n = _extract_followup_n(q, default=0)
     if n > 1 or (
         any(k in q for k in _LIST_FOLLOW_HINTS)
@@ -579,6 +590,71 @@ def _rewrite_subset_built_date(
     return table, where, table.startswith("AL_D198")
 
 
+def _sql_qual_prefix(sql: str) -> str:
+    if re.search(r'\bb\."A\d+"', sql) or re.search(
+        r'\bFROM\s+"[^"]+"\s+b\b', sql, flags=re.I
+    ):
+        return "b."
+    return ""
+
+
+def _ensure_select_col(sql: str, col: str, prefix: str) -> str:
+    token = f'{prefix}"{col}"'
+    if token in sql or f'"{col}"' in sql:
+        return sql
+    over = re.search(r",\s*COUNT\(\*\)\s+OVER\(\)", sql, flags=re.I)
+    if over:
+        return sql[: over.start()] + f", {token}" + sql[over.start() :]
+    frm = re.search(r"\bFROM\b", sql, flags=re.I)
+    if frm:
+        head = sql[: frm.start()].rstrip().rstrip(",")
+        return f"{head}, {token}\n{sql[frm.start() :]}"
+    return sql
+
+
+def _inject_and_predicate(sql: str, extra: str) -> str | None:
+    """직전 SELECT의 WHERE에 AND 조건을 붙인다. JOIN·ORDER·LIMIT은 유지."""
+    body = (sql or "").strip().rstrip(";").strip()
+    if not body:
+        return None
+    where_m = re.search(r"\bWHERE\b", body, flags=re.I)
+    if not where_m:
+        return None
+    rest = body[where_m.end() :]
+    cuts: list[int] = []
+    for pat in (r"\s+ORDER\s+BY\b", r"\s+LIMIT\s+\d+", r"\s+GROUP\s+BY\b"):
+        found = re.search(pat, rest, flags=re.I)
+        if found:
+            cuts.append(found.start())
+    cut = min(cuts) if cuts else len(rest)
+    where_body = rest[:cut].strip()
+    tail = rest[cut:]
+    return f"{body[: where_m.end()]} {where_body} AND {extra}{tail};"
+
+
+def _is_scalar_count_sql(sql: str) -> bool:
+    """COUNT(*) 집계(지도 표출용). COUNT(*) OVER 목록은 제외."""
+    head = (sql or "").split("FROM", 1)[0].upper()
+    if "COUNT(" not in head:
+        return False
+    return not re.search(r"COUNT\s*\(\s*\*\s*\)\s+OVER\s*\(", head, flags=re.I)
+
+
+def _subset_with_calendar_year(sql: str, question: str) -> str | None:
+    prefix = _sql_qual_prefix(sql)
+    col = "A34" if "AL_D198" in sql else "A13"
+    extra = calendar_year_predicate_sql(question, col=col, prefix=prefix)
+    if not extra:
+        return None
+    injected = _inject_and_predicate(sql, extra)
+    if injected is None:
+        return None
+    # 건수 SQL에 날짜 컬럼을 붙이면 GROUP BY 없이 실행이 깨진다
+    if _is_scalar_count_sql(injected):
+        return injected
+    return _ensure_select_col(injected, col, prefix)
+
+
 def try_subset_followup(
     question: str,
     session: SessionContext,
@@ -597,6 +673,12 @@ def try_subset_followup(
     if is_year_grain_followup(question, session):
         return None
     q = question.strip()
+    year_sql = _subset_with_calendar_year(session.last_sql or "", q)
+    if year_sql is not None:
+        intent = str(session.last_route or "building_area_threshold_list")
+        if intent.startswith(("clarify", "guide", "meta", "chart_")):
+            intent = "building_area_threshold_list"
+        return RoutedQuery(intent, year_sql)
     spec = _subset_order(q, session)
     last_order = _order_from_last_sql(session.last_sql or "")
     limit_n = _extract_followup_n(q, default=1)
@@ -654,6 +736,8 @@ def try_subset_followup(
         table, where, is_d198 = _rewrite_subset_built_date(
             table, where, q, session
         )
+        if table.startswith("AL_D010"):
+            is_d198 = False
     ds_map = {d.table: d for d in (D010, D060, BND, BAS)}
     ds = ds_map.get(table)
     col_map = {
@@ -715,6 +799,10 @@ def try_subset_followup(
         f'ORDER BY "{order_col}" {direction} NULLS LAST\n'
         f"LIMIT {limit_n};"
     )
+    if table.startswith("AL_D010"):
+        from llm2sql.sql_d010_guard import rewrite_d198_columns_on_d010
+
+        sql = rewrite_d198_columns_on_d010(sql, q)
     if is_d198:
         intent = "d198_attr_list" if limit_n > 1 else "d198_attr_rank"
     elif ds is not None:

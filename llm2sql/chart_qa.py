@@ -162,6 +162,8 @@ def chart_type_label(chart_type: str) -> str:
 _SERIES_FILTERS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("연면적",), ("연면적",)),
     (("건물면적", "건축물면적", "건축면적"), ("건물면적", "건축물면적", "건축면적", "면적")),
+    (("용적율", "용적률"), ("용적율", "용적률")),
+    (("건폐율", "건폐률"), ("건폐율", "건폐률")),
     (("면적",), ("면적",)),
     (("높이", "고도"), ("높이",)),
     (("층수", "지상층", "층"), ("층",)),
@@ -180,6 +182,7 @@ def is_chart_series_filter_question(question: str) -> bool:
     has_metric = any(any(k in q for k in keys) for keys, _ in _SERIES_FILTERS)
     if not has_metric:
         return False
+    q_man = q.replace("미만", "\u0000")
     onlyish = any(
         k in q
         for k in (
@@ -197,17 +200,32 @@ def is_chart_series_filter_question(question: str) -> bool:
             "만으로 차트",
             "만으로 그려",
         )
-    ) or bool(re.search(r"[가-힣0-9]만(?:으로|으)?(?:\s|$)", q))
+    ) or bool(re.search(r"[가-힣0-9]만(?:으로|으)?(?:\s|$)", q_man))
     if re.search(r"(이상|이하|초과|미만)만", q):
         return False
-    if not onlyish and "만" not in q:
+    if not onlyish and "만" not in q_man:
         return False
     if onlyish:
         return True
     # 「높이만 차트로」처럼 차트 맥락 + 만
-    return "만" in q and any(
+    return "만" in q_man and any(
         k in q for k in ("차트", "그래프", "그려", "시각화", "다시")
     )
+
+
+def is_chart_metric_draw_question(question: str) -> bool:
+    """「평균용적율로 그려라」처럼 특정 지표로 차트를 그리라는 후속 질의.
+
+    「만」이 없어도 지표+그리기 동사가 있으면 참. 첫 질의(맥락 없음)에는
+    파이프라인이 이 함수만으로 SQL을 가로채지 않는다.
+    """
+    q = question.strip()
+    if not q:
+        return False
+    has_metric = any(any(k in q for k in keys) for keys, _ in _SERIES_FILTERS)
+    if not has_metric:
+        return False
+    return any(k in q for k in ("그려", "차트", "그래프", "시각화"))
 
 
 def _source_datasets(spec: dict[str, Any]) -> list[dict[str, Any]]:
@@ -227,6 +245,8 @@ def _requested_series_keys(question: str) -> list[tuple[str, ...]]:
             continue
         # '면적'이 '연면적' 일부로만 잡힌 경우 스킵
         if hit == "면적" and "연면적" in q:
+            continue
+        if hit == "면적" and any(k in q for k in ("용적율", "용적률", "건폐율", "건폐률")):
             continue
         if hit == "층" and any(k in q for k in ("층수", "지상층")):
             # 더 긴 키로 이미 처리됐을 수 있음
@@ -281,6 +301,8 @@ def filter_chart_series(
         lab = str(kept[0].get("label") or "")
         if "(m)" in lab or "높이" in lab:
             out["unit"] = "m"
+        elif "%" in lab or "용적" in lab or "건폐" in lab:
+            out["unit"] = "%"
         elif "㎡" in lab or "면적" in lab:
             out["unit"] = "㎡"
         elif "층" in lab:
@@ -291,6 +313,26 @@ def filter_chart_series(
     labels = ", ".join(str(d.get("label") or "?") for d in kept)
     answer = f"요청하신 대로 {labels} 지표만으로 차트를 다시 그렸습니다."
     return out, answer
+
+
+def infer_chart_rebuild_route(
+    session_route: str | None, rows: list[dict[str, Any]]
+) -> str | None:
+    """차트 후속에서 스펙을 다시 만들 때 쓸 원본 route."""
+    route = str(session_route or "")
+    if route and not route.startswith("chart_"):
+        return route
+    if not rows:
+        return None
+    first = rows[0]
+    if (
+        len(rows) >= 2
+        and (first.get("label") is not None or first.get("place") is not None)
+        and first.get("cnt") is not None
+        and any(k in first for k in ("avg_far", "avg_height", "avg_area", "avg_floors"))
+    ):
+        return "building_profile_compare"
+    return None
 
 
 def is_chart_capability_question(question: str) -> bool:
@@ -559,15 +601,32 @@ def _chart_from_named_counts(
     }
 
 
+def _metric_series(
+    rows: list[dict[str, Any]], key: str, n: int
+) -> tuple[list[float], bool]:
+    values: list[float] = []
+    present = False
+    for row in rows:
+        raw = row.get(key)
+        if raw is None:
+            values.append(0.0)
+            continue
+        try:
+            values.append(float(raw))
+            present = True
+        except (TypeError, ValueError):
+            values.append(0.0)
+    if len(values) < n:
+        values.extend([0.0] * (n - len(values)))
+    return values[:n], present and any(v > 0 for v in values[:n])
+
+
 def _chart_profile_compare(
     rows: list[dict[str, Any]], question: str
 ) -> dict[str, Any] | None:
     labels: list[str] = []
     counts: list[float] = []
-    heights: list[float] = []
-    fars: list[float] = []
-    has_height = False
-    has_far = False
+    kept_rows: list[dict[str, Any]] = []
     for row in rows:
         label = row.get("label") or row.get("place")
         cnt = row.get("cnt")
@@ -579,38 +638,37 @@ def _chart_profile_compare(
             continue
         labels.append(str(label))
         counts.append(c)
-        h = row.get("avg_height")
-        if h is not None:
-            try:
-                heights.append(float(h))
-                has_height = True
-            except (TypeError, ValueError):
-                heights.append(0.0)
-        else:
-            heights.append(0.0)
-        far = row.get("avg_far")
-        if far is not None:
-            try:
-                fars.append(float(far))
-                has_far = True
-            except (TypeError, ValueError):
-                fars.append(0.0)
-        else:
-            fars.append(0.0)
+        kept_rows.append(row)
 
     if len(labels) < 2:
         return None
 
+    n = len(labels)
+    heights, has_height = _metric_series(kept_rows, "avg_height", n)
+    fars, has_far = _metric_series(kept_rows, "avg_far", n)
+    areas, has_area = _metric_series(kept_rows, "avg_area", n)
+    floors, has_floors = _metric_series(kept_rows, "avg_floors", n)
+
+    all_datasets: list[dict[str, Any]] = [{"label": "건물 수(동)", "data": counts}]
+    if has_area:
+        all_datasets.append({"label": "평균 연면적(㎡)", "data": areas})
+    if has_height:
+        all_datasets.append({"label": "평균 높이(m)", "data": heights})
+    if has_far:
+        all_datasets.append({"label": "평균 용적율(%)", "data": fars})
+    if has_floors:
+        all_datasets.append({"label": "평균 지상층", "data": floors})
+
     far_focus = any(k in question for k in ("용적율", "용적률", "건폐율", "건폐률"))
-    datasets: list[dict[str, Any]] = [{"label": "건물 수(동)", "data": counts}]
+    datasets: list[dict[str, Any]] = [all_datasets[0]]
     unit = "동"
-    if has_far and any(v > 0 for v in fars) and (far_focus or not has_height):
+    if has_far and (far_focus or not has_height):
         datasets.append({"label": "평균 용적율(%)", "data": fars})
         unit = "동·%"
-    elif has_height and any(h > 0 for h in heights):
+    elif has_height:
         datasets.append({"label": "평균 높이(m)", "data": heights})
         unit = "동·m"
-    elif has_far and any(v > 0 for v in fars):
+    elif has_far:
         datasets.append({"label": "평균 용적율(%)", "data": fars})
         unit = "동·%"
 
@@ -619,7 +677,7 @@ def _chart_profile_compare(
         "title": _title_from_question(question, "지역 비교"),
         "labels": labels,
         "datasets": datasets,
-        "all_datasets": [dict(d) for d in datasets],
+        "all_datasets": [dict(d) for d in all_datasets],
         "unit": unit,
     }
 

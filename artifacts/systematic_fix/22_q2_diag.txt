@@ -1,0 +1,65 @@
+n=62
+routes Counter({'semantic_plan_aggregate': 18, 'semantic_plan_count': 12, 'semantic_plan_rank': 11, 'semantic_plan_clarify': 8, 'semantic_plan_list': 3, 'building_rank_연면적': 3, 'clarify_place': 2, 'bas_area_topn': 2, 'd198_attr_list': 1, 'building_special_land_count': 1, 'd198_attr_count': 1})
+
+N066 semantic_plan_list scalar-mismatch hits=1 gold=[197.0, 24.0, 4.0] | 지번 알려줘
+Q391 semantic_plan_aggregate scalar-mismatch hits=0 gold=[265.0, 19.3132] | 그 집합의 평균 층수
+Q392 semantic_plan_rank scalar-mismatch hits=1 gold=[24.0, 4.0, 26.0, 43.0] | 층수가 가장 많은 건물 이름
+Q398 semantic_plan_count count-mismatch gold=360 pred=[361.0, 361.0] | 그중 산업단지 안에 있는 것만
+Q399 semantic_plan_aggregate scalar-mismatch hits=0 gold=[360.0, 8261.8981] | 그 공장들 평균 연면적
+Q400 semantic_plan_rank name-missing 르노코리아자동차(주) | 연면적이 가장 큰 공장 이름
+Q403 semantic_plan_aggregate scalar-mismatch hits=0 gold=[248.0, 70.2789] | 그 건물들 평균 높이
+Q404 semantic_plan_rank name-missing 오륙도 에스케이뷰 아파트 | 가장 높은 것의 이름과 층수
+Q407 semantic_plan_count count-mismatch gold=14 pred=[18.0, 18.0] | 그 건물들 지하층이 있는 것은 몇 채야?
+Q408 semantic_plan_aggregate scalar-mismatch hits=0 gold=[5399.9514, 14.0] | 남은 건물 평균 연면적
+Q410 semantic_plan_count count-mismatch gold=50 pred=[47.0, 47.0] | 그중 철골구조만
+Q412 semantic_plan_aggregate scalar-mismatch hits=0 gold=[200589.738, 50.0] | 연면적 합계
+Q420 semantic_plan_rank scalar-mismatch hits=1 gold=[24.0, 16.0, 106.9, 5.0] | 가장 높은 건물명
+Q422 semantic_plan_count count-mismatch gold=405 pred=[408.0, 408.0] | 그중 주요용도가 공동주택인 것만
+Q423 semantic_plan_aggregate scalar-mismatch hits=1 gold=[405.0, 18.2667] | 평균 지상층
+Q424 semantic_plan_rank scalar-mismatch hits=1 gold=[162.5, 4.0] | 가장 높은 건물명
+Q425 d198_attr_list count-mismatch gold=470 pred=[10.0, 2007.0, 8.0, 16.0, 2004.0, 12.0] | 금정구 세부용도 아파트 중 10층 이상
+Q426 semantic_plan_count count-mismatch gold=320 pred=[324.0, 324.0] | 그중 사용승인 2000년 이후만
+Q427 semantic_plan_aggregate scalar-mismatch hits=1 gold=[8318.7581, 320.0] | 평균 건물연면적
+Q428 building_rank_연면적 list-top-missing 부곡동 푸르지오 | 연면적 상위 5 이름
+Q431 semantic_plan_clarify group-mismatch | 용도별 건수 상위 6
+Q432 semantic_plan_clarify name-missing 대원플러스빌 | 연면적이 가장 큰 위반건축물 이름·용도
+Q433 building_special_land_count count-mismatch gold=2456 pred=[2300.0, 2300.0] | 기장군 산지 건물 채수
+Q440 semantic_plan_rank name-missing 청마 마이우스 | 용적율이 가장 큰 건물명
+Q444 semantic_plan_rank scalar-mismatch hits=1 gold=[24.0, 26.0, 85.0, 27.0] | 지상층이 가장 많은 이름
+Q448 semantic_plan_rank name-missing 부산과학기술대학교 | 대지면적이 가장 큰 이름
+Q449 semantic_plan_count count-mismatch gold=610 pred=[601.0, 601.0] | 영도구 지어진지 25년 넘은 공동주택 채수
+Q450 semantic_plan_count count-mismatch gold=115 pred=[114.0, 114.0] | 그중 10층 이상만
+Q451 semantic_plan_aggregate scalar-mismatch hits=1 gold=[11510.4952, 115.0] | 평균 연면적
+Q452 semantic_plan_aggregate name-missing 대동대교맨션아파트 | 가장 오래된(사용승인 빠른) 건물명과 사용승인일
+Q455 semantic_plan_count group-mismatch | 구조별 건수
+Q456 semantic_plan_aggregate name-missing 부산디지털밸리아파트형공장 | 연면적 최대 공장 이름
+Q458 semantic_plan_count count-mismatch gold=3 pred=[2.0, 2.0] | 그중 공동주택 또는 숙박시설만
+Q459 semantic_plan_aggregate scalar-mismatch hits=0 gold=[90.3333, 3.0] | 평균 층수
+Q460 semantic_plan_rank name-missing 중동 18290000 숙박시설 (주식회사엘시티피이에프브이) | 가장 높은 건물의 건물동명과 지번
+Q463 semantic_plan_aggregate scalar-mismatch hits=0 gold=[5353.86, 76.0] | 높이 합계(1~500m)
+Q464 semantic_plan_aggregate name-missing 대연 힐스테이트푸르지오 | 층수 1위 이름
+Q465 d198_attr_count count-mismatch gold=273 pred=[2000.0, 466.0, 466.0] | 구서동 2000년 이후 사용승인 공동주택 채수
+Q468 building_rank_연면적 list-top-missing 구서 협성 엠파이어 | 연면적 상위 3 이름
+Q470 semantic_plan_count count-mismatch gold=171 pred=[195.0, 195.0] | 그중 공동주택만
+Q471 semantic_plan_aggregate scalar-mismatch hits=0 gold=[5539.912, 171.0] | 그 공동주택 평균 연면적
+Q472 semantic_plan_aggregate name-missing 명지롯데캐슬 | 연면적 최대 공동주택명
+Q474 semantic_plan_list count-mismatch gold=313 pred=[100.0, 1.0, 256.0, 17.2, 2.0, 60.0] | 그중 건물높이 15m 이상만
+Q475 semantic_plan_clarify group-mismatch | 세부용도 상위 5
+Q476 semantic_plan_clarify scalar-mismatch hits=0 gold=[173.5, 27.0] | 가장 높은 건물명
+Q477 clarify_place list-top-missing 해운대케이씨씨스위첸 | 좌동 15층 이상 공동주택 이름과 층수
+Q478 clarify_place count-mismatch gold=362 pred=[1.0, 2077.0, 2.0, 334.0, 1.0, 1.0] | 그중 연면적 6000㎡ 이상만
+Q479 semantic_plan_clarify scalar-mismatch hits=0 gold=[59.9616, 362.0] | 평균 높이
+Q480 semantic_plan_clarify name-missing 경남선경아파트 | 지번 알려줘(연면적 1위)
+Q481 semantic_plan_list count-mismatch gold=181 pred=[100.0, 1.0, 337.0, -8.0, 2.0, 307.0] | 전포동 제2종근린생활시설 중 연면적 400㎡ 이상
+Q484 building_rank_연면적 list-top-missing 세화빌딩 | 연면적 상위 5 이름
+Q487 semantic_plan_aggregate scalar-mismatch hits=0 gold=[23.2599, 65.344, 177.0] | 평균 층수와 평균 높이
+Q488 semantic_plan_rank name-missing 대림쌍용강변타운 | 가장 높은 건물 이름
+Q489 bas_area_topn count-mismatch gold=32 pred=[0.2, 1.0, 1.64269819016635, 48562.0] | 남구 기초구역 중 면적(BAS_AR) 0.2 이상 개수
+Q490 bas_area_topn count-mismatch gold=29 pred=[0.2, 1.0, 1.64269819016635, 48562.0] | 그중 이동사유가 최초생성인 것만
+Q491 semantic_plan_clarify scalar-mismatch hits=0 gold=[12.7918, 29.0] | 면적 합계
+Q492 semantic_plan_clarify scalar-mismatch hits=0 gold=[48481.0, 1.5929] | 면적 최대 기초구역번호
+Q495 semantic_plan_count group-mismatch | 법정동별 건수
+Q496 semantic_plan_rank scalar-mismatch hits=1 gold=[24.0, 4.0, 16.0, 95.05] | 가장 높은 건물 이름과 법정동
+Q498 semantic_plan_count count-mismatch gold=14 pred=[19.0, 19.0] | 그중 높이 18m 이상만
+Q499 semantic_plan_aggregate scalar-mismatch hits=0 gold=[190396.95, 14.0] | 연면적 합계와 건수
+Q500 semantic_plan_aggregate name-missing 동아대학교 의료원 | 연면적 1위 이름과 지번

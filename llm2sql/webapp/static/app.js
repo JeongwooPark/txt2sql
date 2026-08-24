@@ -79,9 +79,21 @@
         </div>
         <div class="answer" hidden></div>
         <div class="result-table-wrap" hidden></div>
+        <div class="chart-offer" hidden>
+          <p class="chart-offer-text">이 내용을 차트로도 정리할 수 있어요. 차트로 보시겠어요?</p>
+          <div class="choices chart-choices"></div>
+        </div>
         <div class="chart-wrap" hidden><canvas></canvas></div>
         <div class="meta" hidden></div>
-        <pre class="sql-block" hidden></pre>
+        <details class="sql-details" hidden>
+          <summary class="sql-summary">
+            <svg class="sql-chevron" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path fill="currentColor" d="M6.2 3.2a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5A.75.75 0 0 1 6.2 12.2L10.14 8.25 6.2 4.3a.75.75 0 0 1 0-1.1z"/>
+            </svg>
+            <span>SQL</span>
+          </summary>
+          <pre class="sql-block"></pre>
+        </details>
       </div>
     `;
     messagesEl.appendChild(row);
@@ -93,9 +105,12 @@
       statusText: row.querySelector(".status-text"),
       answer: row.querySelector(".answer"),
       tableWrap: row.querySelector(".result-table-wrap"),
+      chartOffer: row.querySelector(".chart-offer"),
+      chartChoices: row.querySelector(".chart-choices"),
       chartWrap: row.querySelector(".chart-wrap"),
       chartCanvas: row.querySelector(".chart-wrap canvas"),
       meta: row.querySelector(".meta"),
+      sqlDetails: row.querySelector(".sql-details"),
       sql: row.querySelector(".sql-block"),
     };
   }
@@ -124,6 +139,22 @@
       error: "오류 처리",
     };
     return message || map[stage] || stage;
+  }
+
+  function networkErrorMessage(err) {
+    const msg = err instanceof Error ? err.message : String(err || "");
+    if (
+      msg === "Failed to fetch" ||
+      /networkerror when attempting to fetch/i.test(msg) ||
+      msg === "Load failed" ||
+      msg === "NetworkError"
+    ) {
+      return (
+        "서버와 연결이 끊겼습니다. 웹 서버가 실행 중인지 확인하거나, " +
+        "구 전체 비교처럼 무거운 질의는 잠시 후 다시 시도해 주세요."
+      );
+    }
+    return msg || "알 수 없는 오류가 발생했습니다.";
   }
 
   async function ensureSession() {
@@ -200,7 +231,7 @@
     } catch (err) {
       finishBot(
         shell,
-        err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.",
+        networkErrorMessage(err),
         { error: true }
       );
     } finally {
@@ -423,6 +454,7 @@
           .join("");
       }
       if (result.sql) {
+        if (shell.sqlDetails) shell.sqlDetails.hidden = false;
         shell.sql.hidden = false;
         shell.sql.textContent = result.sql;
       }
@@ -464,24 +496,36 @@
         ensureChartShell(shell);
         renderChart(shell, chartSpec);
       } else if (result.chart_offer && result.chart_spec) {
-        const choices = document.createElement("div");
-        choices.className = "choices chart-choices";
-        choices.dataset.chartSpec = JSON.stringify(result.chart_spec);
-        const yes = document.createElement("button");
-        yes.type = "button";
-        yes.className = "choice-btn chart-accept";
-        yes.dataset.q = "차트로 보여줘";
-        yes.innerHTML =
-          '<span class="choice-num">네</span><span class="choice-label">차트로 보기</span>';
-        const no = document.createElement("button");
-        no.type = "button";
-        no.className = "choice-btn chart-decline";
-        no.dataset.q = "괜찮아요";
-        no.innerHTML =
-          '<span class="choice-num">아니요</span><span class="choice-label">텍스트만 볼게요</span>';
-        choices.appendChild(yes);
-        choices.appendChild(no);
-        shell.bubble.appendChild(choices);
+        const offerRe =
+          /(?:\n\n)?이 내용을 차트로도 정리할 수 있어요\.\s*차트로 보시겠어요\?\s*$/;
+        if (shell.answer) {
+          shell.answer.textContent = String(shell.answer.textContent || "")
+            .replace(offerRe, "")
+            .trim();
+          if (!shell.answer.textContent) shell.answer.hidden = true;
+        }
+        const offer = shell.chartOffer;
+        const choices =
+          shell.chartChoices || offer?.querySelector(".chart-choices");
+        if (offer && choices) {
+          choices.innerHTML = "";
+          choices.dataset.chartSpec = JSON.stringify(result.chart_spec);
+          const yes = document.createElement("button");
+          yes.type = "button";
+          yes.className = "choice-btn chart-accept";
+          yes.dataset.q = "차트로 보여줘";
+          yes.innerHTML =
+            '<span class="choice-num">네</span><span class="choice-label">차트로 보기</span>';
+          const no = document.createElement("button");
+          no.type = "button";
+          no.className = "choice-btn chart-decline";
+          no.dataset.q = "괜찮아요";
+          no.innerHTML =
+            '<span class="choice-num">아니요</span><span class="choice-label">텍스트만 볼게요</span>';
+          choices.appendChild(yes);
+          choices.appendChild(no);
+          offer.hidden = false;
+        }
       }
 
       scrollToBottom(true);
@@ -714,7 +758,9 @@
         spec = null;
       }
       const bubble = btn.closest(".bubble");
-      box?.remove();
+      const offerBox = btn.closest(".chart-offer");
+      if (offerBox) offerBox.hidden = true;
+      else box?.remove();
       if (spec && bubble) {
         const shell = {
           bubble,
@@ -733,7 +779,9 @@
 
     // 차트 거절: 버튼만 닫고 세션 동기화
     if (btn.classList.contains("chart-decline")) {
-      btn.closest(".chart-choices")?.remove();
+      const offer = btn.closest(".chart-offer");
+      if (offer) offer.hidden = true;
+      else btn.closest(".chart-choices")?.remove();
       syncSessionQuestion(btn.getAttribute("data-q") || "괜찮아요");
       return;
     }

@@ -217,6 +217,15 @@ body[data-ui^="data"] .site-body {
   line-height: 1.5;
 }
 
+.data-card p + p {
+  margin-top: 10px;
+}
+
+.data-card a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .data-split {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
@@ -776,6 +785,27 @@ body[data-ui^="data"] .site-body {
   height: 260px !important;
 }
 
+.chart-offer {
+  margin-top: 12px;
+  white-space: normal;
+}
+
+.chart-offer-text {
+  margin: 0 0 8px;
+  line-height: 1.55;
+}
+
+.chart-offer .choices {
+  margin-top: 0;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.chart-offer .choice-btn {
+  flex: 1 1 148px;
+  width: auto;
+}
+
 .chart-choices .choice-num {
   font-size: 0.78rem;
   width: auto;
@@ -800,12 +830,60 @@ body[data-ui^="data"] .site-body {
   line-height: 1.35;
 }
 
-.sql-block {
+.sql-details {
   margin-top: 10px;
-  padding: 10px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.28);
+  white-space: normal;
   border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.sql-details[hidden] {
+  display: none !important;
+}
+
+.sql-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  user-select: none;
+}
+
+.sql-summary::-webkit-details-marker {
+  display: none;
+}
+
+.sql-summary::marker {
+  content: "";
+}
+
+.sql-chevron {
+  flex: 0 0 auto;
+  color: var(--accent);
+  transition: transform 0.15s ease;
+}
+
+.sql-details[open] > .sql-summary .sql-chevron {
+  transform: rotate(90deg);
+}
+
+.sql-summary:hover {
+  color: var(--ink);
+}
+
+.sql-block {
+  margin: 0;
+  padding: 10px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 12px 12px;
+  background: rgba(0, 0, 0, 0.28);
   font-family: var(--mono);
   font-size: 0.75rem;
   color: #b9d5e0;

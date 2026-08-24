@@ -53,6 +53,19 @@ def verify_contract(
     } else 0.4
     if contract.places:
         place_ok = bool(plan.scope and plan.scope.place and plan.scope.place.name)
+        if not place_ok:
+            from llm2sql.domain import is_busan_wide
+
+            place_ok = is_busan_wide(question)
+        if not place_ok:
+            place_ok = any(
+                getattr(rel.target, "entity", None) == "industrial_complex"
+                or (
+                    rel.target.place is not None
+                    and bool((rel.target.place.name or "").strip())
+                )
+                for rel in plan.spatial_relations
+            )
         scope_score = 1.0 if place_ok else 0.0
         if not place_ok:
             reasons.append("P07")

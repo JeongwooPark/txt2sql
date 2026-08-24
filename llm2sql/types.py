@@ -28,6 +28,8 @@ class AskResult:
     map: dict[str, Any] | None = None
     semantic_plan: dict[str, Any] | None = None
     plan_quality: float | None = None
+    stage_latency_ms: dict[str, int] = field(default_factory=dict)
+    selected_route: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)

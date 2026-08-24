@@ -53,9 +53,14 @@ def normalize_sql(
     *,
     question: str | None = None,
 ) -> str:
-    return fix_common_sql_mistakes(
-        rewrite_display_names(sql, table_map, column_map),
-        question=question,
+    from llm2sql.sql_d010_guard import rewrite_d198_columns_on_d010
+
+    return rewrite_d198_columns_on_d010(
+        fix_common_sql_mistakes(
+            rewrite_display_names(sql, table_map, column_map),
+            question=question,
+        ),
+        question,
     )
 
 

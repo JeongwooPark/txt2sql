@@ -35,3 +35,15 @@ class ProgressTracker:
         self.steps.append(item)
         if self.on_step is not None:
             self.on_step(stage, message, item.get("detail"))
+
+    def stage_latency_ms(self) -> dict[str, int]:
+        """단계별 구간 시간. emit의 elapsed_ms는 시작 시각 기준 누적값이다."""
+        out: dict[str, int] = {}
+        prev = 0
+        for item in self.steps:
+            elapsed = int(item.get("elapsed_ms") or 0)
+            stage = str(item.get("stage") or "unknown")
+            delta = max(0, elapsed - prev)
+            out[stage] = out.get(stage, 0) + delta
+            prev = elapsed
+        return out

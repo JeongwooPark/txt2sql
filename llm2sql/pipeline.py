@@ -15,12 +15,15 @@ from llm2sql.answer import (
 )
 from llm2sql.chart_qa import (
     attach_chart_offer,
+    build_chart_spec,
     chart_capability_answer,
     chart_type_label,
     filter_chart_series,
+    infer_chart_rebuild_route,
     is_chart_accept_question,
     is_chart_capability_question,
     is_chart_decline_question,
+    is_chart_metric_draw_question,
     is_chart_series_filter_question,
     parse_chart_type_request,
     with_chart_type,
@@ -81,7 +84,9 @@ from llm2sql.router_lexicon import map_unknown_to_router
 from llm2sql.session import SessionContext
 from llm2sql.semantic_plan import run_semantic_plan
 from llm2sql.semantic_plan.followup import (
+    apply_count_display_followup,
     apply_followup_history,
+    apply_result_anchor,
     is_semantic_plan_followup,
     merge_followup_plan,
 )
@@ -259,6 +264,8 @@ def _expand_followup_question(
     if session is None:
         return question
     q = question.strip()
+    if is_semantic_plan_followup(q, session):
+        return question
     if looks_like_standalone_question(q):
         return question
     if is_list_attr_followup(q, session):
@@ -275,7 +282,7 @@ def _expand_followup_question(
     if not base:
         return question
     subsetish = has_anaphora(q) or any(
-        h in q for h in ("그 중", "그중", "이 중", "그중에")
+        h in q for h in ("그 중", "그중", "이 중", "이중에", "이 중에", "그중에")
     ) or (
         "제외" in q and any(k in q for k in ("건설일", "사용승인", "준공", "지어"))
     ) or (
@@ -286,7 +293,7 @@ def _expand_followup_question(
     )
     if subsetish:
         follow = re.sub(
-            r"^(그 중에|그 중|그중|이 중에|이 중|그중에)\s*",
+            r"^(그 중에|그 중|그중|이 중에|이중에|이 중|그중에)\s*",
             "",
             q,
         )
@@ -502,15 +509,53 @@ def _chart_reply(
     return result
 
 
+def _filter_chart_from_session(
+    question: str,
+    session: SessionContext,
+    base_chart: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str]:
+    chart, answer = filter_chart_series(base_chart, question)
+    if chart is not None:
+        return chart, answer
+    rows = list(session.last_rows or [])
+    if not rows:
+        return None, answer
+    rebuilt = build_chart_spec(
+        route=infer_chart_rebuild_route(session.last_route, rows),
+        rows=rows,
+        question=question,
+    )
+    if not rebuilt:
+        return None, answer
+    return filter_chart_series(rebuilt, question)
+
+
 def _try_chart_turn(
     question: str,
     session: SessionContext | None,
     progress: ProgressTracker,
     on_token: TokenCallback | None,
 ) -> dict[str, Any] | None:
-    if session is not None and (session.pending_chart or session.last_chart):
+    metric_draw = is_chart_metric_draw_question(question)
+    has_spec = session is not None and (session.pending_chart or session.last_chart)
+    can_rebuild = (
+        session is not None
+        and bool(session.last_rows)
+        and infer_chart_rebuild_route(session.last_route, list(session.last_rows))
+        is not None
+    )
+    if session is not None and (has_spec or (metric_draw and can_rebuild)):
         base_chart = session.pending_chart or session.last_chart
-        assert base_chart is not None
+        if base_chart is None and can_rebuild:
+            base_chart = build_chart_spec(
+                route=infer_chart_rebuild_route(
+                    session.last_route, list(session.last_rows)
+                ),
+                rows=list(session.last_rows),
+                question=question,
+            )
+        if base_chart is None:
+            return None
         if is_chart_capability_question(question):
             return _chart_reply(
                 answer=chart_capability_answer(base_chart),
@@ -522,7 +567,7 @@ def _try_chart_turn(
                 question=question,
             )
         new_type = parse_chart_type_request(question)
-        if new_type:
+        if new_type and not metric_draw and not is_chart_series_filter_question(question):
             chart = with_chart_type(base_chart, new_type)
             return _chart_reply(
                 answer=f"같은 내용을 {chart_type_label(new_type)} 차트로 다시 정리했습니다.",
@@ -534,9 +579,9 @@ def _try_chart_turn(
                 question=question,
                 chart=chart,
             )
-        if is_chart_series_filter_question(question):
+        if is_chart_series_filter_question(question) or metric_draw:
             progress.emit("route", "차트 지표 필터")
-            chart, answer = filter_chart_series(base_chart, question)
+            chart, answer = _filter_chart_from_session(question, session, base_chart)
             emit_text_chunks(answer, on_token)
             extra: dict[str, Any] = {"steps": progress.steps}
             if chart:
@@ -697,6 +742,8 @@ def run_ask(
     def finish(payload: dict[str, Any], q: str | None = None) -> dict[str, Any]:
         payload = dict(payload)
         payload["steps"] = progress.steps
+        payload["stage_latency_ms"] = progress.stage_latency_ms()
+        payload["selected_route"] = payload.get("route")
         if not include_map:
             return payload
         return _with_map(
@@ -817,6 +864,27 @@ def run_ask(
     return finish(result, effective)
 
 
+def _blocks_meta_profile_force(question: str) -> bool:
+    """건수·임계·OR·후속은 meta/profile force 선점을 막는다."""
+    q = question.strip()
+    if has_anaphora(q) or any(
+        k in q for k in ("그중", "그 중", "그 건물", "해당 건물", "첫번째", "첫 번째")
+    ):
+        return True
+    if any(k in q for k in ("또는", "혹은", "이거나", "제외", "아닌", "빼고")):
+        return True
+    if any(k in q for k in ("이상", "이하", "초과", "미만")):
+        return True
+    countish = any(
+        k in q
+        for k in ("몇", "건수", "채수", "채야", "건물 수", "건물수는", "수는?", "수는")
+    )
+    building = any(k in q for k in ("건물", "건축물", "주택", "아파트", "시설"))
+    if countish and building:
+        return True
+    return False
+
+
 def _try_preferred_intent(
     question: str,
     settings: Settings,
@@ -830,6 +898,12 @@ def _try_preferred_intent(
     """분류된 의도로 핸들러를 우선 시도. 실패하면 None."""
     intent = preferred.intent
     if intent in {"guide", "coverage", "out_of_scope", "sql"}:
+        return None
+    from llm2sql.domain import wants_map_display
+
+    if wants_map_display(question) and intent == "profile":
+        return None
+    if intent in {"profile", "meta"} and _blocks_meta_profile_force(question):
         return None
     llm = _llm_kw(settings, ollama_client)
 
@@ -894,7 +968,12 @@ def _finish_routed_query(
     progress.emit("sql", "라우터 SQL 확정", sql=routed.sql)
     progress.emit("execute", "DB 조회 실행")
     try:
-        rows = execute_query(conn, routed.sql, default_limit=settings.default_limit)
+        rows = execute_query(
+            conn,
+            routed.sql,
+            default_limit=settings.default_limit,
+            statement_timeout_ms=settings.db_statement_timeout_ms,
+        )
     except Exception as exc:
         progress.emit("error", f"실행 실패: {type(exc).__name__}")
         answer = format_failure(question, error=exc, sql=routed.sql)
@@ -1041,19 +1120,30 @@ def _ask_inner(
             heur = try_heuristic_plan(
                 session.last_full_question or session.last_question or ""
             )
-            if heur is not None and not heur.requires_clarification:
-                base_plan = heur.model_dump()
+            if heur is not None:
+                usable = (not heur.requires_clarification) or bool(
+                    heur.filters or heur.scope or heur.predicate
+                )
+                if usable:
+                    dumped = heur.model_dump()
+                    dumped["requires_clarification"] = False
+                    dumped["ambiguities"] = []
+                    base_plan = dumped
         if base_plan:
             history = apply_followup_history(
                 question,
                 base_plan,
                 session.last_plan_events,
-                base_override=session.last_plan_base,
+                base_override=(
+                    session.last_plan_base if session.last_plan_events else None
+                ),
             )
             merged = history[0] if history is not None else merge_followup_plan(
                 question, base_plan
             )
             if merged is not None:
+                merged = apply_result_anchor(question, merged, session)
+                merged = apply_count_display_followup(question, merged, session)
                 if history is not None:
                     session.last_plan_events = [item.model_dump() for item in history[1]]
                 progress.emit("route", "Semantic Plan 후속 delta")
@@ -1254,16 +1344,17 @@ def _ask_inner(
 
     progress.emit("route", "모호성/미지 용어 점검")
     clarify = check_ambiguity(conn, question)
+    followup_cue = has_anaphora(question) or any(
+        k in question
+        for k in ("그중", "그 중", "그 건물", "그 건물들", "첫번째", "첫 번째")
+    )
+    if followup_cue and clarify is not None and clarify.intent == "clarify_unknown_term":
+        clarify = None
+    deferred_unknown = None
     if clarify is not None and clarify.intent == "clarify_unknown_term":
-        question, deferred_route, clarify = _resolve_unknown_terms(
-            question,
-            clarify,
-            settings,
-            progress,
-            conn=conn,
-            ollama_client=ollama_client,
-            deferred_route=deferred_route,
-        )
+        # 미지 용어는 라우트·Plan이 실패한 뒤에만 반환. 동음이의·컬럼 모호는 선제 유지.
+        deferred_unknown = clarify
+        clarify = None
     if clarify is not None:
         progress.emit(
             "clarify",
@@ -1318,6 +1409,29 @@ def _ask_inner(
         )
         if finished is not None:
             return finished
+        if settings.semantic_plan_mode == "hybrid" and semantic.get("fallback"):
+            error = semantic.get("error") or semantic.get("fallback_reason") or "plan_fallback"
+            answer = format_failure(question, error=error, sql=semantic.get("sql"))
+            emit_text_chunks(answer, on_token)
+            return _payload(
+                ok=False,
+                answer=answer,
+                sql=semantic.get("sql"),
+                tables=semantic.get("tables") or [],
+                error=error,
+                semantic_plan=semantic.get("semantic_plan"),
+            )
+
+    if deferred_unknown is not None:
+        progress.emit(
+            "clarify",
+            f"확인 필요: {', '.join(deferred_unknown.ambiguous_terms) or deferred_unknown.intent}",
+        )
+        progress.emit("answer", "확인 요청 답변 완료")
+        emit_text_chunks(deferred_unknown.answer, on_token)
+        return _qa_ok(
+            deferred_unknown, ambiguous_terms=deferred_unknown.ambiguous_terms
+        )
 
     progress.emit("route", "라우트 미매칭 → RAG+LLM 경로")
     rag = run_rag_sql(

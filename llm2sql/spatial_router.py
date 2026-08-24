@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from llm2sql.domain import (
     LENGTH_DIST_PATTERN,
     _FALSE_DONG,
+    dong_requires_gu,
     extract_gu,
     extract_place,
     extract_places,
@@ -17,6 +18,7 @@ from llm2sql.domain import (
 )
 from llm2sql.spatial_templates import (
     bas_dong_buffer_count_sql,
+    bas_dong_count_and_max_sql,
     bas_dong_count_sql,
     bas_dong_list_sql,
     bas_dong_nearest_sql,
@@ -322,6 +324,8 @@ def try_spatial_route(question: str) -> RoutedQuery | None:
             )
             return RoutedQuery(intent, sql)
         if op in {"intersects", "within"}:
+            if dong_requires_gu(dong) and not gu:
+                return None
             if as_list:
                 return RoutedQuery(
                     "building_in_dong_spatial_list",
@@ -355,6 +359,13 @@ def try_spatial_route(question: str) -> RoutedQuery | None:
             return RoutedQuery(
                 "spatial_bas_dong_list",
                 bas_dong_list_sql(dong, join_op),
+            )
+        if any(k in q for k in ("최대", "가장")) and any(
+            k in q for k in ("개수", "몇", "채수")
+        ):
+            return RoutedQuery(
+                "spatial_bas_dong_count_max",
+                bas_dong_count_and_max_sql(dong, join_op),
             )
         return RoutedQuery(
             "spatial_bas_dong_count",

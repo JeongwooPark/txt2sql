@@ -9,7 +9,15 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
-from llm2sql.domain import USAGE_ALIASES, extract_gu, extract_place, is_busan_wide
+from llm2sql.domain import (
+    DETAIL_USAGE_ALIASES,
+    USAGE_ALIASES,
+    USAGE_CLASS_ALIASES,
+    dong_requires_gu,
+    extract_gu,
+    extract_place,
+    is_busan_wide,
+)
 
 _COL = re.compile(r"\b(A\d+)\b", re.I)
 
@@ -94,6 +102,7 @@ _STOP = {
     "건수",
     "채",
     "채야",
+    "채수",
     "수",
     "총",
     "및",
@@ -116,6 +125,12 @@ _STOP = {
     "그중에서",
     "이면서",
     "이거나",
+    "얼마나",
+    "되나요",
+    "돼요",
+    "있어요",
+    "있나요",
+    "인가요",
     "이름과",
     "성격의",
     "구까지",
@@ -305,7 +320,11 @@ _VAGUE = (
     "최고인",
 )
 
-_USAGE_WORDS = tuple(USAGE_ALIASES.keys())
+_USAGE_WORDS = tuple(
+    list(USAGE_ALIASES.keys())
+    + list(DETAIL_USAGE_ALIASES.keys())
+    + list(USAGE_CLASS_ALIASES.keys())
+)
 
 
 @dataclass(frozen=True)
@@ -462,22 +481,32 @@ def check_ambiguity(
     )
 
     if looks_like_age_question(q) and extract_age_years(q) is not None:
-        if gu_name and d198_table_for_gu(gu_name) is None:
+        d198_slot = any(k in q for k in ("허가일", "허가일자"))
+        if d198_slot and gu_name and d198_table_for_gu(gu_name) is None:
             return ClarifyAnswer(
                 intent="clarify_unsupported_age",
-                ambiguous_terms=["사용승인일자"],
+                ambiguous_terms=["허가일자"],
                 options=[],
                 answer=(
-                    f"건물 ‘준공·사용승인·건축년수’는 현재 {d198_coverage_label()} "
-                    "용도별건물(AL_D198)의 사용승인일자(A34)·허가일자(A33)로만 "
-                    "조회할 수 있습니다.\n"
-                    "예: 금정구 구서동 단독주택 중 사용승인 후 30년 이상인 건수는?\n"
-                    f"부산 전체로 물으시면 {d198_coverage_label(joiner='·')} 합산으로 답합니다."
+                    f"건물 ‘허가일’은 현재 {d198_coverage_label()} "
+                    "용도별건물(AL_D198)로만 조회할 수 있습니다.\n"
+                    "예: 금정구 구서동 단독주택 중 허가 후 30년 이상인 건수는?\n"
+                    f"사용승인·경과년수는 전 구 GIS건물(AL_D010) 사용승인일자로 답합니다."
                 ),
             )
 
     # 2) 지명 모호/미존재 (동이 여러 구에 있거나 데이터에 없음)
     if place and place.endswith("동"):
+        if gu_name is None and dong_requires_gu(place):
+            return ClarifyAnswer(
+                intent="clarify_place",
+                ambiguous_terms=[place],
+                options=[],
+                answer=(
+                    f"확인 필요. {place}은 여러 구에 있어 구를 지정해야 한다.\n"
+                    f"예: 중구 {place} 건물 몇 채야?"
+                ),
+            )
         places = _lookup_places(conn, place, gu=gu_name)
         if not places:
             admin = _lookup_admin_dong(conn, place)
@@ -560,6 +589,7 @@ def check_ambiguity(
     )
     from llm2sql.domain import (
         extract_building_name_candidate,
+        has_anaphora,
         looks_like_building_name_lookup,
         looks_like_measure_threshold,
     )
@@ -575,6 +605,7 @@ def check_ambiguity(
         or looks_like_measure_threshold(q)
         or looks_like_value_bin_question(q)
         or looks_like_year_stats_question(q)
+        or has_anaphora(q)
     ):
         unknown = []
     else:
@@ -729,12 +760,12 @@ def _lookup_places(
                 """
                 SELECT "A4" AS place, COUNT(*) AS n
                 FROM "AL_D010_26_20250704"
-                WHERE "A4" LIKE %s OR "A4" = %s
+                WHERE ("A4" LIKE %s OR "A4" = %s OR "A4" LIKE %s)
                 GROUP BY 1
                 ORDER BY 2 DESC
                 LIMIT 10
                 """,
-                (f"% {dong}", dong),
+                (f"% {dong}", dong, f"% {dong}%"),
             )
         return list(cur.fetchall())
 
@@ -779,6 +810,11 @@ def _looks_like_data_query(q: str) -> bool:
 def _has_table_hint(q: str) -> bool:
     keys = (
         "건물",
+        "용도",
+        "건축물",
+        "공동주택",
+        "위반건축",
+        "채수",
         "AL_D010",
         "D010",
         "산업단지",

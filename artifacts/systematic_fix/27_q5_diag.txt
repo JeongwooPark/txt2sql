@@ -1,0 +1,91 @@
+Q306	semantic_plan_aggregate	scalar-mismatch hits=1 gold=[780.0, 2113.5119]
+  Q: 금정구 문교사회용 건물 수와 평균 건물연면적
+  sql: SELECT AVG(b."A19"::float8) AS "avg_gross_floor_area_m2" / FROM "AL_D198_26410_20250115" b / WHERE b."A4" LIKE '%금정구%' AND b."A29" = '문교사회용';
+
+Q307	d198_attr_count	compare-num-missing
+  Q: 동래구 부속건축물 채수와 주건축물 채수
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D198_26260_20250115" / WHERE "A4" LIKE '%동래구%' AND TRIM(COALESCE("A16"::text, '')) = '부속건축물' AND TRIM(COALESCE("A16"::text, '')) = '주건축물';
+
+Q308	semantic_plan_count	count-mismatch gold=4536 pred=[6163.0, 6163.0]
+  Q: 금정구 일반건축물대장 중 건폐율 50% 이상 80% 이하인 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A4" LIKE '%금정구%' AND b."A17"::float8 BETWEEN 50 AND 80;
+
+Q310	building_name_lookup	list-top-missing 한진스카이뷰
+  Q: 금정구 오피스텔(세부용도) 이름과 지상층·건물높이
+  sql: SELECT * FROM ( /   SELECT DISTINCT ON ("A4", "A5", "A24") * /   FROM ( / SELECT "A0"::text AS "A0", "A4"::text AS "A4", "A5"::text AS "A5", "A9"::text AS "A9", "A11"::text AS "A11", "A12"::float8 AS "A12", "A13"::text AS "A13", "A14"::floa
+
+Q311	d010_attr_count	count-mismatch gold=360 pred=[3.0, 19645.0, 19645.0]
+  Q: 동래구 허가일과 사용승인일 연도 차이가 3년 이상인 집합건축물 채수
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D010_26_20250704" / WHERE "A4" LIKE '%동래구%' AND ("A13"::text ~ '^[0-9]{4}');
+
+Q312	d198_attr_count	count-mismatch gold=400 pred=[2000.0, 713.0, 713.0]
+  Q: 금정구 사용승인이 2000년 이후인 아파트(세부용도) 채수
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D198_26410_20250115" / WHERE "A4" LIKE '%금정구%' AND "A27" ILIKE '%아파트%';
+
+Q315	None	engine-fail:- 동래구 "주요용도명" kinds/count must use "AL_D198_26260_20250115"."A25" with A25 IS NOT NULL, 
+  Q: 동래구 주요용도별 건수 상위 8
+  sql: SELECT b."A9" AS "usage", /        COUNT(*) AS "n" / FROM "AL_D010_26_20250704" b / WHERE b."A4" LIKE '%동래구%' / GROUP BY b."A9" / ORDER BY "n" DESC NULLS LAST / LIMIT 100;
+
+Q317	d198_attr_count	count-mismatch gold=153 pred=[200.0, 154.0, 154.0]
+  Q: 동래구 학원(세부용도) 중 건물대지면적 200㎡ 이상인 채수
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D198_26260_20250115" / WHERE "A4" LIKE '%동래구%' AND "A17" >= 200 AND "A27" ILIKE '%학원%';
+
+Q319	building_name_lookup	list-top-missing 동래전화국
+  Q: 동래구 공공용 건물 이름과 주요용도
+  sql: SELECT * FROM ( /   SELECT DISTINCT ON ("A4", "A5", "A24") * /   FROM ( / SELECT "A0"::text AS "A0", "A4"::text AS "A4", "A5"::text AS "A5", "A9"::text AS "A9", "A11"::text AS "A11", "A12"::float8 AS "A12", "A13"::text AS "A13", "A14"::floa
+
+Q322	semantic_plan_aggregate	scalar-mismatch hits=0 gold=[235.0, 38.1403]
+  Q: 금정구 구서동 아파트(세부용도) 평균 건물높이와 건수
+  sql: SELECT AVG(b."A16"::float8) AS "avg_height_m", /        COUNT(*) AS "n" / FROM "AL_D010_26_20250704" b / WHERE (b."A4" LIKE '% 구서동' OR b."A4" = '구서동') AND b."A9" = '공동주택';
+
+Q323	building_place_count	count-mismatch gold=163 pred=[1990.0, 4374.0, 4374.0]
+  Q: 동래구 사직동 상업용 중 허가 1990년대인 채수
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D010_26_20250704" / WHERE (("A4" LIKE '% 사직동' OR "A4" = '사직동')) AND "A4" LIKE '%동래구%';
+
+Q324	semantic_plan_aggregate	scalar-mismatch hits=1 gold=[160.0, 559127.324]
+  Q: 금정구 장전동 문교사회용 건물연면적 합계
+  sql: SELECT SUM(b."A19"::float8) AS "sum_gross_floor_area_m2" / FROM "AL_D198_26410_20250115" b / WHERE b."A4" LIKE '%금정구%' AND (b."A29" = '문교사회용' AND b."A4" ILIKE '%장전동%');
+
+Q325	d198_attr_count	count-mismatch gold=130 pred=[2000.0, 219.0, 219.0]
+  Q: 동래구 안락동 다세대주택 중 사용승인 2000년 이후인 채수
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D198_26260_20250115" / WHERE ("A4" LIKE '% 안락동' OR "A4" = '안락동') AND "A4" LIKE '%동래구%' AND "A27" ILIKE '%다세대주택%';
+
+Q327	building_name_lookup	count-mismatch gold=81 pred=[]
+  Q: 동래구 명륜동 오피스텔 또는 사무소(세부용도) 채수
+  sql: SELECT * FROM ( /   SELECT DISTINCT ON ("A4", "A5", "A24") * /   FROM ( / SELECT "A0"::text AS "A0", "A4"::text AS "A4", "A5"::text AS "A5", "A9"::text AS "A9", "A11"::text AS "A11", "A12"::float8 AS "A12", "A13"::text AS "A13", "A14"::floa
+
+Q328	building_age_count	count-mismatch gold=648 pred=[1423.0, 1423.0]
+  Q: 금정구 남산동 단독주택(세부용도) 중 지어진지 30년 넘은 채수(사용승인 기준)
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D198_26410_20250115" / WHERE "A4" LIKE '%남산동%' AND "A4" LIKE '%금정구%' AND "A25" = '단독주택' AND "A34" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' AND "A34"::date <= (CURRENT_DATE - INTERVAL '30 years');
+
+Q329	semantic_plan_aggregate	compare-num-missing
+  Q: 동래구 집합 vs 일반건축물 평균 건물높이
+  sql: SELECT AVG(b."A16"::float8) AS "avg_height_m" / FROM "AL_D010_26_20250704" b / WHERE b."A4" LIKE '%동래구%';
+
+Q330	d010_attr_count	count-mismatch gold=278 pred=[5.0, 23435.0, 23435.0]
+  Q: 금정구 허가일과 사용승인일의 연도 차이가 5년 이상인 건물 수
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D010_26_20250704" / WHERE "A4" LIKE '%금정구%' AND ("A13"::text ~ '^[0-9]{4}');
+
+Q332	None	engine-fail:- 금정구 "주요용도명" kinds/count must use "AL_D198_26410_20250115"."A25" with A25 IS NOT NULL, 
+  Q: 금정구 철근콘크리트 구조이면서 주요용도가 공동주택이고 15층 이상인 채수
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A4" LIKE '%금정구%' AND (b."A9" = '공동주택' AND b."A11" ILIKE '%철근콘크리트%' AND b."A26"::float8 >= 15);
+
+Q334	semantic_plan_count	compare-num-missing
+  Q: 금정구 주거용 대비 상업용 건수 비
+  sql: SELECT COUNT(*) AS "count" / FROM "AL_D010_26_20250704" b / WHERE b."A4" LIKE '%금정구%';
+
+Q336	d198_attr_count	count-mismatch gold=64 pred=[0.0, 0.0]
+  Q: 금정구 청룡동 문교사회용 또는 공공용 채수
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D198_26410_20250115" / WHERE ("A4" LIKE '% 청룡동' OR "A4" = '청룡동') AND "A4" LIKE '%금정구%' AND TRIM(COALESCE("A29"::text, '')) = '문교사회용' AND TRIM(COALESCE("A29"::text, '')) = '공공용';
+
+Q337	semantic_plan_aggregate	scalar-mismatch hits=1 gold=[524.0, 87.5702]
+  Q: 동래구 명장동 다가구주택 평균 건물건축면적과 건수
+  sql: SELECT AVG(b."A18"::float8) AS "avg_building_area_m2", /        COUNT(*) AS "n" / FROM "AL_D198_26260_20250115" b / WHERE b."A4" LIKE '%동래구%' AND (b."A25" = '단독주택' AND b."A27" = '다가구주택' AND b."A4" ILIKE '%명장동%');
+
+Q338	building_name_lookup	count-mismatch gold=358 pred=[]
+  Q: 금정구 서동 주거용 중 지하층 있는 채수
+  sql: SELECT * FROM ( /   SELECT DISTINCT ON ("A4", "A5", "A24") * /   FROM ( / SELECT "A0"::text AS "A0", "A4"::text AS "A4", "A5"::text AS "A5", "A9"::text AS "A9", "A11"::text AS "A11", "A12"::float8 AS "A12", "A13"::text AS "A13", "A14"::floa
+
+Q374	d198_attr_count	compare-num-missing
+  Q: 동래구 명장동 vs 안락동 다세대·다가구(D198 세부용도) 채수
+  sql: SELECT COUNT(*) AS cnt / FROM "AL_D198_26260_20250115" / WHERE ("A4" LIKE '% 명장동' OR "A4" = '명장동') AND "A4" LIKE '%동래구%';

@@ -127,9 +127,18 @@ _COVERAGE_ASK = (
     "데이터",
 )
 
-_OUT_OF_SCOPE = (
+# 장소·용도명이 있어도 즉시 범위외. 카탈로그 용도 접두(의료)는 넣지 않는다.
+_ALWAYS_OUT_OF_SCOPE = (
     "날씨",
     "기온",
+    "강수량",
+    "강우",
+    "예보",
+    "기상",
+    "항공편",
+    "항공 지연",
+    "항공지연",
+    "비행기",
     "미세먼지",
     "뉴스",
     "주식",
@@ -159,14 +168,14 @@ _OUT_OF_SCOPE = (
     "인생",
     "연애",
     "심리상담",
-    "의료",
     "병원 추천",
     "맛집",
     "카페 추천",
     "여행 코스",
-    "비행기",
     "기차표",
 )
+
+_OUT_OF_SCOPE = _ALWAYS_OUT_OF_SCOPE
 
 _GREETING = (
     "안녕",
@@ -350,6 +359,12 @@ def _is_greeting_only(q: str) -> bool:
 
 def _is_out_of_scope(q: str) -> bool:
     ql = q.lower()
+    if any(k in ql for k in _ALWAYS_OUT_OF_SCOPE):
+        return True
+    from llm2sql.domain import extract_usages
+
+    if extract_usages(q) or _has_domain_signal(q):
+        return False
     if any(k in ql for k in _OUT_OF_SCOPE):
         return True
     return False

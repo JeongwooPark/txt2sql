@@ -1,0 +1,201 @@
+fails 162
+
+=== reason head ===
+  62 count-mismatch
+  45 scalar-mismatch
+  13 name-missing
+  12 group-mismatch
+  11 list-top-missing
+   8 engine-fail:-
+   8 compare-num-missing
+   1 compare-name-missing
+   1 engine-fail:too
+   1 group-label-missing
+
+=== engine-fail ===
+   3 - Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT.
+   3 - Industrial-park questions must use "AL_D060_00_20250804".
+   1 too many aggregations
+   1 - 동래구 "주요용도명" kinds/count must use "AL_D198_26260_20250115"."A25" with A25 IS NOT NULL, not AL_D010 "A9".
+   1 - 금정구 "주요용도명" kinds/count must use "AL_D198_26410_20250115"."A25" with A25 IS NOT NULL, not AL_D010 "A9".
+
+=== route ===
+  35 semantic_plan_count
+  32 semantic_plan_aggregate
+  20 semantic_plan_clarify
+  12 semantic_plan_rank
+   9 (none)
+   7 d198_attr_count
+   6 building_name_lookup
+   6 semantic_plan_list
+   4 building_rank_연면적
+   4 bas_area_topn
+   2 building_age_count
+   2 clarify_column
+   2 building_usage_count
+   2 building_profile
+   2 building_place_count
+   2 meta_catalog
+   2 building_special_land_count
+   2 d010_attr_count
+   2 chart_help
+   2 clarify_place
+   1 building_area_threshold_count
+   1 d198_value_bins
+   1 place_buffer_count
+   1 building_admin_dong_usage_count
+   1 bas_attr_count
+   1 d060_attr_count
+   1 d198_attr_list
+
+=== cat ===
+  55 후속
+  22 D198전용
+  20 집계비율
+  19 공간복합
+  17 미사용속성
+   7 논리NOT
+   7 후속앵커
+   3 논리OR
+   3 비교연도
+   2 복합AND
+   2 구간BETWEEN
+   1 메타
+   1 비교
+   1 산업단지
+   1 구간
+   1 연도
+
+=== structural buckets ===
+Q4_legacy_steal: 40
+  N016,N096,N097,Q183,Q195,Q200,Q201,Q220,Q223,Q225,Q230,Q239,Q252,Q270,Q277,Q279,Q280,Q291,Q298,Q307,Q310,Q311,Q312,Q317,Q319,Q323,Q325,Q327,Q328,Q330,Q336,Q338,Q353,Q358,Q374,Q425,Q433,Q465,Q489,Q490
+Q2_followup: 62
+  N066,Q391,Q392,Q398,Q399,Q400,Q403,Q404,Q407,Q408,Q410,Q412,Q420,Q422,Q423,Q424,Q425,Q426,Q427,Q428,Q431,Q432,Q433,Q440,Q444,Q448,Q449,Q450,Q451,Q452,Q455,Q456,Q458,Q459,Q460,Q463,Q464,Q465,Q468,Q470,Q471,Q472,Q474,Q475,Q476,Q477,Q478,Q479,Q480,Q481,Q484,Q487,Q488,Q489,Q490,Q491,Q492,Q495,Q496,Q498,Q499,Q500
+Q1_over_clarify: 24
+  N069,N090,Q188,Q244,Q245,Q255,Q257,Q272,Q273,Q274,Q282,Q288,Q293,Q294,Q431,Q432,Q475,Q476,Q477,Q478,Q479,Q480,Q491,Q492
+Q6_spatial: 19
+  N090,Q185,Q251,Q271,Q272,Q273,Q274,Q279,Q280,Q282,Q283,Q288,Q291,Q293,Q298,Q300,Q398,Q489,Q492
+Q7_year_age: 14
+  N097,Q137,Q206,Q255,Q311,Q312,Q323,Q325,Q328,Q330,Q426,Q449,Q452,Q465
+Q8_other: 20
+  Q105,Q151,Q156,Q159,Q160,Q165,Q171,Q172,Q175,Q178,Q184,Q193,Q198,Q202,Q208,Q214,Q215,Q216,Q267,Q285
+Q3_agg_rank: 57
+  Q200,Q201,Q220,Q221,Q222,Q223,Q227,Q230,Q231,Q232,Q237,Q238,Q239,Q242,Q243,Q244,Q245,Q246,Q251,Q252,Q254,Q255,Q256,Q257,Q261,Q265,Q282,Q286,Q288,Q294,Q298,Q306,Q315,Q322,Q324,Q329,Q337,Q391,Q399,Q403,Q408,Q412,Q423,Q427,Q428,Q431,Q451,Q459,Q463,Q468,Q471,Q475,Q479,Q484,Q487,Q491,Q499
+Q5_d198: 26
+  Q306,Q307,Q308,Q310,Q311,Q312,Q315,Q317,Q319,Q322,Q323,Q324,Q325,Q327,Q328,Q329,Q330,Q332,Q334,Q336,Q337,Q338,Q374,Q422,Q425,Q475
+
+unassigned []
+
+=== exclusive primary (loop sets) ===
+Q2_followup: 62
+  N066,Q391,Q392,Q398,Q399,Q400,Q403,Q404,Q407,Q408,Q410,Q412,Q420,Q422,Q423,Q424,Q425,Q426,Q427,Q428,Q431,Q432,Q433,Q440,Q444,Q448,Q449,Q450,Q451,Q452,Q455,Q456,Q458,Q459,Q460,Q463,Q464,Q465,Q468,Q470,Q471,Q472,Q474,Q475,Q476,Q477,Q478,Q479,Q480,Q481,Q484,Q487,Q488,Q489,Q490,Q491,Q492,Q495,Q496,Q498,Q499,Q500
+Q5_d198: 23
+  Q306,Q307,Q308,Q310,Q311,Q312,Q315,Q317,Q319,Q322,Q323,Q324,Q325,Q327,Q328,Q329,Q330,Q332,Q334,Q336,Q337,Q338,Q374
+Q1_over_clarify: 14
+  N069,N090,Q188,Q244,Q245,Q255,Q257,Q272,Q273,Q274,Q282,Q288,Q293,Q294
+Q3_agg_rank: 24
+  Q200,Q201,Q220,Q221,Q222,Q223,Q227,Q230,Q231,Q232,Q237,Q238,Q239,Q242,Q243,Q246,Q251,Q252,Q254,Q256,Q261,Q265,Q286,Q298
+Q4_legacy_steal: 13
+  N016,N096,N097,Q183,Q195,Q225,Q270,Q277,Q279,Q280,Q291,Q353,Q358
+Q6_spatial: 4
+  Q185,Q271,Q283,Q300
+Q7_year_age: 2
+  Q137,Q206
+Q8_other: 20
+  Q105,Q151,Q156,Q159,Q160,Q165,Q171,Q172,Q175,Q178,Q184,Q193,Q198,Q202,Q208,Q214,Q215,Q216,Q267,Q285
+
+=== primary samples ===
+
+## Q2_followup
+- N066 route=semantic_plan_list reason=scalar-mismatch hits=1 gold=[197.0, 24.0, 4.0] | 지번 알려줘
+- Q391 route=semantic_plan_aggregate reason=scalar-mismatch hits=0 gold=[265.0, 19.3132] | 그 집합의 평균 층수
+- Q392 route=semantic_plan_rank reason=scalar-mismatch hits=1 gold=[24.0, 4.0, 26.0, 43.0] | 층수가 가장 많은 건물 이름
+- Q398 route=semantic_plan_count reason=count-mismatch gold=360 pred=[361.0, 361.0] | 그중 산업단지 안에 있는 것만
+- Q399 route=semantic_plan_aggregate reason=scalar-mismatch hits=0 gold=[360.0, 8261.8981] | 그 공장들 평균 연면적
+- Q400 route=semantic_plan_rank reason=name-missing 르노코리아자동차(주) | 연면적이 가장 큰 공장 이름
+- Q403 route=semantic_plan_aggregate reason=scalar-mismatch hits=0 gold=[248.0, 70.2789] | 그 건물들 평균 높이
+- Q404 route=semantic_plan_rank reason=name-missing 오륙도 에스케이뷰 아파트 | 가장 높은 것의 이름과 층수
+- Q407 route=semantic_plan_count reason=count-mismatch gold=14 pred=[18.0, 18.0] | 그 건물들 지하층이 있는 것은 몇 채야?
+- Q408 route=semantic_plan_aggregate reason=scalar-mismatch hits=0 gold=[5399.9514, 14.0] | 남은 건물 평균 연면적
+- Q410 route=semantic_plan_count reason=count-mismatch gold=50 pred=[47.0, 47.0] | 그중 철골구조만
+- Q412 route=semantic_plan_aggregate reason=scalar-mismatch hits=0 gold=[200589.738, 50.0] | 연면적 합계
+
+## Q5_d198
+- Q306 route=semantic_plan_aggregate reason=scalar-mismatch hits=1 gold=[780.0, 2113.5119] | 금정구 문교사회용 건물 수와 평균 건물연면적
+- Q307 route=d198_attr_count reason=compare-num-missing | 동래구 부속건축물 채수와 주건축물 채수
+- Q308 route=semantic_plan_count reason=count-mismatch gold=4536 pred=[6163.0, 6163.0] | 금정구 일반건축물대장 중 건폐율 50% 이상 80% 이하인 채수
+- Q310 route=building_name_lookup reason=list-top-missing 한진스카이뷰 | 금정구 오피스텔(세부용도) 이름과 지상층·건물높이
+- Q311 route=d010_attr_count reason=count-mismatch gold=360 pred=[3.0, 19645.0, 19645.0] | 동래구 허가일과 사용승인일 연도 차이가 3년 이상인 집합건축물 채수
+- Q312 route=d198_attr_count reason=count-mismatch gold=400 pred=[2000.0, 713.0, 713.0] | 금정구 사용승인이 2000년 이후인 아파트(세부용도) 채수
+- Q315 route=None reason=engine-fail:- 동래구 "주요용도명" kinds/count must use "AL_D198_26260_20250115 | 동래구 주요용도별 건수 상위 8
+- Q317 route=d198_attr_count reason=count-mismatch gold=153 pred=[200.0, 154.0, 154.0] | 동래구 학원(세부용도) 중 건물대지면적 200㎡ 이상인 채수
+- Q319 route=building_name_lookup reason=list-top-missing 동래전화국 | 동래구 공공용 건물 이름과 주요용도
+- Q322 route=semantic_plan_aggregate reason=scalar-mismatch hits=0 gold=[235.0, 38.1403] | 금정구 구서동 아파트(세부용도) 평균 건물높이와 건수
+- Q323 route=building_place_count reason=count-mismatch gold=163 pred=[1990.0, 4374.0, 4374.0] | 동래구 사직동 상업용 중 허가 1990년대인 채수
+- Q324 route=semantic_plan_aggregate reason=scalar-mismatch hits=1 gold=[160.0, 559127.324] | 금정구 장전동 문교사회용 건물연면적 합계
+
+## Q1_over_clarify
+- N069 route=semantic_plan_clarify reason=compare-name-missing 중동 18290000 숙박시설 (주식회사엘시티피이에프브이) | 엘시티랑 엘크루 블루오션 중에 더 높은 건물은?
+- N090 route=semantic_plan_clarify reason=count-mismatch gold=35 pred=[] | 사하구 산업단지와 교차하는 기초구역은 몇 개야?
+- Q188 route=clarify_column reason=count-mismatch gold=44 pred=[20.0, 10.0, 20.0] | 부산진구 위반건축물(A20=Y) 중 공동주택은 몇 채야?
+- Q244 route=semantic_plan_clarify reason=compare-num-missing | 서구 공동주택 연면적 합계가 단독주택 연면적 합계보다 얼마나 큰가
+- Q245 route=clarify_column reason=scalar-mismatch hits=0 gold=[27.0, 9360.0] | 동구 용도 종류 수(distinct A9)와 가장 많은 용도 건수
+- Q255 route=semantic_plan_clarify reason=compare-num-missing | 금정구 2000년 이후 사용승인 공동주택 평균 층수가 1990년대보다 얼마나 높은가
+- Q257 route=semantic_plan_clarify reason=scalar-mismatch hits=0 gold=[0.0] | 해운대구 아파트 중 높이 결측 비율 %
+- Q272 route=semantic_plan_clarify reason=count-mismatch gold=2375 pred=[] | 명지·녹산 국가산업단지 안 공장 또는 창고시설 채수
+- Q273 route=semantic_plan_clarify reason=group-mismatch | 센텀2지구 도시첨단산업단지와 교차하는 건물 용도별 건수
+- Q274 route=semantic_plan_clarify reason=count-mismatch gold=35 pred=[] | 사하구 산업단지와 교차하는 기초구역 개수
+- Q282 route=semantic_plan_clarify reason=group-mismatch | 신호지방산업단지 안 건물 용도별 건수 상위 6
+- Q288 route=semantic_plan_clarify reason=scalar-mismatch hits=0 gold=[22.0, 876.0655] | 모라도시첨단산업단지 안 건물 수와 평균 연면적
+
+## Q3_agg_rank
+- Q200 route=building_profile reason=list-top-missing 마린시티두산위브포세이돈 | 해운대구 용적율 상위 10개 공동주택의 이름·용적율·높이
+- Q201 route=building_profile reason=list-top-missing 호텔아쿠아펠리스 | 수영구 건폐율 상위 8개 숙박시설의 이름·건폐율·연면적
+- Q220 route=building_place_count reason=scalar-mismatch hits=0 gold=[2344.0, 2682.0] | 동구 지하층 합계와 지하층이 있는 건물 수
+- Q221 route=semantic_plan_aggregate reason=scalar-mismatch hits=0 gold=[73.0, 2129.7754] | 남구 건물동명에 '상가'가 들어가는 건물 수와 평균 연면적
+- Q222 route=semantic_plan_aggregate reason=scalar-mismatch hits=0 gold=[1.5357] | 사하구 위반건축물 비율(위반/(위반+N))
+- Q223 route=meta_catalog reason=scalar-mismatch hits=0 gold=[3.7068] | 금정구 산지 비율(산 / 전체) %
+- Q227 route=None reason=engine-fail:- Ranking questions require ORDER BY ... DESC NULLS LAST a | 수영구 건물 용도별 평균 연면적 상위 10개 용도
+- Q230 route=meta_catalog reason=scalar-mismatch hits=0 gold=[9.0305] | 남구에서 공동주택이 전체 건물에서 차지하는 비율 %
+- Q231 route=semantic_plan_aggregate reason=scalar-mismatch hits=0 gold=[91.716] | 영도구 15층 이상 건물 중 공동주택 비율 %
+- Q232 route=None reason=engine-fail:- Ranking questions require ORDER BY ... DESC NULLS LAST a | 부산진구 용도별 평균 높이(높이 있는 건물만) 상위 8
+- Q237 route=None reason=engine-fail:too many aggregations | 광안동 숙박시설 연면적 합계·평균·최대 높이
+- Q238 route=semantic_plan_aggregate reason=scalar-mismatch hits=0 gold=[24.7444] | 장림동 공장 중 연면적 1000㎡ 이상 비율 %
+
+## Q4_legacy_steal
+- N016 route=building_name_lookup reason=scalar-mismatch hits=0 gold=[4.0] | 법정동명과 행정동명의 차이가 뭐야?
+- N096 route=building_name_lookup reason=group-mismatch | 금정구 주거용 연면적 크기별 수는?
+- N097 route=building_age_count reason=count-mismatch gold=3021 pred=[2866.0, 2866.0] | 안락동에서 지어진지 30년 넘은 건물은 몇 채야?
+- Q183 route=building_area_threshold_count reason=count-mismatch gold=110 pred=[800.0, 5000.0, 137.0, 137.0] | 연제구 업무시설 연면적 800㎡ 이상 5000㎡ 이하이고 높이 15~45m인 채수
+- Q195 route=building_usage_count reason=count-mismatch gold=16 pred=[316.0, 316.0] | 우동에서 건물동명이 '101동'인 공동주택 채수
+- Q225 route=building_special_land_count reason=count-mismatch gold=85 pred=[0.0, 0.0] | 기장군 농수산 성격의 동식물관련시설 중 산지인 채수
+- Q270 route=place_buffer_count reason=count-mismatch gold=43 pred=[2.0, 2595.0, 2595.0] | 광안2동 주변 100m 이내 숙박시설 채수
+- Q277 route=building_admin_dong_usage_count reason=count-mismatch gold=7 pred=[1.0, 1.0, 1.0] | 구포1동 안 공장·창고 합산 채수
+- Q279 route=bas_area_topn reason=count-mismatch gold=16 pred=[0.3, 1.0, 1.64269819016635, 48562.0] | 남구 기초구역 중 면적(BAS_AR) 0.3 이상인 개수
+- Q280 route=bas_attr_count reason=group-mismatch | 해운대구 기초구역 이동사유별 개수
+- Q291 route=d060_attr_count reason=count-mismatch gold=112 pred=[852.0, 852.0] | 장안일반산업단지 안 공장 채수
+- Q353 route=chart_help reason=compare-num-missing | 수영구 광안동 숙박시설 연면적 80평 이상과 미만 채수
+
+## Q6_spatial
+- Q185 route=semantic_plan_count reason=count-mismatch gold=2143 pred=[5072.0, 5072.0] | 사상구 공장 또는 자동차관련시설이면서 산업단지와 교차하는 건물 수
+- Q271 route=None reason=engine-fail:- Industrial-park questions must use "AL_D060_00_20250804" | 장림동 산업단지 안 공장 중 연면적 3000㎡ 이상인 채수
+- Q283 route=None reason=engine-fail:- Industrial-park questions must use "AL_D060_00_20250804" | 강서구 산업단지 안 공장 중 연면적 5000㎡ 이상 이름
+- Q300 route=semantic_plan_count reason=count-mismatch gold=173 pred=[260.0, 260.0] | 명지동 건물 중 산업단지 안에 있으면서 연면적 2000㎡ 이상인 채수
+
+## Q7_year_age
+- Q137 route=semantic_plan_count reason=count-mismatch gold=19 pred=[18.0, 18.0] | 동구 공동주택 중 지어진지 20년 넘고 지상 10층 이상인 채수
+- Q206 route=semantic_plan_count reason=count-mismatch gold=151 pred=[148.0, 148.0] | 동래구 위반건축물이면서 지어진지 30년 넘은 단독주택 채수
+
+## Q8_other
+- Q105 route=semantic_plan_list reason=list-top-missing ？⑥?？댄?？？二？怨듭? | 강서구 공장 중 일반철골구조이고 연면적 5000㎡ 이상인 건물명과 연면적
+- Q151 route=semantic_plan_count reason=count-mismatch gold=449 pred=[447.0, 447.0] | 연제구에서 공동주택 또는 단독주택이면서 높이 20m 이상인 건물 수
+- Q156 route=semantic_plan_count reason=count-mismatch gold=98 pred=[91.0, 91.0] | 동래구 건물 중 공동주택을 제외하고 높이 40m 이상인 채수
+- Q159 route=semantic_plan_count reason=count-mismatch gold=1043 pred=[1035.0, 1035.0] | 부산진구 제1·2종근린생활시설을 뺀 건물 중 높이 25m 이상인 채수
+- Q160 route=semantic_plan_count reason=count-mismatch gold=805 pred=[8.0, 8.0] | 영도구에서 단독주택이 아니고 벽돌·블록구조도 아닌 건물 중 연면적 1000㎡ 이상 채수
+- Q165 route=semantic_plan_count reason=count-mismatch gold=304 pred=[378.0, 378.0] | 사하구 공장 연면적 1000㎡ 이상 8000㎡ 이하이고 일반철골인 채수
+- Q171 route=semantic_plan_count reason=count-mismatch gold=100 pred=[94.0, 94.0] | 수영구에서 공동주택·단독주택을 제외한 높이 35m 이상 건물 수
+- Q172 route=semantic_plan_count reason=count-mismatch gold=81 pred=[0.0, 0.0] | 장림동 공장 중 경량철골이 아닌 연면적 2500㎡ 이상 채수
+- Q175 route=semantic_plan_count reason=count-mismatch gold=241 pred=[238.0, 238.0] | 동래구 철근콘크리트 또는 철골철근콘크리트 구조이면서 높이 50m 이상인 채수
+- Q178 route=semantic_plan_count reason=count-mismatch gold=7 pred=[0.0, 0.0] | 강서구 동식물관련시설이 아니면서 산지(특수지)인 건물 중 연면적 500㎡ 이상 채수
+- Q184 route=semantic_plan_count reason=count-mismatch gold=73 pred=[1.0, 1.0] | 해운대구 위반건축물이 아니면서 높이 80m 이상인 공동주택 채수
+- Q193 route=semantic_plan_count reason=count-mismatch gold=7 pred=[22303.0, 22303.0] | 사하구 일반지번이 아닌 건물 중 공장인 채수

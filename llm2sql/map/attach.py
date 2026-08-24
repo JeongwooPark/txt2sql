@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from llm2sql.config import Settings
+from llm2sql.domain import wants_map_display
 from llm2sql.map.publish import layer_is_published, publish_query_layer
 from llm2sql.map.sql import map_scope_key, plan_map_sql
 from llm2sql.session import SessionContext
@@ -71,6 +72,7 @@ def attach_map(
         }
         if progress is not None:
             progress.emit("map", "지도 발행 중 오류 (채팅은 유지)")
+    result = _rewrite_map_display_answer(result, question)
     if progress is not None:
         result = dict(result)
         result["steps"] = progress.steps
@@ -125,3 +127,26 @@ def _reuse_map(
         return None
     prev["reused"] = True
     return prev
+
+
+def _rewrite_map_display_answer(
+    result: dict[str, Any], question: str
+) -> dict[str, Any]:
+    if not wants_map_display(question) and result.get("route") != "building_map_display":
+        return result
+    from llm2sql.answer import format_map_display_answer
+
+    out = dict(result)
+    mapped = result.get("map") if isinstance(result.get("map"), dict) else None
+    if mapped is None:
+        mapped = {
+            "available": False,
+            "error": "지도 레이어를 만들지 못했습니다.",
+        }
+    out["answer"] = format_map_display_answer(
+        question,
+        rows=list(result.get("rows") or []),
+        map_info=mapped,
+        include_map=True,
+    )
+    return out

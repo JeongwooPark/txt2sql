@@ -69,11 +69,19 @@ class Llm2SqlEngine:
 
     def _ensure_resources(self) -> None:
         if self._ollama is None:
-            self._ollama = ollama.Client(host=self.settings.ollama_host)
+            try:
+                self._ollama = ollama.Client(
+                    host=self.settings.ollama_host,
+                    timeout=self.settings.llm_timeout_s,
+                )
+            except TypeError:
+                self._ollama = ollama.Client(host=self.settings.ollama_host)
         if self._conn is None or self._conn.closed:
+            timeout_ms = int(self.settings.db_statement_timeout_ms)
             self._conn = psycopg.connect(
                 self.settings.database_url,
                 row_factory=dict_row,
+                options=f"-c statement_timeout={timeout_ms}",
             )
             try:
                 from llm2sql.data.coverage import refresh_dataset_coverage

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from llm2sql.domain import STRUCTURE_ALIASES
+from llm2sql.domain import STRUCTURE_ALIASES, BUSAN_GU_CODES, d198_table_for_gu
 from llm2sql.gazetteer import uses_admin_boundary
 from llm2sql.semantic_plan.catalog import (
     ADMIN_TABLE,
@@ -57,11 +57,39 @@ _ENTITY_ALIAS = {
     "industrial_complex": "i",
 }
 
+# D198 물리 컬럼. D010 A27은 지하층수, D198 A27은 세부용도.
+D198_BUILDING_COLUMNS = {
+    "id": "A1",
+    "name": "A13",
+    "legal_dong": "A4",
+    "lot_address": "A7",
+    "usage": "A25",
+    "structure": "A23",
+    "building_area_m2": "A18",
+    "gross_floor_area_m2": "A19",
+    "site_area_m2": "A17",
+    "height_m": "A30",
+    "ground_floors": "A31",
+    "basement_floors": "A32",
+    "building_coverage_ratio": "A21",
+    "floor_area_ratio": "A20",
+    "building_dong_name": "A14",
+    "special_land": "A6",
+    "approval_date": "A34",
+    "permit_date": "A33",
+    "detail_usage": "A27",
+    "usage_class": "A29",
+    "ledger_kind": "A12",
+}
+
 
 def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
     entity = get_entity(plan.entity)
     alias = _ENTITY_ALIAS.get(plan.entity, "t")
-    tables = [entity.default_table]
+    col_map = _column_override(plan)
+    d198_table = _d198_table_for_plan(plan)
+    default_table = d198_table or entity.default_table
+    tables = [default_table]
     joins: list[str] = []
     where: list[str] = []
     uses_boundary = False
@@ -84,7 +112,11 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
 
     if place and place.name.strip() and place.name.strip() not in spatial_places:
         name = place.name.strip()
-        if plan.entity != "building":
+        if place.kind == "sido" or name in {"부산광역시", "부산시", "부산"}:
+            name = ""
+        if not name:
+            pass
+        elif plan.entity != "building":
             where.append(_entity_place_sql(alias, plan.entity, name))
         else:
             want_boundary = spatial_mode == "boundary" or (
@@ -95,44 +127,69 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
                 if ADMIN_TABLE not in tables:
                     tables.append(ADMIN_TABLE)
                 joins.append(
-                    f"JOIN {_ident(ADMIN_TABLE, physical=True)} a "
-                    f"ON ST_Intersects({alias}.geometry, a.geometry)"
+                    f"JOIN {_ident(ADMIN_TABLE, physical=True)} adm "
+                    f"ON ST_Intersects({alias}.geometry, adm.geometry)"
                 )
-                where.append(_admin_name_sql("a", name))
-                where.append("a.\"ADM_CD\" LIKE '21%'")
+                where.append(_admin_name_sql("adm", name))
+                where.append('adm."ADM_CD" LIKE \'21%\'')
             else:
                 where.append(_a4_place_sql(alias, name))
 
     height_used = False
     params: list[object] = []
+    ratio = "ratio_percent" in (plan.assumptions or [])
+    pred_clause: str | None = None
     pred = effective_predicate(plan)
     if pred is not None:
         validate_predicate(pred)
-        clause, used_height, pred_params = _predicate_sql(alias, plan.entity, pred)
-        where.append(clause)
+        clause, used_height, pred_params = _predicate_sql(
+            alias, plan.entity, pred, col_map=col_map
+        )
+        if ratio:
+            pred_clause = clause
+        else:
+            where.append(clause)
         height_used = height_used or used_height
         params.extend(pred_params)
         compiled_nodes.extend(_predicate_node_ids(pred))
+
+    gap_assump = next(
+        (a for a in (plan.assumptions or []) if a.startswith("permit_year_gap:")),
+        None,
+    )
+    if gap_assump and plan.entity == "building":
+        n = int(gap_assump.split(":", 1)[1])
+        a33 = _col(alias, "A33")
+        a34 = _col(alias, "A34")
+        y33 = f"LEFT(regexp_replace({a33}::text, '[^0-9]', '', 'g'), 4)::int"
+        y34 = f"LEFT(regexp_replace({a34}::text, '[^0-9]', '', 'g'), 4)::int"
+        where.append(f"{a33}::text ~ '^[0-9]{{4}}'")
+        where.append(f"{a34}::text ~ '^[0-9]{{4}}'")
+        where.append(f"ABS({y33} - {y34}) >= {n}")
 
     if plan.query_kind in {"rank", "list"} and any(
         item.field == "height_m" for item in plan.order_by
     ):
         height_used = True
     if height_used and plan.entity == "building":
-        where.append(_sane_height_sql(alias))
+        height_col = col_map.get("height_m") or "A16"
+        floors_col = col_map.get("ground_floors") or "A26"
+        where.append(_sane_height_sql(alias, height_col, floors_col))
 
-    select_sql = _select_sql(alias, plan)
-    from_sql = f"FROM {_ident(entity.default_table, physical=True)} {alias}"
+    select_sql = _select_sql(alias, plan, filter_clause=pred_clause, col_map=col_map)
+    from_sql = f"FROM {_ident(default_table, physical=True)} {alias}"
     if joins:
         from_sql = from_sql + "\n" + "\n".join(joins)
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
-    group_sql = _group_sql(alias, plan)
+    group_sql = _group_sql(alias, plan, col_map=col_map)
     having_sql = ""
     if plan.having and plan.having.predicate:
-        having_clause, _, having_params = _predicate_sql(alias, plan.entity, plan.having.predicate)
+        having_clause, _, having_params = _predicate_sql(
+            alias, plan.entity, plan.having.predicate, col_map=col_map
+        )
         having_sql = f"HAVING {having_clause}"
         params.extend(having_params)
-    order_sql = _order_sql(alias, plan)
+    order_sql = _order_sql(alias, plan, col_map=col_map)
     if spatial_order:
         extra_order = ", ".join(spatial_order)
         order_sql = f"{order_sql}, {extra_order}" if order_sql else f"ORDER BY {extra_order}"
@@ -154,6 +211,7 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
     sql = "\n".join(parts) + ";"
 
     _assert_safe_sql(sql)
+    _assert_table_columns(sql, plan.entity, tables)
     extra = dict(plan.model_dump().get("extra") or {})
     extra["compile_trace"] = {
         "entity": plan.entity,
@@ -176,19 +234,59 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
     )
 
 
-def _select_sql(alias: str, plan: SemanticQueryPlan) -> str:
+def _field_col(
+    alias: str,
+    entity: str,
+    key: str,
+    col_map: dict[str, str] | None = None,
+):
+    field = get_field(entity, key)
+    column = (col_map or {}).get(key) or field.column
+    return field, _col(alias, column)
+
+
+def _select_sql(
+    alias: str,
+    plan: SemanticQueryPlan,
+    filter_clause: str | None = None,
+    col_map: dict[str, str] | None = None,
+) -> str:
+    if "ratio_percent" in (plan.assumptions or []):
+        if filter_clause:
+            return (
+                "SELECT 100.0 * COUNT(*) FILTER "
+                f"(WHERE {filter_clause})::float8 "
+                '/ NULLIF(COUNT(*), 0) AS "ratio_pct"'
+            )
+        return 'SELECT 100.0 * COUNT(*)::float8 / NULLIF(COUNT(*), 0) AS "ratio_pct"'
     if plan.query_kind == "count":
+        industrial_join = any(
+            getattr(rel.target, "entity", None) == "industrial_complex"
+            for rel in plan.spatial_relations
+        )
+        if industrial_join:
+            pk = {
+                "building": "A0",
+                "basic_zone": "BAS_ID",
+                "industrial_complex": "A0",
+            }.get(plan.entity, "A0")
+            return f'SELECT COUNT(DISTINCT {alias}."{pk}") AS "count"'
         return 'SELECT COUNT(*) AS "count"'
     if plan.query_kind in {"aggregate", "distribution"}:
         pieces: list[str] = []
         for key in plan.group_by:
-            field = get_field(plan.entity, key)
-            pieces.append(f"{_col(alias, field.column)} AS {_ident(key)}")
+            _field, col = _field_col(alias, plan.entity, key, col_map)
+            if key == "approval_date" and "approval_decade" in (plan.assumptions or []):
+                pieces.append(f"{_approval_decade_expr(col)} AS {_ident('decade')}")
+            elif key == "sigungu_name" and plan.entity == "building":
+                pieces.append(f"{_sigungu_name_sql(alias)} AS {_ident(key)}")
+            else:
+                pieces.append(f"{col} AS {_ident(key)}")
         aggs = list(plan.aggregations)
         if not aggs and plan.query_kind == "distribution":
             pieces.append('COUNT(*) AS "n"')
         for agg in aggs:
-            pieces.append(_agg_sql(alias, plan.entity, agg.function, agg.field, agg.alias))
+            pieces.append(_agg_sql(alias, plan.entity, agg, col_map=col_map))
         if not pieces:
             raise SemanticCompileError("aggregate/distribution needs aggregations")
         return "SELECT " + ",\n       ".join(pieces)
@@ -205,8 +303,7 @@ def _select_sql(alias: str, plan: SemanticQueryPlan) -> str:
             keys = ["name", "legal_dong", "lot_address"]
     pieces = []
     for key in keys:
-        field = get_field(plan.entity, key)
-        expr = _col(alias, field.column)
+        field, expr = _field_col(alias, plan.entity, key, col_map)
         if field.data_type == "number":
             expr = f"{expr}::float8"
         pieces.append(f"{expr} AS {_ident(key)}")
@@ -216,21 +313,36 @@ def _select_sql(alias: str, plan: SemanticQueryPlan) -> str:
 def _agg_sql(
     alias: str,
     entity: str,
-    function: str,
-    field_key: str | None,
-    alias_name: str | None,
+    agg,
+    col_map: dict[str, str] | None = None,
 ) -> str:
-    out = alias_name or (f"{function}_{field_key}" if field_key else function)
+    function = agg.function
+    field_key = agg.field
+    out = agg.alias or (f"{function}_{field_key}" if field_key else function)
     if not _IDENT_RE.fullmatch(out):
         raise SemanticCompileError(f"invalid aggregation alias: {out}")
+    if getattr(agg, "filter_field", None):
+        from llm2sql.semantic_plan.models import FilterSpec
+
+        extra, _ = _filter_sql(
+            alias,
+            entity,
+            FilterSpec(
+                field=agg.filter_field,
+                operator=agg.filter_operator or "eq",
+                value=agg.filter_value,
+            ),
+            col_map=col_map,
+        )
+        return f"COUNT(*) FILTER (WHERE {extra}) AS {_ident(out)}"
     if function == "count" and not field_key:
         return f'COUNT(*) AS {_ident(out)}'
     if not field_key:
         raise SemanticCompileError(f"{function} requires a field")
-    field = get_field(entity, field_key)
+    field, col = _field_col(alias, entity, field_key, col_map)
     if not field.aggregatable:
         raise SemanticCompileError(f"field is not aggregatable: {field_key}")
-    expr = f"{_col(alias, field.column)}::float8"
+    expr = f"{col}::float8"
     if function == "median":
         return f"PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {expr}) AS {_ident(out)}"
     fn = {"avg": "AVG", "sum": "SUM", "min": "MIN", "max": "MAX", "count": "COUNT"}
@@ -240,19 +352,31 @@ def _agg_sql(
     return f"{sql_fn}({expr}) AS {_ident(out)}"
 
 
-def _group_sql(alias: str, plan: SemanticQueryPlan) -> str:
+def _group_sql(
+    alias: str, plan: SemanticQueryPlan, col_map: dict[str, str] | None = None
+) -> str:
     if not plan.group_by:
         return ""
     cols = []
     for key in plan.group_by:
-        field = get_field(plan.entity, key)
-        cols.append(_col(alias, field.column))
+        _field, col = _field_col(alias, plan.entity, key, col_map)
+        if key == "approval_date" and "approval_decade" in (plan.assumptions or []):
+            cols.append(_approval_decade_expr(col))
+        elif key == "sigungu_name" and plan.entity == "building":
+            cols.append(_sigungu_name_sql(alias))
+        else:
+            cols.append(col)
     return "GROUP BY " + ", ".join(cols)
 
 
-def _order_sql(alias: str, plan: SemanticQueryPlan) -> str:
+def _order_sql(
+    alias: str, plan: SemanticQueryPlan, col_map: dict[str, str] | None = None
+) -> str:
     if plan.query_kind == "distribution" and not plan.order_by:
         return 'ORDER BY "n" DESC NULLS LAST'
+    if not plan.order_by and plan.group_by and plan.aggregations:
+        metric = plan.aggregations[-1].alias or "n"
+        return f"ORDER BY {_ident(metric)} DESC NULLS LAST"
     if not plan.order_by:
         return ""
     bits = []
@@ -261,9 +385,12 @@ def _order_sql(alias: str, plan: SemanticQueryPlan) -> str:
         if item.field in agg_aliases or item.field in {"count", "n"}:
             expr = _ident(item.field)
         else:
-            field = get_field(plan.entity, item.field)
-            expr = _col(alias, field.column)
-            if field.data_type == "number":
+            field, expr = _field_col(alias, plan.entity, item.field, col_map)
+            if item.field == "approval_date" and "approval_decade" in (plan.assumptions or []):
+                expr = _approval_decade_expr(
+                    _field_col(alias, plan.entity, "approval_date", col_map)[1]
+                )
+            elif field.data_type == "number":
                 expr = f"{expr}::float8"
         direction = "DESC" if item.direction == "desc" else "ASC"
         nulls = "NULLS FIRST" if item.nulls == "first" else "NULLS LAST"
@@ -271,7 +398,12 @@ def _order_sql(alias: str, plan: SemanticQueryPlan) -> str:
     return "ORDER BY " + ", ".join(bits)
 
 
-def _operand_sql(alias: str, entity: str, operand) -> tuple[str, bool, list[object]]:
+def _operand_sql(
+    alias: str,
+    entity: str,
+    operand,
+    col_map: dict[str, str] | None = None,
+) -> tuple[str, bool, list[object]]:
     from llm2sql.semantic_plan.models import OperandSpec
 
     if operand is None:
@@ -279,8 +411,7 @@ def _operand_sql(alias: str, entity: str, operand) -> tuple[str, bool, list[obje
     if operand.kind == "field":
         if not operand.field:
             raise SemanticCompileError("field operand missing name")
-        field = get_field(entity, operand.field)
-        col = _col(alias, field.column)
+        field, col = _field_col(alias, entity, operand.field, col_map)
         expr = f"{col}::float8" if field.data_type == "number" else col
         return expr, operand.field == "height_m", []
     field_type = "number" if isinstance(operand.value, (int, float)) else "text"
@@ -288,28 +419,70 @@ def _operand_sql(alias: str, entity: str, operand) -> tuple[str, bool, list[obje
     return lit, False, [operand.value]
 
 
-def _predicate_sql(alias: str, entity: str, pred: PredicateSpec) -> tuple[str, bool, list[object]]:
+def _predicate_sql(
+    alias: str,
+    entity: str,
+    pred: PredicateSpec,
+    col_map: dict[str, str] | None = None,
+) -> tuple[str, bool, list[object]]:
     if pred.op == "and":
-        parts = [_predicate_sql(alias, entity, child) for child in (pred.args or [])]
+        parts = [
+            _predicate_sql(alias, entity, child, col_map=col_map)
+            for child in (pred.args or [])
+        ]
         sql = "(" + " AND ".join(item[0] for item in parts) + ")"
         return sql, any(item[1] for item in parts), [p for item in parts for p in item[2]]
     if pred.op == "or":
-        parts = [_predicate_sql(alias, entity, child) for child in (pred.args or [])]
+        parts = [
+            _predicate_sql(alias, entity, child, col_map=col_map)
+            for child in (pred.args or [])
+        ]
         sql = "(" + " OR ".join(item[0] for item in parts) + ")"
         return sql, any(item[1] for item in parts), [p for item in parts for p in item[2]]
     if pred.op == "not":
         if not pred.args:
             raise SemanticCompileError("not predicate missing args")
-        inner, height_used, params = _predicate_sql(alias, entity, pred.args[0])
+        inner, height_used, params = _predicate_sql(
+            alias, entity, pred.args[0], col_map=col_map
+        )
         return f"(NOT {inner})", height_used, params
     if pred.op != "cmp" or pred.operator is None:
         raise SemanticCompileError(f"unsupported predicate op: {pred.op}")
+    if pred.left and pred.left.field in {"special_land", "structure"}:
+        spec = FilterSpec(
+            field=pred.left.field,
+            operator=pred.operator,
+            value=pred.right.value if pred.right else None,
+        )
+        sql, height_used = _filter_sql(alias, entity, spec, col_map=col_map)
+        return sql, height_used, []
+    if pred.left and pred.left.field in {"approval_date", "permit_date"}:
+        raw = pred.right.value if pred.right else None
+        value2 = None
+        value = raw
+        if pred.operator == "between":
+            if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+                value, value2 = raw[0], raw[1]
+            else:
+                raise SemanticCompileError("between requires [low, high] literal")
+        spec = FilterSpec(
+            field="approval_date",
+            operator=pred.operator,
+            value=value,
+            value2=value2,
+        )
+        _field, col = _field_col(alias, entity, "approval_date", col_map)
+        return _approval_date_sql(col, spec), False, []
     if pred.operator in {"is_null", "is_not_null"}:
-        left, height_used, params = _operand_sql(alias, entity, pred.left)
+        left, height_used, params = _operand_sql(
+            alias, entity, pred.left, col_map=col_map
+        )
         sql = f"{left} IS NULL" if pred.operator == "is_null" else f"{left} IS NOT NULL"
         return sql, height_used, params
     if pred.operator == "between":
-        left, height_used, params = _operand_sql(alias, entity, pred.left)
+        left, height_used, params = _operand_sql(
+            alias, entity, pred.left, col_map=col_map
+        )
         raw = pred.right.value if pred.right else None
         if isinstance(raw, (list, tuple)) and len(raw) >= 2:
             low, high = raw[0], raw[1]
@@ -322,7 +495,9 @@ def _predicate_sql(alias: str, entity: str, pred: PredicateSpec) -> tuple[str, b
             params,
         )
     if pred.operator in {"in", "not_in"}:
-        left, height_used, params = _operand_sql(alias, entity, pred.left)
+        left, height_used, params = _operand_sql(
+            alias, entity, pred.left, col_map=col_map
+        )
         values = pred.right.value if pred.right else []
         if not isinstance(values, (list, tuple)):
             values = [values]
@@ -330,8 +505,8 @@ def _predicate_sql(alias: str, entity: str, pred: PredicateSpec) -> tuple[str, b
         params.extend(list(values))
         kw = "IN" if pred.operator == "in" else "NOT IN"
         return f"{left} {kw} ({lits})", height_used, params
-    left_sql, h1, p1 = _operand_sql(alias, entity, pred.left)
-    right_sql, h2, p2 = _operand_sql(alias, entity, pred.right)
+    left_sql, h1, p1 = _operand_sql(alias, entity, pred.left, col_map=col_map)
+    right_sql, h2, p2 = _operand_sql(alias, entity, pred.right, col_map=col_map)
     op = _OPS.get(pred.operator)
     if op is None:
         if pred.operator == "neq":
@@ -343,13 +518,19 @@ def _predicate_sql(alias: str, entity: str, pred: PredicateSpec) -> tuple[str, b
     return f"{left_sql} {op} {right_sql}", h1 or h2, p1 + p2
 
 
-def _filter_sql(alias: str, entity: str, spec: FilterSpec) -> tuple[str, bool]:
+def _filter_sql(
+    alias: str,
+    entity: str,
+    spec: FilterSpec,
+    col_map: dict[str, str] | None = None,
+) -> tuple[str, bool]:
     try:
-        field = get_field(entity, spec.field)
+        field, col = _field_col(alias, entity, spec.field, col_map)
     except UnknownSemanticFieldError as exc:
         raise SemanticCompileError(str(exc)) from exc
-    col = _col(alias, field.column)
     height_used = spec.field == "height_m"
+    if spec.field in {"approval_date", "permit_date"}:
+        return _approval_date_sql(col, spec), height_used
     if spec.operator == "is_null":
         return f"{col} IS NULL", height_used
     if spec.operator == "is_not_null":
@@ -362,6 +543,19 @@ def _filter_sql(alias: str, entity: str, spec: FilterSpec) -> tuple[str, bool]:
         values = spec.value if isinstance(spec.value, (list, tuple)) else [spec.value]
         lits = ", ".join(_literal(v, field.data_type) for v in values)
         return f"{col} IN ({lits})", height_used
+    if spec.field == "special_land" and not col_map:
+        a6 = _col(alias, "A6")
+        a7 = _col(alias, "A7")
+        raw = str(spec.value or "").strip()
+        if raw in {"산", "산지"}:
+            inner = f"({a6}::text = '2' OR TRIM(COALESCE({a7}::text, '')) = '산')"
+        elif raw in {"일반", "일반지번"}:
+            inner = f"({a6}::text = '1' OR TRIM(COALESCE({a7}::text, '')) = '일반')"
+        else:
+            inner = f"TRIM(COALESCE({a7}::text, '')) = {_literal(raw, 'text')}"
+        if spec.operator == "neq":
+            return f"(NOT {inner})", height_used
+        return inner, height_used
     if spec.operator == "contains":
         pattern = spec.value
         if spec.field == "structure" and isinstance(pattern, str):
@@ -369,15 +563,17 @@ def _filter_sql(alias: str, entity: str, spec: FilterSpec) -> tuple[str, bool]:
             if mapped:
                 return f"{col} ILIKE {_literal(mapped, 'text')}", height_used
         return f"{col} ILIKE {_literal(f'%{pattern}%', 'text')}", height_used
+    if spec.field == "structure" and spec.operator == "neq" and isinstance(spec.value, str):
+        mapped = STRUCTURE_ALIASES.get(spec.value) or f"%{spec.value}%"
+        return f"NOT ({col} ILIKE {_literal(mapped, 'text')})", height_used
     if spec.operator == "between":
         left = _literal(spec.value, field.data_type)
         right = _literal(spec.value2, field.data_type)
         expr = f"{col}::float8" if field.data_type == "number" else col
         return f"{expr} BETWEEN {left} AND {right}", height_used
     if spec.value_field:
-        other = get_field(entity, spec.value_field)
+        other, right = _field_col(alias, entity, spec.value_field, col_map)
         left = f"{col}::float8" if field.data_type == "number" else col
-        right = _col(alias, other.column)
         if other.data_type == "number":
             right = f"{right}::float8"
         op = _OPS.get(spec.operator)
@@ -418,19 +614,37 @@ def _apply_spatial_relations(
         )
         target_entity = getattr(target, "entity", None) or "admin_area"
         if policy.kind == "predicate":
-            if not place_name:
+            target_entity = getattr(target, "entity", None) or "admin_area"
+            if not place_name and target_entity != "industrial_complex":
                 raise SemanticCompileError(f"{rel.relation} requires a place target")
-            used_places.add(place_name)
-            d_alias = "a" if not admin_alias_used else f"a{index}"
-            admin_alias_used = True
-            table, name_clause = _spatial_target_sql(target_entity, d_alias, place_name)
+            if place_name:
+                used_places.add(place_name)
+            if target_entity == "industrial_complex":
+                d_alias = "ind" if index == 0 else f"ind{index}"
+            else:
+                d_alias = "a" if not admin_alias_used else f"a{index}"
+                admin_alias_used = True
+            table, name_clause = _spatial_target_sql(
+                target_entity, d_alias, place_name or ""
+            )
             if table not in tables:
                 tables.append(table)
-            joins.append(
-                f"JOIN {_ident(table, physical=True)} {d_alias} "
-                f"ON {policy.postgis_fn}({alias}.geometry, {d_alias}.geometry)"
-            )
-            where.append(name_clause)
+            if target_entity == "industrial_complex":
+                exists = (
+                    f"EXISTS (SELECT 1 FROM {_ident(table, physical=True)} {d_alias} "
+                    f"WHERE {policy.postgis_fn}({alias}.geometry, {d_alias}.geometry)"
+                )
+                if name_clause and name_clause != "TRUE":
+                    exists += f" AND {name_clause}"
+                exists += ")"
+                where.append(exists)
+            else:
+                joins.append(
+                    f"JOIN {_ident(table, physical=True)} {d_alias} "
+                    f"ON {policy.postgis_fn}({alias}.geometry, {d_alias}.geometry)"
+                )
+                if name_clause and name_clause != "TRUE":
+                    where.append(name_clause)
             uses_boundary = True
             continue
         if policy.kind in {"distance", "distance_outside"}:
@@ -456,7 +670,7 @@ def _apply_spatial_relations(
                 where.append(
                     "ST_DWithin("
                     f"{alias}.geometry::geography, "
-                    f"{z_alias}.geom::geography, "
+                    f"{_distance_origin_sql(z_alias, plan)}::geography, "
                     f"{meters})"
                 )
                 if policy.kind == "distance_outside":
@@ -570,10 +784,27 @@ def _apply_canonical_joins(
             raise SemanticCompileError(f"uncompiled join edge: {edge.edge_id}")
 
 
+def _sigungu_name_sql(alias: str) -> str:
+    whens = " ".join(
+        f"WHEN {alias}.\"A3\" LIKE {_literal(code + '%', 'text')} THEN {_literal(name, 'text')}"
+        for name, code in BUSAN_GU_CODES.items()
+    )
+    return f"(CASE {whens} ELSE NULL END)"
+
+
+def _distance_origin_sql(z_alias: str, plan: SemanticQueryPlan) -> str:
+    if "distance_from_centroid" in (plan.assumptions or []):
+        return f"ST_Centroid({z_alias}.geom)"
+    return f"{z_alias}.geom"
+
+
 def _a4_place_sql(alias: str, place: str) -> str:
     col = f'{alias}."A4"'
     if place.endswith(("동", "가", "리", "로")):
         return f"({col} LIKE {_literal('% ' + place, 'text')} OR {col} = {_literal(place, 'text')})"
+    code = BUSAN_GU_CODES.get(place)
+    if code:
+        return f'{alias}."A3" LIKE {_literal(code + "%", "text")}'
     return f"{col} LIKE {_literal('%' + place + '%', 'text')}"
 
 
@@ -596,6 +827,17 @@ def _entity_place_sql(alias: str, entity: str, place: str) -> str:
     if entity == "basic_zone":
         return f'{alias}."SIG_KOR_NM" LIKE {_literal("%" + place + "%", "text")}'
     if entity == "industrial_complex":
+        if not (place or "").strip():
+            return "TRUE"
+        parts = [p.strip() for p in re.split(r"[·･、,/|]", place) if p.strip()]
+        if len(parts) >= 2:
+            clauses = []
+            for part in parts:
+                pat = _literal("%" + part + "%", "text")
+                clauses.append(
+                    f'({alias}."A8" ILIKE {pat} OR {alias}."A9" ILIKE {pat})'
+                )
+            return "(" + " OR ".join(clauses) + ")"
         pat = _literal("%" + place + "%", "text")
         return f'({alias}."A8" ILIKE {pat} OR {alias}."A9" ILIKE {pat})'
     return _a4_place_sql(alias, place)
@@ -626,13 +868,50 @@ def _predicate_node_ids(pred: PredicateSpec) -> list[str]:
     return out
 
 
-def _sane_height_sql(alias: str) -> str:
-    col = f'{alias}."A16"::float8'
-    floors = f'{alias}."A26"::float8'
+def _sane_height_sql(
+    alias: str, height_col: str = "A16", floors_col: str = "A26"
+) -> str:
+    col = f'{alias}."{height_col}"::float8'
+    floors = f'{alias}."{floors_col}"::float8'
     return (
         f"{col} > 0 AND {col} <= 600 AND "
-        f"({alias}.\"A26\" IS NULL OR {col} <= ({floors} * 8 + 30))"
+        f"({alias}.\"{floors_col}\" IS NULL OR {col} <= ({floors} * 8 + 30))"
     )
+
+
+def _plan_uses_d198_slots(plan: SemanticQueryPlan) -> bool:
+    fields = {item.field for item in plan.filters}
+    from llm2sql.semantic_plan.predicate_utils import walk_predicate
+
+    pred = effective_predicate(plan)
+    if pred is not None:
+        for node in walk_predicate(pred):
+            if node.op == "cmp" and node.left and node.left.field:
+                fields.add(node.left.field)
+    return bool(
+        fields & {"detail_usage", "usage_class", "ledger_kind", "permit_date"}
+    ) or (
+        "d198_ledger" in (plan.assumptions or [])
+    )
+
+
+def _d198_table_for_plan(plan: SemanticQueryPlan) -> str | None:
+    if plan.entity != "building" or not _plan_uses_d198_slots(plan):
+        return None
+    place = plan.scope.place.name.strip() if plan.scope and plan.scope.place else ""
+    gu = place if place.endswith(("구", "군")) else None
+    table = d198_table_for_gu(gu) if gu else None
+    if table is None:
+        raise SemanticCompileError(
+            "detail_usage/usage_class require a D198-covered district"
+        )
+    return table
+
+
+def _column_override(plan: SemanticQueryPlan) -> dict[str, str]:
+    if _d198_table_for_plan(plan):
+        return dict(D198_BUILDING_COLUMNS)
+    return {}
 
 
 def _col(alias: str, column: str) -> str:
@@ -680,6 +959,41 @@ def _literal(value: object, data_type: str) -> str:
     return "'" + text.replace("'", "''") + "'"
 
 
+def _approval_year_expr(col: str) -> str:
+    return f"LEFT(regexp_replace({col}::text, '[^0-9]', '', 'g'), 4)"
+
+
+def _approval_decade_expr(col: str) -> str:
+    return f"(({_approval_year_expr(col)})::int / 10 * 10)"
+
+
+def _approval_date_sql(col: str, spec: FilterSpec) -> str:
+    """사용승인일 텍스트 컬럼을 연도 또는 날짜로 비교한다."""
+    year_expr = _approval_year_expr(col)
+    valid = f"({col}::text ~ '^[0-9]{{4}}')"
+    op = _OPS.get(spec.operator)
+    if spec.operator == "between":
+        lo, hi = spec.value, spec.value2
+        return f"{valid} AND {year_expr}::int BETWEEN {int(lo)} AND {int(hi)}"
+    raw = spec.value
+    if isinstance(raw, str) and re.match(r"^\d{4}-\d{2}-\d{2}", raw):
+        year = int(raw[:4])
+        iso = raw[:10]
+        date_ok = f"{col}::text ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}'"
+        year_ok = f"{col}::text ~ '^[0-9]{{4}}$'"
+        if op is None:
+            raise SemanticCompileError(f"unknown operator: {spec.operator}")
+        return (
+            f"{valid} AND ("
+            f"({date_ok} AND {col}::date {op} DATE '{iso}') OR "
+            f"({year_ok} AND {year_expr}::int {op} {year})"
+            f")"
+        )
+    if op is None:
+        raise SemanticCompileError(f"unknown operator: {spec.operator}")
+    return f"{valid} AND {year_expr}::int {op} {int(float(raw))}"
+
+
 def _assert_safe_sql(sql: str) -> str:
     lower = " ".join(sql.lower().split())
     if not lower.startswith("select"):
@@ -689,4 +1003,17 @@ def _assert_safe_sql(sql: str) -> str:
             raise SemanticCompileError(f"forbidden keyword: {word}")
     if "select *" in lower:
         raise SemanticCompileError("SELECT * is not allowed")
+    return sql
+
+
+def _assert_table_columns(sql: str, entity: str, tables: list[str]) -> str:
+    """D010에 D198 전용 컬럼(A33/A34/A30)을 붙이지 않는다."""
+    from llm2sql.sql_d010_guard import rewrite_d198_columns_on_d010, uses_d010_only
+
+    using_d010 = entity == "building" or any("AL_D010" in (t or "") for t in tables)
+    using_d198 = any("AL_D198" in (t or "") for t in tables)
+    if using_d010 and not using_d198:
+        sql = rewrite_d198_columns_on_d010(sql)
+        if uses_d010_only(sql) and re.search(r'"(A33|A34|A30)"', sql):
+            raise SemanticCompileError("D198 columns cannot be used on D010")
     return sql

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from llm2sql.domain import D198_TABLES
 from llm2sql.semantic_plan.models import UnknownSemanticFieldError
 
 BUILDING_TABLE = "AL_D010_26_20250704"
@@ -33,7 +34,11 @@ _FIELD_ALIASES = {
     "floor_area_ratio": "floor_area_ratio",
     "violation_status": "violation_status",
     "building_dong_name": "building_dong_name",
+    "special_land": "special_land",
     "approval_date": "approval_date",
+    "detail_usage": "detail_usage",
+    "usage_class": "usage_class",
+    "basement_floors": "basement_floors",
 }
 
 
@@ -194,8 +199,26 @@ BUILDING_FIELDS: dict[str, SemanticField] = {
     "building_dong_name": _text(
         "building_dong_name", "building", BUILDING_TABLE, "A25", "건물동명"
     ),
+    "sigungu_name": _text(
+        "sigungu_name", "building", BUILDING_TABLE, "A3", "시군구명"
+    ),
+    "special_land": _text(
+        "special_land", "building", BUILDING_TABLE, "A7", "특수지구분명"
+    ),
     "approval_date": _date(
         "approval_date", "building", BUILDING_TABLE, "A13", "사용승인일자"
+    ),
+    "permit_date": _date(
+        "permit_date", "building", BUILDING_TABLE, "A13", "허가일자"
+    ),
+    "detail_usage": _text(
+        "detail_usage", "building", BUILDING_TABLE, "A27", "세부용도"
+    ),
+    "usage_class": _text(
+        "usage_class", "building", BUILDING_TABLE, "A29", "용도분류"
+    ),
+    "ledger_kind": _text(
+        "ledger_kind", "building", BUILDING_TABLE, "A12", "대장종류"
     ),
     "geometry": SemanticField(
         key="geometry",
@@ -253,6 +276,9 @@ BASIC_ZONE_FIELDS: dict[str, SemanticField] = {
         "area_m2", "basic_zone", BASIC_ZONE_TABLE, "BAS_AR", "기초구역면적", "m2"
     ),
     "gu_name": _text("gu_name", "basic_zone", BASIC_ZONE_TABLE, "SIG_KOR_NM", "시군구명"),
+    "move_reason": _text(
+        "move_reason", "basic_zone", BASIC_ZONE_TABLE, "MVMN_RESN", "이동사유"
+    ),
     "geometry": SemanticField(
         key="geometry",
         entity="basic_zone",
@@ -275,12 +301,25 @@ FIELDS_BY_ENTITY: dict[str, dict[str, SemanticField]] = {
 }
 
 ALLOWED_TABLES = frozenset(
-    {BUILDING_TABLE, ADMIN_TABLE, BASIC_ZONE_TABLE, INDUSTRIAL_TABLE}
+    {BUILDING_TABLE, ADMIN_TABLE, BASIC_ZONE_TABLE, INDUSTRIAL_TABLE, *D198_TABLES}
 )
 ALLOWED_COLUMNS = frozenset(
-    field.column
-    for fields in FIELDS_BY_ENTITY.values()
-    for field in fields.values()
+    {field.column for fields in FIELDS_BY_ENTITY.values() for field in fields.values()}
+    | {
+        "A3",
+        "A7",
+        "A13",
+        "A19",
+        "A21",
+        "A23",
+        "A25",
+        "A29",
+        "A30",
+        "A31",
+        "A32",
+        "A33",
+        "A34",
+    }
 )
 CANONICAL_ALIASES = frozenset(
     {

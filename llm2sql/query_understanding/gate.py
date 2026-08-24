@@ -19,15 +19,19 @@ def accept_heuristic_plan(contract: QueryContract, plan: SemanticQueryPlan) -> b
         return True
     if plan.unsupported_reason:
         return False
+    pred = effective_predicate(plan)
+    or_bound = has_op(pred, "or")
+    unresolved_ok = not contract.unresolved_spans
+    if or_bound:
+        unresolved_ok = True
     if not (
         contract.boolean_structure_supported
         and contract.aggregation_complete
         and contract.all_numeric_expressions_bound
         and contract.all_requested_outputs_bound
-        and not contract.unresolved_spans
+        and unresolved_ok
     ):
         return False
-    pred = effective_predicate(plan)
     if any(span.kind == "or" for span in contract.boolean_ops):
         if not _or_bound(contract.question, plan, pred):
             return False
@@ -59,7 +63,18 @@ def accept_heuristic_plan(contract: QueryContract, plan: SemanticQueryPlan) -> b
             return False
     if contract.places:
         if plan.scope is None or plan.scope.place is None:
-            return False
+            from llm2sql.domain import is_busan_wide
+
+            industrial_place = any(
+                getattr(rel.target, "entity", None) == "industrial_complex"
+                or (
+                    rel.target.place is not None
+                    and bool((rel.target.place.name or "").strip())
+                )
+                for rel in plan.spatial_relations
+            )
+            if not is_busan_wide(contract.question) and not industrial_place:
+                return False
     return True
 
 
@@ -99,6 +114,6 @@ def _or_bound(question: str, plan: SemanticQueryPlan, pred) -> bool:
         return any(item.field == "usage" and item.value == mapped[0] for item in plan.filters) or (
             plan.predicate is not None and plan.predicate.op == "cmp"
         )
-    if len(usages) < 2:
+    if len(usages) >= 2:
         return False
     return False

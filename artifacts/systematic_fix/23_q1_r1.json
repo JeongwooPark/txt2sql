@@ -1,0 +1,840 @@
+{
+  "when": "2026-08-25 07:25:35",
+  "gold_file": "D:\\py_workspace\\llm2sql\\docs\\평가문항_500.json",
+  "md_file": "D:\\py_workspace\\llm2sql\\docs\\평가문항_500.md",
+  "scoring": "gold_value_match_not_sql_tokens",
+  "timeout_s": 40,
+  "elapsed_s": 50.6,
+  "total": 18,
+  "passed": 7,
+  "failed": 11,
+  "accuracy_pct": 38.9,
+  "latency": {
+    "avg_ms": 2809,
+    "p50_ms": 75,
+    "p95_ms": 6008,
+    "max_ms": 40014,
+    "avg_ms_passed": 1180,
+    "buckets": {
+      ">30s": 1,
+      "100–500ms": 2,
+      "2–10s": 1,
+      "<100ms": 10,
+      "0.5–2s": 4
+    }
+  },
+  "by_kind": {
+    "count": {
+      "n": 8,
+      "ok": 4,
+      "acc_pct": 50.0
+    },
+    "compare": {
+      "n": 3,
+      "ok": 0,
+      "acc_pct": 0.0
+    },
+    "scalar": {
+      "n": 3,
+      "ok": 0,
+      "acc_pct": 0.0
+    },
+    "group": {
+      "n": 3,
+      "ok": 2,
+      "acc_pct": 66.7
+    },
+    "list": {
+      "n": 1,
+      "ok": 1,
+      "acc_pct": 100.0
+    }
+  },
+  "by_cat": {
+    "공간복합": {
+      "n": 10,
+      "ok": 5,
+      "acc_pct": 50.0
+    },
+    "집계비율": {
+      "n": 4,
+      "ok": 0,
+      "acc_pct": 0.0
+    },
+    "비교": {
+      "n": 1,
+      "ok": 0,
+      "acc_pct": 0.0
+    },
+    "산업단지": {
+      "n": 1,
+      "ok": 0,
+      "acc_pct": 0.0
+    },
+    "논리OR": {
+      "n": 1,
+      "ok": 1,
+      "acc_pct": 100.0
+    },
+    "미사용속성": {
+      "n": 1,
+      "ok": 1,
+      "acc_pct": 100.0
+    }
+  },
+  "by_source": {
+    "new": {
+      "n": 16,
+      "ok": 7,
+      "acc_pct": 43.8
+    },
+    "nl100": {
+      "n": 2,
+      "ok": 0,
+      "acc_pct": 0.0
+    }
+  },
+  "by_block": {
+    "nl100": {
+      "n": 2,
+      "ok": 0,
+      "acc_pct": 0.0
+    },
+    "new400": {
+      "n": 16,
+      "ok": 7,
+      "acc_pct": 43.8
+    },
+    "followup": {
+      "n": 0,
+      "ok": 0,
+      "acc_pct": 0.0
+    }
+  },
+  "routes": {
+    "semantic_plan_count": 6,
+    "(none)": 4,
+    "semantic_plan_clarify": 3,
+    "semantic_plan_distribution": 2,
+    "clarify_column": 1,
+    "semantic_plan_list": 1,
+    "semantic_plan_aggregate": 1
+  },
+  "fail_reasons": {
+    "count-mismatch": 3,
+    "scalar-mismatch": 3,
+    "compare-num-missing": 2,
+    "timeout>40s": 1,
+    "engine-fail:heuristic_plan": 1,
+    "engine-fail:-": 1
+  },
+  "failed_items": [
+    {
+      "id": "N069",
+      "cat": "비교",
+      "kind": "compare",
+      "q": "엘시티랑 엘크루 블루오션 중에 더 높은 건물은?",
+      "gold": "name=중동 18290000 숙박시설 (주식회사엘시티피이에프브이); height_m=411.6 | name=엘시티, height_m=339.1 / name=르씨엘시티, height_m=57 / name=엘크루 블루오션, height_m=35.45",
+      "answer": "",
+      "reason": "timeout>40s",
+      "route": null,
+      "ms": 40014,
+      "sql": "",
+      "root_causes": [
+        "EXECUTION_TIMEOUT"
+      ]
+    },
+    {
+      "id": "N090",
+      "cat": "산업단지",
+      "kind": "count",
+      "q": "사하구 산업단지와 교차하는 기초구역은 몇 개야?",
+      "gold": "35개",
+      "answer": "사하구의 조건에 해당하는 건물은 162건입니다.",
+      "reason": "count-mismatch gold=35 pred=[162.0, 162.0]",
+      "route": "semantic_plan_count",
+      "ms": 175,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(z.geometry, a.geometry) / WHERE TRUE AND z.\"SIG_KOR_NM\" LIKE '%사하구%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q244",
+      "cat": "집계비율",
+      "kind": "compare",
+      "q": "서구 공동주택 연면적 합계가 단독주택 연면적 합계보다 얼마나 큰가",
+      "gold": "apt_sum=1,953,917.88; detached_sum=819,131.1875; diff_sum=1,134,786.6925",
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_clarify",
+      "ms": 3,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q245",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "동구 용도 종류 수(distinct A9)와 가장 많은 용도 건수",
+      "gold": "n_usage=27; max_usage_n=9,360",
+      "answer": "컬럼 A9은(는) 테이블마다 의미가 다를 수 있습니다. / 어느 데이터(예: 부산 건물 AL_D010, 산업단지, 동래/금정 용도별건물)를 기준으로 할지 알려 주세요. / 또는 「A9 컬럼 의미가 뭐야?」처럼 설명부터 요청할 수 있습니다.",
+      "reason": "scalar-mismatch hits=0 gold=[27.0, 9360.0]",
+      "route": "clarify_column",
+      "ms": 1,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q255",
+      "cat": "집계비율",
+      "kind": "compare",
+      "q": "금정구 2000년 이후 사용승인 공동주택 평균 층수가 1990년대보다 얼마나 높은가",
+      "gold": "avg_fl_2000=7.6913; avg_fl_1990s=6.4428; diff_fl=1.2486",
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_clarify",
+      "ms": 3,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q257",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "해운대구 아파트 중 높이 결측 비율 %",
+      "gold": "pct_null_h=0",
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "reason": "scalar-mismatch hits=0 gold=[0.0]",
+      "route": "semantic_plan_clarify",
+      "ms": 953,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q271",
+      "cat": "공간복합",
+      "kind": "count",
+      "q": "장림동 산업단지 안 공장 중 연면적 3000㎡ 이상인 채수",
+      "gold": "35채",
+      "answer": "장림동의 조건에 해당하는 건물은 76건입니다.",
+      "reason": "count-mismatch gold=35 pred=[76.0, 76.0]",
+      "route": "semantic_plan_count",
+      "ms": 109,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE TRUE AND (b.\"A4\" LIKE '% 장림동' OR b.\"A4\" = '장림동') AND (b.\"A9\" = '공장' AND b.\"A14\"::float8 >= 3000);",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q273",
+      "cat": "공간복합",
+      "kind": "group",
+      "q": "센텀2지구 도시첨단산업단지와 교차하는 건물 용도별 건수",
+      "gold": "1. usage=없음, n=612 / 2. usage=단독주택, n=63 / 3. usage=판매시설, n=18 / 4. usage=제2종근린생활시설, n=9 / 5. usage=제1종근린생활시설, n=7 / 6. usage=창고시설, n=4 / 7. usage=공동주택, n=2 / 8. usage=공장, n=2 / 9. usage=교육연구시설, n=2 / 10. usage=분뇨.쓰레기처리시설, n=2",
+      "answer": "요청하신 「센텀2지구 도시첨단산업단지와 교차하는 건물 용도별 건수」에는 지금은 답하지 못했습니다. / 이유: heuristic_plan / 시도한 SQL: SELECT b.\"A9\" AS \"usage\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geomet...",
+      "reason": "engine-fail:heuristic_plan",
+      "route": null,
+      "ms": 11,
+      "sql": "SELECT b.\"A9\" AS \"usage\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE (a.\"A8\" ILIKE '%센텀2지구도시첨단산업단지%' OR a.\"A9\" ILIKE '%센텀2지구도시첨단산업단지%') / GROUP BY b.\"A9\" / ORDER BY \"n\" DESC NULLS LAST / LIMIT 100;",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q274",
+      "cat": "공간복합",
+      "kind": "count",
+      "q": "사하구 산업단지와 교차하는 기초구역 개수",
+      "gold": "35개",
+      "answer": "사하구의 조건에 해당하는 건물은 162건입니다.",
+      "reason": "count-mismatch gold=35 pred=[162.0, 162.0]",
+      "route": "semantic_plan_count",
+      "ms": 11,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(z.geometry, a.geometry) / WHERE TRUE AND z.\"SIG_KOR_NM\" LIKE '%사하구%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q288",
+      "cat": "공간복합",
+      "kind": "scalar",
+      "q": "모라도시첨단산업단지 안 건물 수와 평균 연면적",
+      "gold": "n=22; avg_gfa=876.0655",
+      "answer": "집계 결과입니다. 평균 연면적 876.0655.",
+      "reason": "scalar-mismatch hits=1 gold=[22.0, 876.0655]",
+      "route": "semantic_plan_aggregate",
+      "ms": 952,
+      "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE (a.\"A8\" ILIKE '%모라도시첨단산업단지%' OR a.\"A9\" ILIKE '%모라도시첨단산업단지%');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q300",
+      "cat": "공간복합",
+      "kind": "count",
+      "q": "명지동 건물 중 산업단지 안에 있으면서 연면적 2000㎡ 이상인 채수",
+      "gold": "173채",
+      "answer": "요청하신 「명지동 건물 중 산업단지 안에 있으면서 연면적 2000㎡ 이상인 채수」에는 지금은 답하지 못했습니다. / 이유: - EXPLAIN failed: DuplicateAlias: 테이블 이름 \"a\" 가 한번 이상 명시되어 있습니다. / 시도한 SQL: SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON S...",
+      "reason": "engine-fail:- EXPLAIN failed: DuplicateAlias: 테이블 이름 \"a\" 가 한번 이상 명시되어 있습니다.",
+      "route": null,
+      "ms": 75,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / JOIN \"BND_ADM_DONG_PG\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE TRUE AND (a.\"ADM_NM\" = '명지동' OR a.\"ADM_NM\" ~ '^명지[0-9]+동$') AND a.\"ADM_CD\" LIKE '21%' AND b.\"A14\"::float8 >= 2000;",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED",
+        "ENTITY_SELECTION_ERROR"
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "id": "N069",
+      "cat": "비교",
+      "kind": "compare",
+      "source": "nl100",
+      "session": null,
+      "parent": null,
+      "q": "엘시티랑 엘크루 블루오션 중에 더 높은 건물은?",
+      "gold": "name=중동 18290000 숙박시설 (주식회사엘시티피이에프브이); height_m=411.6 | name=엘시티, height_m=339.1 / name=르씨엘시티, height_m=57 / name=엘크루 블루오션, height_m=35.45",
+      "pass": false,
+      "reason": "timeout>40s",
+      "route": null,
+      "error": "timeout>40s",
+      "ms": 40014,
+      "answer": "",
+      "sql": "",
+      "row_count": 0,
+      "timed_out": true,
+      "root_causes": [
+        "EXECUTION_TIMEOUT"
+      ],
+      "stage_latency_ms": {}
+    },
+    {
+      "id": "N090",
+      "cat": "산업단지",
+      "kind": "count",
+      "source": "nl100",
+      "session": null,
+      "parent": null,
+      "q": "사하구 산업단지와 교차하는 기초구역은 몇 개야?",
+      "gold": "35개",
+      "pass": false,
+      "reason": "count-mismatch gold=35 pred=[162.0, 162.0]",
+      "route": "semantic_plan_count",
+      "error": null,
+      "ms": 175,
+      "answer": "사하구의 조건에 해당하는 건물은 162건입니다.",
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(z.geometry, a.geometry) / WHERE TRUE AND z.\"SIG_KOR_NM\" LIKE '%사하구%';",
+      "row_count": 1,
+      "timed_out": false,
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 2,
+        "plan": 1,
+        "plan_validate": 9,
+        "plan_compile": 1,
+        "result": 112,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q185",
+      "cat": "논리OR",
+      "kind": "count",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "사상구 공장 또는 자동차관련시설이면서 산업단지와 교차하는 건물 수",
+      "gold": "2,143채",
+      "pass": true,
+      "reason": "count-match",
+      "route": "semantic_plan_count",
+      "error": null,
+      "ms": 6008,
+      "answer": "사상구의 조건에 해당하는 건물은 2,143건입니다.",
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE TRUE AND b.\"A4\" LIKE '%사상구%' AND (b.\"A9\" = '공장' OR b.\"A9\" = '자동차관련시설');",
+      "row_count": 1,
+      "timed_out": false,
+      "root_causes": [],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 5928,
+        "plan": 0,
+        "plan_validate": 1,
+        "plan_compile": 0,
+        "result": 79,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q188",
+      "cat": "미사용속성",
+      "kind": "count",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "부산진구 위반건축물(A20=Y) 중 공동주택은 몇 채야?",
+      "gold": "44채",
+      "pass": true,
+      "reason": "count-match",
+      "route": "semantic_plan_count",
+      "error": null,
+      "ms": 62,
+      "answer": "부산진구의 조건에 해당하는 건물은 44건입니다.",
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A4\" LIKE '%부산진구%' AND (b.\"A9\" = '공동주택' AND b.\"A20\" = 'Y');",
+      "row_count": 1,
+      "timed_out": false,
+      "root_causes": [],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 1,
+        "plan": 1,
+        "plan_validate": 1,
+        "plan_compile": 0,
+        "result": 60,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q244",
+      "cat": "집계비율",
+      "kind": "compare",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "서구 공동주택 연면적 합계가 단독주택 연면적 합계보다 얼마나 큰가",
+      "gold": "apt_sum=1,953,917.88; detached_sum=819,131.1875; diff_sum=1,134,786.6925",
+      "pass": false,
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_clarify",
+      "error": null,
+      "ms": 3,
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "sql": "",
+      "row_count": 0,
+      "timed_out": false,
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 1,
+        "plan": 2,
+        "plan_validate": 0,
+        "clarify": 0
+      }
+    },
+    {
+      "id": "Q245",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "동구 용도 종류 수(distinct A9)와 가장 많은 용도 건수",
+      "gold": "n_usage=27; max_usage_n=9,360",
+      "pass": false,
+      "reason": "scalar-mismatch hits=0 gold=[27.0, 9360.0]",
+      "route": "clarify_column",
+      "error": null,
+      "ms": 1,
+      "answer": "컬럼 A9은(는) 테이블마다 의미가 다를 수 있습니다. / 어느 데이터(예: 부산 건물 AL_D010, 산업단지, 동래/금정 용도별건물)를 기준으로 할지 알려 주세요. / 또는 「A9 컬럼 의미가 뭐야?」처럼 설명부터 요청할 수 있습니다.",
+      "sql": "",
+      "row_count": 0,
+      "timed_out": false,
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 1,
+        "clarify": 0,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q255",
+      "cat": "집계비율",
+      "kind": "compare",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "금정구 2000년 이후 사용승인 공동주택 평균 층수가 1990년대보다 얼마나 높은가",
+      "gold": "avg_fl_2000=7.6913; avg_fl_1990s=6.4428; diff_fl=1.2486",
+      "pass": false,
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_clarify",
+      "error": null,
+      "ms": 3,
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "sql": "",
+      "row_count": 0,
+      "timed_out": false,
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 1,
+        "plan": 2,
+        "plan_validate": 0,
+        "clarify": 0
+      }
+    },
+    {
+      "id": "Q257",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "해운대구 아파트 중 높이 결측 비율 %",
+      "gold": "pct_null_h=0",
+      "pass": false,
+      "reason": "scalar-mismatch hits=0 gold=[0.0]",
+      "route": "semantic_plan_clarify",
+      "error": null,
+      "ms": 953,
+      "answer": "확인이 필요합니다. 질문을 더 구체적으로 알려 주세요.",
+      "sql": "",
+      "row_count": 0,
+      "timed_out": false,
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 951,
+        "plan": 0,
+        "plan_validate": 2,
+        "clarify": 0
+      }
+    },
+    {
+      "id": "Q271",
+      "cat": "공간복합",
+      "kind": "count",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "장림동 산업단지 안 공장 중 연면적 3000㎡ 이상인 채수",
+      "gold": "35채",
+      "pass": false,
+      "reason": "count-mismatch gold=35 pred=[76.0, 76.0]",
+      "route": "semantic_plan_count",
+      "error": null,
+      "ms": 109,
+      "answer": "장림동의 조건에 해당하는 건물은 76건입니다.",
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE TRUE AND (b.\"A4\" LIKE '% 장림동' OR b.\"A4\" = '장림동') AND (b.\"A9\" = '공장' AND b.\"A14\"::float8 >= 3000);",
+      "row_count": 1,
+      "timed_out": false,
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 61,
+        "plan": 0,
+        "plan_validate": 1,
+        "plan_compile": 0,
+        "result": 47,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q272",
+      "cat": "공간복합",
+      "kind": "count",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "명지·녹산 국가산업단지 안 공장 또는 창고시설 채수",
+      "gold": "2,375채",
+      "pass": true,
+      "reason": "count-match",
+      "route": "semantic_plan_count",
+      "error": null,
+      "ms": 1071,
+      "answer": "조건에 해당하는 건물은 2,375건입니다.",
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE ((a.\"A8\" ILIKE '%명지국가산업단지%' OR a.\"A9\" ILIKE '%명지국가산업단지%') OR (a.\"A8\" ILIKE '%녹산...",
+      "row_count": 1,
+      "timed_out": false,
+      "root_causes": [],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 1040,
+        "plan": 1,
+        "plan_validate": 0,
+        "plan_compile": 0,
+        "result": 30,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q273",
+      "cat": "공간복합",
+      "kind": "group",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "센텀2지구 도시첨단산업단지와 교차하는 건물 용도별 건수",
+      "gold": "1. usage=없음, n=612 / 2. usage=단독주택, n=63 / 3. usage=판매시설, n=18 / 4. usage=제2종근린생활시설, n=9 / 5. usage=제1종근린생활시설, n=7 / 6. usage=창고시설, n=4 / 7. usage=공동주택, n=2 / 8. usage=공장, n=2 / 9. usage=교육연구시설, n=2 / 10. usage=분뇨.쓰레기처리시설, n=2",
+      "pass": false,
+      "reason": "engine-fail:heuristic_plan",
+      "route": null,
+      "error": "heuristic_plan",
+      "ms": 11,
+      "answer": "요청하신 「센텀2지구 도시첨단산업단지와 교차하는 건물 용도별 건수」에는 지금은 답하지 못했습니다. / 이유: heuristic_plan / 시도한 SQL: SELECT b.\"A9\" AS \"usage\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geomet...",
+      "sql": "SELECT b.\"A9\" AS \"usage\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE (a.\"A8\" ILIKE '%센텀2지구도시첨단산업단지%' OR a.\"A9\" ILIKE '%센텀2지구도시첨단산업단지%') / GROUP BY b.\"A9\" / ORDER BY \"n\" DESC NULLS LAST / LIMIT 100;",
+      "row_count": 0,
+      "timed_out": false,
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 9,
+        "plan": 1,
+        "plan_validate": 1,
+        "plan_compile": 0
+      }
+    },
+    {
+      "id": "Q274",
+      "cat": "공간복합",
+      "kind": "count",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "사하구 산업단지와 교차하는 기초구역 개수",
+      "gold": "35개",
+      "pass": false,
+      "reason": "count-mismatch gold=35 pred=[162.0, 162.0]",
+      "route": "semantic_plan_count",
+      "error": null,
+      "ms": 11,
+      "answer": "사하구의 조건에 해당하는 건물은 162건입니다.",
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(z.geometry, a.geometry) / WHERE TRUE AND z.\"SIG_KOR_NM\" LIKE '%사하구%';",
+      "row_count": 1,
+      "timed_out": false,
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 2,
+        "plan": 1,
+        "plan_validate": 0,
+        "plan_compile": 0,
+        "result": 8,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q282",
+      "cat": "공간복합",
+      "kind": "group",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "신호지방산업단지 안 건물 용도별 건수 상위 6",
+      "gold": "1. usage=단독주택, n=431 / 2. usage=없음, n=320 / 3. usage=공장, n=167 / 4. usage=제2종근린생활시설, n=33 / 5. usage=제1종근린생활시설, n=19 / 6. usage=공동주택, n=17",
+      "pass": true,
+      "reason": "group-nums",
+      "route": "semantic_plan_distribution",
+      "error": null,
+      "ms": 16,
+      "answer": "분포를 조회했습니다. / 1. 단독주택 431건 / 3. 공장 167건 / 4. 제2종근린생활시설 33건 / 5. 제1종근린생활시설 19건 / 6. 공동주택 17건 / 7. 숙박시설 16건 / 8. 자동차관련시설 5건 / 9. 교육연구시설 5건 / 10. 업무시설 2건 / 11. 종교시설 2건 / 12. 위락시설 1건 / 외 1개 구간 /  / 이 내용을 차트로도 정리할 수 있어요. 차트로 보시겠어요?",
+      "sql": "SELECT b.\"A9\" AS \"usage\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE (a.\"A8\" ILIKE '%신호지방산업단지%' OR a.\"A9\" ILIKE '%신호지방산업단지%'...",
+      "row_count": 13,
+      "timed_out": false,
+      "root_causes": [],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 1,
+        "plan": 1,
+        "plan_validate": 0,
+        "plan_compile": 0,
+        "result": 12,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q283",
+      "cat": "공간복합",
+      "kind": "list",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "강서구 산업단지 안 공장 중 연면적 5000㎡ 이상 이름",
+      "gold": "1. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A14=74,540.74 / 2. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A14=69,736.75 / 3. A24=삼성전기(주), A4=부산광역시 강서구 송정동, A14=69,623.17 / 4. A24=없음, A4=부산광역시 강서구 송정동, A14=54,595.54 / 5. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A14=51,095.44 / 6. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A14=39,503.43 / 7. A24=(주)성광벤드, A4=부산광역시 강서구 송정동, A14=37,014.07 / 8. A24=삼성전기(주), A4=부산광역시 강서구 송정동, A14=33,453.95 / 9. A24=농심 녹산공장, A4=부산광역시 강서구 송정동, A14=31,388.84 / 10. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A14=30,053.22 / 11. A24=삼성전기(주), A4=부산광역시 강서구 송정동, A14=27,377.12 / 12. A24=없음, A4=부산광역시 강서구 송정동, A14=27,214.85 / 13. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A14=27,139.62 / 14. A24=없음, A4=부산광역시 강서구 지사동, A14=25,814.7 / 15. A24=없음, A4=부산광역시 강서구 송정동, A14=24,231.98",
+      "pass": true,
+      "reason": "list-top1 extra=3",
+      "route": "semantic_plan_list",
+      "error": null,
+      "ms": 82,
+      "answer": "강서구의 조건에 해당하는 건물 100건을 조회했습니다. / 1. KOC전기 공장 · 부산광역시 강서구 송정동 1495-4 · 연면적 9661.48㎡ / 2. 르노코리아자동차(주) · 부산광역시 강서구 신호동 185 · 연면적 18375.97㎡ / 3. 삼성전기(주) · 부산광역시 강서구 송정동 1623-2 · 연면적 17303.1㎡ / 4. 삼성전기(주) · 부산광역시 강서구 송정동 1623-2 · 연면적 5991.83㎡...",
+      "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A14\"::float8 AS \"gross_floor_area_m2\", /        b.\"A9\" AS \"usage\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060...",
+      "row_count": 100,
+      "timed_out": false,
+      "root_causes": [],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 6,
+        "plan": 4,
+        "plan_validate": 0,
+        "plan_compile": 0,
+        "result": 71,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q288",
+      "cat": "공간복합",
+      "kind": "scalar",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "모라도시첨단산업단지 안 건물 수와 평균 연면적",
+      "gold": "n=22; avg_gfa=876.0655",
+      "pass": false,
+      "reason": "scalar-mismatch hits=1 gold=[22.0, 876.0655]",
+      "route": "semantic_plan_aggregate",
+      "error": null,
+      "ms": 952,
+      "answer": "집계 결과입니다. 평균 연면적 876.0655.",
+      "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE (a.\"A8\" ILIKE '%모라도시첨단산업단지%' OR a.\"A9\" ILIKE '%모라도시첨단산업단지%');",
+      "row_count": 1,
+      "timed_out": false,
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 935,
+        "plan": 1,
+        "plan_validate": 0,
+        "plan_compile": 0,
+        "result": 16,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q293",
+      "cat": "공간복합",
+      "kind": "count",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "부산 일반산업단지 도형 중 시군구코드가 강서구(26440)인 개수",
+      "gold": "10개",
+      "pass": true,
+      "reason": "count-match",
+      "route": null,
+      "error": "heuristic_plan",
+      "ms": 11,
+      "answer": "요청하신 「부산 일반산업단지 도형 중 시군구코드가 강서구(26440)인 개수」에는 지금은 답하지 못했습니다. / 이유: heuristic_plan / 시도한 SQL: SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20...",
+      "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE (a.\"A8\" ILIKE ...",
+      "row_count": 0,
+      "timed_out": false,
+      "root_causes": [],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 10,
+        "plan": 0,
+        "plan_validate": 1,
+        "plan_compile": 0
+      }
+    },
+    {
+      "id": "Q294",
+      "cat": "공간복합",
+      "kind": "group",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "사상재생사업지구와 교차하는 건물 용도 상위 5",
+      "gold": "1. usage=없음, n=2,195 / 2. usage=공장, n=2,021 / 3. usage=제2종근린생활시설, n=199 / 4. usage=창고시설, n=171 / 5. usage=자동차관련시설, n=122",
+      "pass": true,
+      "reason": "group-nums",
+      "route": "semantic_plan_distribution",
+      "error": null,
+      "ms": 1015,
+      "answer": "분포를 조회했습니다. / 2. 공장 2,021건 / 3. 제2종근린생활시설 199건 / 4. 창고시설 171건 / 5. 자동차관련시설 122건 / 6. 제1종근린생활시설 95건 / 7. 위험물저장및처리시설 62건 / 8. 단독주택 28건 / 9. 분뇨.쓰레기처리시설 24건 / 10. 업무시설 6건 / 11. 공동주택 6건 / 12. 의료시설 3건 / 외 9개 구간 /  / 이 내용을 차트로도 정리할 수 있어요. 차트로 보...",
+      "sql": "SELECT b.\"A9\" AS \"usage\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE (a.\"A8\" ILIKE '%사상재생사업지구%' OR a.\"A9\" ILIKE '%사상재생사업지구%'...",
+      "row_count": 21,
+      "timed_out": false,
+      "root_causes": [],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 990,
+        "plan": 1,
+        "plan_validate": 0,
+        "plan_compile": 0,
+        "result": 24,
+        "answer": 0
+      }
+    },
+    {
+      "id": "Q300",
+      "cat": "공간복합",
+      "kind": "count",
+      "source": "new",
+      "session": null,
+      "parent": null,
+      "q": "명지동 건물 중 산업단지 안에 있으면서 연면적 2000㎡ 이상인 채수",
+      "gold": "173채",
+      "pass": false,
+      "reason": "engine-fail:- EXPLAIN failed: DuplicateAlias: 테이블 이름 \"a\" 가 한번 이상 명시되어 있습니다.",
+      "route": null,
+      "error": "- EXPLAIN failed: DuplicateAlias: 테이블 이름 \"a\" 가 한번 이상 명시되어 있습니다.",
+      "ms": 75,
+      "answer": "요청하신 「명지동 건물 중 산업단지 안에 있으면서 연면적 2000㎡ 이상인 채수」에는 지금은 답하지 못했습니다. / 이유: - EXPLAIN failed: DuplicateAlias: 테이블 이름 \"a\" 가 한번 이상 명시되어 있습니다. / 시도한 SQL: SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON S...",
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / JOIN \"AL_D060_00_20250804\" a ON ST_Intersects(b.geometry, a.geometry) / JOIN \"BND_ADM_DONG_PG\" a ON ST_Intersects(b.geometry, a.geometry) / WHERE TRUE AND (a.\"ADM_NM\" = '명지동' OR a.\"ADM_NM\" ~ '^명지[0-9]+동$') AND a.\"ADM_CD\" LIKE '21%' AND b.\"A14\"::float8 >= 2000;",
+      "row_count": 0,
+      "timed_out": false,
+      "root_causes": [
+        "RANGE_BOUND_DROPPED",
+        "ENTITY_SELECTION_ERROR"
+      ],
+      "stage_latency_ms": {
+        "start": 0,
+        "route": 59,
+        "plan": 3,
+        "plan_validate": 2,
+        "plan_compile": 2,
+        "plan_fallback": 9
+      }
+    }
+  ],
+  "partial": false,
+  "pattern_total": 18,
+  "pattern_passed": 7,
+  "pattern_failed": [
+    "N069",
+    "N090",
+    "Q244",
+    "Q245",
+    "Q255",
+    "Q257",
+    "Q271",
+    "Q273",
+    "Q274",
+    "Q288",
+    "Q300"
+  ]
+}

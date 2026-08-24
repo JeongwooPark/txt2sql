@@ -19,7 +19,10 @@ _REL_OPS = {
     "넘는": ">",
     "미만": "<",
     "이하": "<=",
+    "까지": "<=",
+    "사이": "<=",
     "이상": ">=",
+    "부터": ">=",
 }
 
 
@@ -193,7 +196,7 @@ D060_ATTRS: tuple[Attr, ...] = (
     Attr("A0", "원천도형ID", ("원천도형ID",), "id", exclusive=True),
     Attr("A1", "도면번호", ("도면번호",), "id", exclusive=True),
     Attr("A2", "주제도명", ("주제도명", "주제도"), "text", exclusive=True),
-    Attr("A3", "데이터기준일자", ("데이터기준일자", "데이터기준일"), "date", exclusive=True),
+    Attr("A3", "데이터기준일자", ("데이터기준일자", "데이터기준일", "기준일"), "date", exclusive=True),
     Attr("A4", "원천시도시군구코드", ("원천시도시군구코드", "시군구코드"), "code", exclusive=True),
     Attr("A5", "용도지역지구코드", ("용도지역지구코드",), "code", exclusive=True),
     Attr(
@@ -462,6 +465,37 @@ def _parse_numeric(q: str, parsed: Parsed, ds: Dataset, named: bool) -> None:
     seen: set[str] = set()
     for alias, col in sorted(pairs, key=lambda x: len(x[0]), reverse=True):
         if col in seen:
+            continue
+        m = re.search(
+            rf"{re.escape(alias)}\s*(?:이|가)?\s*(\d+(?:\.\d+)?)\s*"
+            rf"{UNIT_TOKEN}\s*"
+            r"(이상|초과|부터)\s*"
+            rf"(\d+(?:\.\d+)?)\s*{UNIT_TOKEN}\s*"
+            r"(이하|미만|까지|사이)",
+            q,
+        )
+        if m:
+            attr = next(a for a in ds.attrs if a.col == col)
+            lo = convert_for_schema(m.group(1), m.group(2), attr.unit or "㎡")
+            hi = convert_for_schema(m.group(4), m.group(5), attr.unit or "㎡")
+            if lo is None or hi is None or lo.canonical >= hi.canonical:
+                continue
+            lo_op = _rel_op(m.group(3))
+            hi_op = _rel_op(m.group(6))
+            _add(
+                parsed,
+                col,
+                f'"{col}" {lo_op} {lo.sql}',
+                f"{attr.label} {lo.label} {m.group(3)}",
+            )
+            _add(
+                parsed,
+                col,
+                f'"{col}" {hi_op} {hi.sql}',
+                f"{attr.label} {hi.label} {m.group(6)}",
+            )
+            parsed.order_col = parsed.order_col or col
+            seen.add(col)
             continue
         m = re.search(
             rf"{re.escape(alias)}\s*(?:이|가)?\s*(\d+(?:\.\d+)?)\s*"

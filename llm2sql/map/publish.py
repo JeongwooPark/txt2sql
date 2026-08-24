@@ -386,6 +386,7 @@ def _create_temp_table(
         f"{select_sql}"
     )
     with conn.cursor() as cur:
+        cur.execute("SET LOCAL statement_timeout = '45s'")
         cur.execute(ddl)
 
 

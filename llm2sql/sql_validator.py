@@ -196,9 +196,17 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
                 'Dong containment requires ST_Intersects with "BND_ADM_DONG_PG".'
             )
 
-    # 산업단지 질의인데 AL_D060 미사용
-    if "산업단지" in q and "AL_D060" not in upper and "건물" not in q:
-        reasons.append('Industrial-park questions must use "AL_D060_00_20250804".')
+    # 산업단지 도형 자체 질의는 D060 필수. 건물·공장∩산단은 JOIN이면 통과.
+    if "산업단지" in q and "AL_D060" not in upper:
+        buildingish = any(
+            k in q for k in ("건물", "공장", "창고", "채", "용도", "이름")
+        )
+        if not buildingish:
+            reasons.append('Industrial-park questions must use "AL_D060_00_20250804".')
+        elif "ST_INTERSECTS" not in upper:
+            reasons.append(
+                'Industrial-park building questions must ST_Intersects "AL_D060_00_20250804".'
+            )
 
     # 등록된 D198 구의 주요용도명 → D198 A25
     if "주요용도" in q or (("용도" in q) and ("종류" in q or "몇 가지" in q)):
