@@ -14,9 +14,9 @@
 | 09 | DONE | shadow 기본값, config flags, pipeline trace | 75 passed | gold exact 2/30, gate NOT_PASSED, shadow 유지 | `feat(pipeline): [STEP-09] integrate sqp v1.1 in shadow mode` | Phase1 gold gate 미달, 태그 보류 | STEP-10 |
 | 10-14 | DONE | semantic_catalog, linking, join edges, eval_schema_linking | 77 passed | holdout Recall gate NOT_PASSED (목표 미완화) | `feat(catalog): [STEP-10] externalize semantic catalog and source bindings` | labeled holdout 부재 | STEP-15 |
 | 15-18 | DONE | Plan-SQL sqlglot 동등성, result shape, hard-query selector | 81 passed | silent-error fixture 탐지 4/4, Phase3 unit gate PASSED | `feat(sql-verifier): [STEP-15] verify plan and SQL AST equivalence` | live gold 미달로 hybrid 금지 | STEP-19 |
-| 19-22 | DONE | PostGIS policy, canonical join, Plan event log | 87 passed | unit spatial+4-turn PASSED | `feat(spatial): [STEP-19] map spatial relations by explicit policy` | live spatial accuracy 미측정, hybrid 금지 | STEP-23 |
-| 23-25 | DONE | 모델 pin, 트레이스 마스킹, A–E 비교, 문서 | 90 passed | hybrid 미승격, shadow 유지 | `chore(obs): [STEP-23] pin models and mask query traces` | gold/holdout 미달 | STEP-26 |
-| 26 | DONE | LoRA 자격 검사 | 91 passed | NOT_ELIGIBLE (verified 30 < 5000) | `chore(lora): [STEP-26] record QLoRA as not eligible` | 데이터 규모 미달 | FIX-1 |
+| 19-22 | DONE | PostGIS policy, canonical join, Plan event log | 87 passed (당시) / 93 재검증 | unit spatial+4-turn PASSED. live 6/6은 FIX-3 | `feat(spatial): [STEP-19] map spatial relations by explicit policy` | (당시) live 미측정 → FIX-3에서 해소 | STEP-23 |
+| 23-25 | DONE | 모델 pin, 트레이스 마스킹, A–E 비교, 문서 | 90 passed (당시) / 93 재검증 | (당시) shadow 유지 → FIX-4에서 hybrid 승격, 태그 `sqp-v11-ready` | `chore(obs): [STEP-23] pin models and mask query traces` | (당시) gold/holdout 미달 → FIX-1~4에서 해소 | STEP-26 |
+| 26 | DONE | LoRA 자격 검사 | 91 passed (당시) / 93 재검증 | NOT_ELIGIBLE (verified 30 < 5000). 재검증에서도 실험 시작 안 함 | `chore(lora): [STEP-26] record QLoRA as not eligible` | 데이터 규모 미달 | FIX-1 |
 | FIX-1 | DONE | heuristic OR/NOT/range/field-compare + canonical 비교 | 91 passed | verified 30/30 | `fix(plan): [FIX-1] bind OR NOT range and field compare in heuristic` | 없음 | FIX-2 |
 | FIX-2 | DONE | labeled linking holdout n=17 | 92 passed | Recall@10=1.0 Value@5=1.0 | `test(catalog): [FIX-2] add labeled schema linking holdout` | 없음 | FIX-3 |
 | FIX-3 | DONE | PostGIS live spatial 6종 EXPLAIN/LIMIT 1 | 92 passed | accuracy 1.0, ENV_BLOCKED 아님 | `test(spatial): [FIX-3] measure live spatial relation accuracy` | 없음 | FIX-4 |
@@ -76,3 +76,15 @@
 - Router 회귀 0, 부분 Plan 자동 실행 0 (불완전 OR는 clarify), unsafe write 차단 유지
 - 전 지표 통과 → `SEMANTIC_PLAN_MODE` 기본값 `hybrid`, 태그 `sqp-v11-ready`
 - 제품 버전 **0.2.3**
+
+## 재검증 (master `048e6a4`, v0.2.3)
+
+원 저장소 master에서 STEP-19~26 잔여 작업을 대조했다. 구현·아티팩트·태그는 이미 있고, 코드 갭은 없었다.
+
+- `uv run pytest tests/semantic_plan tests/query_understanding tests/evaluation tests/semantic_catalog -q` → **93 passed**
+- `uv run python scripts/eval_promotion.py` → `promote_hybrid=true`, `blocked_by=[]`
+- Phase 4 아티팩트: `artifacts/evaluation/phase4_gate.json` (`gate_passed=true`, live spatial 6/6, `env_blocked=false`). 태그 `sqp-v11-phase-4` = `18c5d2c`
+- Phase 5: 기본값 `hybrid` 유지. 태그 `sqp-v11-ready` = `89c3f4d`
+- STEP-26 재확인: verified pair 30 < 5,000, holdout 미분리 → `NOT_ELIGIBLE`. QLoRA를 시작하지 않음
+- `benchmarks/korean_postgis_v1/conversation.jsonl`은 STEP-01 빈 플레이스홀더로 남아 있다. 4-turn gate는 `tests/semantic_plan/test_followup.py`의 event log 테스트로 충족한다
+- 사용자 untracked 스크립트 5개는 커밋하지 않음
