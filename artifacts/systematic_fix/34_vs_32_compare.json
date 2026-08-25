@@ -1,0 +1,350 @@
+{
+  "before": {
+    "passed": 393,
+    "total": 500,
+    "acc": 78.6,
+    "elapsed_s": 820.9,
+    "latency": {
+      "avg_ms": 1640,
+      "p50_ms": 139,
+      "p95_ms": 12344
+    },
+    "routes": {
+      "legacy": 88,
+      "semantic_plan": 346,
+      "clarify": 38,
+      "other": 28
+    }
+  },
+  "after": {
+    "passed": 367,
+    "total": 500,
+    "acc": 73.4,
+    "elapsed_s": 1071.8,
+    "latency": {
+      "avg_ms": 2141,
+      "p50_ms": 169,
+      "p95_ms": 13969
+    },
+    "routes": {
+      "legacy": 136,
+      "semantic_plan": 292,
+      "clarify": 47,
+      "other": 25
+    }
+  },
+  "delta_passed": -26,
+  "regress_n": 36,
+  "gain_n": 10,
+  "reg_route_pairs": [
+    {
+      "pair": "semantic_plan_count->building_area_threshold_count",
+      "n": 6
+    },
+    {
+      "pair": "semantic_plan_count->d198_attr_count",
+      "n": 3
+    },
+    {
+      "pair": "semantic_plan_rank->semantic_plan_clarify",
+      "n": 2
+    },
+    {
+      "pair": "semantic_plan_count->d010_attr_count",
+      "n": 2
+    },
+    {
+      "pair": "semantic_plan_count->bas_area_topn",
+      "n": 2
+    },
+    {
+      "pair": "semantic_plan_count->semantic_plan_list",
+      "n": 2
+    },
+    {
+      "pair": "spatial_bas_dong_count->None",
+      "n": 1
+    },
+    {
+      "pair": "buffer_count->semantic_plan_clarify",
+      "n": 1
+    },
+    {
+      "pair": "None->semantic_plan_clarify",
+      "n": 1
+    },
+    {
+      "pair": "semantic_plan_count->building_usage_count",
+      "n": 1
+    },
+    {
+      "pair": "semantic_plan_count->d010_attr_lookup",
+      "n": 1
+    },
+    {
+      "pair": "semantic_plan_aggregate->d010_attr_count",
+      "n": 1
+    },
+    {
+      "pair": "semantic_plan_list->semantic_plan_clarify",
+      "n": 1
+    },
+    {
+      "pair": "building_profile_compare->semantic_plan_aggregate",
+      "n": 1
+    },
+    {
+      "pair": "semantic_plan_aggregate->bas_attr_count",
+      "n": 1
+    },
+    {
+      "pair": "semantic_plan_count->d060_attr_count",
+      "n": 1
+    },
+    {
+      "pair": "d060_attr_count->semantic_plan_clarify",
+      "n": 1
+    },
+    {
+      "pair": "semantic_plan_count->building_in_dong_spatial",
+      "n": 1
+    },
+    {
+      "pair": "semantic_plan_count->buildings_in_industrial",
+      "n": 1
+    },
+    {
+      "pair": "semantic_plan_count->building_floor_count",
+      "n": 1
+    }
+  ],
+  "reg_sample": [
+    {
+      "id": "N079",
+      "before": "spatial_bas_dong_count",
+      "after": null,
+      "reason": "engine-fail:- 기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다.",
+      "q": "대연3동과 교차하는 기초구역은 몇 개야?"
+    },
+    {
+      "id": "N082",
+      "before": "buffer_count",
+      "after": "semantic_plan_clarify",
+      "reason": "count-mismatch gold=0 pred=[]",
+      "q": "좌표(129.12, 35.15)에서 200미터 이내 건물 건수"
+    },
+    {
+      "id": "N083",
+      "before": null,
+      "after": "semantic_plan_clarify",
+      "reason": "group-mismatch",
+      "q": "반여동에 있는 건물이 반여1동과 반여2동에 몇 퍼센트씩 있는가?"
+    },
+    {
+      "id": "Q110",
+      "before": "semantic_plan_count",
+      "after": "building_area_threshold_count",
+      "reason": "count-mismatch gold=54 pred=[200.0, 269.0, 269.0]",
+      "q": "기장군 단독주택 중 건축면적 200㎡ 이상이면서 벽돌구조인 채수"
+    },
+    {
+      "id": "Q125",
+      "before": "semantic_plan_count",
+      "after": "building_area_threshold_count",
+      "reason": "count-mismatch gold=8 pred=[150.0, 66.0, 66.0]",
+      "q": "괴정동 단독주택 중 건축면적 150㎡ 이상이면서 블록구조인 채수"
+    },
+    {
+      "id": "Q136",
+      "before": "semantic_plan_count",
+      "after": "building_area_threshold_count",
+      "reason": "count-mismatch gold=12 pred=[1500.0, 310.0, 310.0]",
+      "q": "사상구 공장 중 경량철골구조이고 연면적 1500㎡ 이상인 채수"
+    },
+    {
+      "id": "Q146",
+      "before": "semantic_plan_count",
+      "after": "building_area_threshold_count",
+      "reason": "count-mismatch gold=2 pred=[80.0, 1160.0, 1160.0]",
+      "q": "남산동 단독주택 중 목구조이고 건축면적 80㎡ 이상인 채수"
+    },
+    {
+      "id": "Q165",
+      "before": "semantic_plan_count",
+      "after": "building_area_threshold_count",
+      "reason": "count-mismatch gold=304 pred=[1000.0, 8000.0, 733.0, 733.0]",
+      "q": "사하구 공장 연면적 1000㎡ 이상 8000㎡ 이하이고 일반철골인 채수"
+    },
+    {
+      "id": "Q177",
+      "before": "semantic_plan_count",
+      "after": "d198_attr_count",
+      "reason": "count-mismatch gold=5872 pred=[1989.0, 13218.0, 13218.0]",
+      "q": "금정구 단독주택 중 사용승인 1970~1989년이고 건축면적 60~150㎡인 채수"
+    },
+    {
+      "id": "Q181",
+      "before": "semantic_plan_rank",
+      "after": "semantic_plan_clarify",
+      "reason": "group-mismatch",
+      "q": "기장군 공동주택을 제외하고 높이 25m 이상인 건물 용도 상위 8개"
+    },
+    {
+      "id": "Q186",
+      "before": "semantic_plan_count",
+      "after": "d010_attr_count",
+      "reason": "count-mismatch gold=1850 pred=[30.0, 11476.0, 11476.0]",
+      "q": "해운대구 공동주택 중 건폐율이 30% 이상인 건물 수"
+    },
+    {
+      "id": "Q188",
+      "before": "semantic_plan_count",
+      "after": "d010_attr_count",
+      "reason": "count-mismatch gold=44 pred=[20.0, 652.0, 652.0]",
+      "q": "부산진구 위반건축물(A20=Y) 중 공동주택은 몇 채야?"
+    },
+    {
+      "id": "Q195",
+      "before": "semantic_plan_count",
+      "after": "building_usage_count",
+      "reason": "count-mismatch gold=16 pred=[316.0, 316.0]",
+      "q": "우동에서 건물동명이 '101동'인 공동주택 채수"
+    },
+    {
+      "id": "Q207",
+      "before": "semantic_plan_count",
+      "after": "d010_attr_lookup",
+      "reason": "count-mismatch gold=589 pred=[]",
+      "q": "해운대구 건물동명이 비어 있지 않은 아파트 중 20층 이상인 채수"
+    },
+    {
+      "id": "Q210",
+      "before": "semantic_plan_aggregate",
+      "after": "d010_attr_count",
+      "reason": "scalar-mismatch hits=1 gold=[264.0, 53.0]",
+      "q": "중구 위반건축물 전체 채수와 그 중 제2종근린생활시설 채수"
+    },
+    {
+      "id": "Q224",
+      "before": "semantic_plan_list",
+      "after": "semantic_plan_clarify",
+      "reason": "list-top-missing 마린시티두산위브포세이돈",
+      "q": "우동 공동주택 중 지하 2층 이상·건폐율 20% 이상·높이 60m 이상인 이름"
+    },
+    {
+      "id": "Q259",
+      "before": "semantic_plan_rank",
+      "after": "semantic_plan_clarify",
+      "reason": "group-mismatch",
+      "q": "기장군 법정동별 공장 수 상위 6"
+    },
+    {
+      "id": "Q271",
+      "before": "semantic_plan_count",
+      "after": "building_area_threshold_count",
+      "reason": "count-mismatch gold=35 pred=[3000.0, 68.0, 68.0]",
+      "q": "장림동 산업단지 안 공장 중 연면적 3000㎡ 이상인 채수"
+    },
+    {
+      "id": "Q278",
+      "before": "building_profile_compare",
+      "after": "semantic_plan_aggregate",
+      "reason": "scalar-mismatch hits=0 gold=[0.0]",
+      "q": "감천1동 안 공장 중 산업단지와 교차하는 비율 %"
+    },
+    {
+      "id": "Q279",
+      "before": "semantic_plan_count",
+      "after": "bas_area_topn",
+      "reason": "count-mismatch gold=16 pred=[0.3, 3.0, 1.64269819016635, 48562.0, 1.592911, 48481.0]",
+      "q": "남구 기초구역 중 면적(BAS_AR) 0.3 이상인 개수"
+    },
+    {
+      "id": "Q280",
+      "before": "semantic_plan_aggregate",
+      "after": "bas_attr_count",
+      "reason": "group-mismatch",
+      "q": "해운대구 기초구역 이동사유별 개수"
+    },
+    {
+      "id": "Q291",
+      "before": "semantic_plan_count",
+      "after": "d060_attr_count",
+      "reason": "count-mismatch gold=112 pred=[852.0, 852.0]",
+      "q": "장안일반산업단지 안 공장 채수"
+    },
+    {
+      "id": "Q293",
+      "before": "d060_attr_count",
+      "after": "semantic_plan_clarify",
+      "reason": "count-mismatch gold=10 pred=[]",
+      "q": "부산 일반산업단지 도형 중 시군구코드가 강서구(26440)인 개수"
+    },
+    {
+      "id": "Q299",
+      "before": "semantic_plan_count",
+      "after": "building_in_dong_spatial",
+      "reason": "count-mismatch gold=322 pred=[15292.0, 15292.0]",
+      "q": "연산동 행정경계 안 위반건축물 채수"
+    },
+    {
+      "id": "Q300",
+      "before": "semantic_plan_count",
+      "after": "buildings_in_industrial",
+      "reason": "count-mismatch gold=173 pred=[2000.0, 794.0, 794.0]",
+      "q": "명지동 건물 중 산업단지 안에 있으면서 연면적 2000㎡ 이상인 채수"
+    }
+  ],
+  "gains": [
+    {
+      "id": "Q105",
+      "before": "semantic_plan_list",
+      "after": "building_area_threshold_list"
+    },
+    {
+      "id": "Q133",
+      "before": "semantic_plan_list",
+      "after": "building_height_threshold_list"
+    },
+    {
+      "id": "Q161",
+      "before": "semantic_plan_list",
+      "after": "building_height_threshold_list"
+    },
+    {
+      "id": "Q301",
+      "before": "semantic_plan_count",
+      "after": "d198_attr_count"
+    },
+    {
+      "id": "Q302",
+      "before": "semantic_plan_clarify",
+      "after": "d198_attr_count"
+    },
+    {
+      "id": "Q303",
+      "before": "semantic_plan_clarify",
+      "after": "d198_attr_count"
+    },
+    {
+      "id": "Q319",
+      "before": "usage_overview",
+      "after": "semantic_plan_list"
+    },
+    {
+      "id": "Q331",
+      "before": "semantic_plan_clarify",
+      "after": "d198_attr_count"
+    },
+    {
+      "id": "Q421",
+      "before": "semantic_plan_count",
+      "after": "d198_attr_count"
+    },
+    {
+      "id": "Q431",
+      "before": "semantic_plan_clarify",
+      "after": "semantic_plan_distribution"
+    }
+  ]
+}

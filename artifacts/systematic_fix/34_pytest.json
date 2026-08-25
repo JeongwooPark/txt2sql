@@ -1,0 +1,5 @@
+{
+  "when": "2026-08-25",
+  "branch": "contract-capability-sqp-20260825",
+  "pytest": {"passed": 254, "failed": 0}
+}
