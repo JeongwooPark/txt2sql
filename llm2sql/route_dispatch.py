@@ -1,5 +1,6 @@
 """규칙 SQL 라우트 조기 디스패치 (baseline vs optimized).
 
+early allowlist는 후보 우선순위만 정한다. 실행 여부는 RouteCapability가 결정한다.
 baseline: 파이프라인 early 구간에서 try_route를 여러 번 호출하던 방식
 optimized: try_route 1회 + allowlist early + 잔여 결과는 이후 단계 재사용
 """
@@ -122,6 +123,7 @@ def tables_for_intent(intent: str) -> list[str]:
 
 
 def _is_early_intent(intent: str) -> bool:
+    """우선 검토할 후보인지. 실행 허가와는 무관하다."""
     if intent == "building_name_lookup":
         return True
     if intent in EARLY_INDUSTRIAL_INTENTS:

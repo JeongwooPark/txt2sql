@@ -882,25 +882,32 @@ def run_ask(
     return finish(result, effective)
 
 
+_PREFERRED_ROUTE = {
+    "rank_compare": "building_rank_compare",
+    "usage_overview": "building_usage_count",
+    "profile": "building_profile",
+}
+
+
 def _blocks_meta_profile_force(question: str) -> bool:
-    """건수·임계·OR·후속은 meta/profile force 선점을 막는다."""
-    q = question.strip()
-    if has_anaphora(q) or any(
-        k in q for k in ("그중", "그 중", "그 건물", "해당 건물", "첫번째", "첫 번째")
-    ):
-        return True
-    if any(k in q for k in ("또는", "혹은", "이거나", "제외", "아닌", "빼고")):
-        return True
-    if any(k in q for k in ("이상", "이하", "초과", "미만")):
-        return True
-    countish = any(
-        k in q
-        for k in ("몇", "건수", "채수", "채야", "건물 수", "건물수는", "수는?", "수는")
+    """profile force가 Contract를 전부 지원하지 않으면 선점하지 않는다."""
+    return not route_allowed("building_profile", extract_contract(question))
+
+
+def _contract_looks_like_data_query(contract) -> bool:
+    return bool(
+        contract.places
+        or contract.aggregation_requests
+        or contract.wants_count
+        or contract.group_fields
+        or contract.output_fields
+        or contract.order_requests
+        or contract.ratios
+        or contract.percentile_requests
+        or contract.derived_metrics
+        or contract.numbers
+        or contract.ranges
     )
-    building = any(k in q for k in ("건물", "건축물", "주택", "아파트", "시설"))
-    if countish and building:
-        return True
-    return False
 
 
 def _try_preferred_intent(
@@ -912,8 +919,9 @@ def _try_preferred_intent(
     ollama_client: Any | None,
     on_token: TokenCallback | None,
     preferred: IntentPrediction,
+    contract,
 ) -> dict[str, Any] | None:
-    """분류된 의도로 핸들러를 우선 시도. 실패하면 None."""
+    """분류된 의도로 핸들러를 우선 시도. capability 부족이면 None → SQP."""
     intent = preferred.intent
     if intent in {"guide", "coverage", "out_of_scope", "sql"}:
         return None
@@ -921,7 +929,11 @@ def _try_preferred_intent(
 
     if wants_map_display(question) and intent == "profile":
         return None
-    if intent in {"profile", "meta"} and _blocks_meta_profile_force(question):
+    route_name = _PREFERRED_ROUTE.get(intent)
+    if route_name is not None and not route_allowed(route_name, contract):
+        progress.emit("route", f"선호 의도 capability 부족: {intent}")
+        return None
+    if intent == "meta" and _contract_looks_like_data_query(contract):
         return None
     llm = _llm_kw(settings, ollama_client)
 
@@ -1324,6 +1336,7 @@ def _ask_inner(
             ollama_client=ollama_client,
             on_token=on_token,
             preferred=preferred_intent,
+            contract=contract,
         )
         if dispatched is not None:
             return dispatched
