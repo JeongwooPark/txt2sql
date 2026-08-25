@@ -422,6 +422,7 @@ def try_heuristic_plan(
                 unsupported_reason="허가일은 동래·금정 용도별건물(D198)에서만 조회할 수 있습니다",
             )
     hints = hints or extract_plan_hints(q)
+    bound = bound_contract if bound_contract is not None else extract_contract(q)
     if (
         not hints.get("place")
         and not hints.get("usage")
@@ -436,6 +437,10 @@ def try_heuristic_plan(
         and "사업지구" not in q
         and not hints.get("ratio")
         and not hints.get("extra_filters")
+        and not bound.percentile_requests
+        and not bound.derived_metrics
+        and not bound.ratios
+        and not bound.group_fields
     ):
         return None
     if _catalog_owns_d060_only(q):

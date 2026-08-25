@@ -260,7 +260,13 @@ def missing_requirements(capability: RouteCapability, contract: QueryContract) -
         missing.append("rank")
     if contract.limit is not None and requires_rank and not capability.supports_top_n:
         missing.append("top_n")
-    if contract.output_fields and not capability.supports_output_projection:
+    metric_vals = {str(span.value) for span in contract.metrics if span.value}
+    projection_needed = [
+        field
+        for field in contract.output_fields
+        if field not in metric_vals or contract.operation in {"list", "rank", "group_rank"}
+    ]
+    if projection_needed and not capability.supports_output_projection:
         missing.append("output_projection")
     if contract.ratios and not capability.supports_ratio:
         missing.append("ratio")
