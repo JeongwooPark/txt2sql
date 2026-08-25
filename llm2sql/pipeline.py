@@ -759,6 +759,14 @@ def run_ask(
         if early is not None:
             return finish(early)
 
+    contract = extract_contract(question)
+    progress.emit(
+        "understand",
+        "Query Contract 생성",
+        operation=contract.operation,
+        complexity=contract.complexity,
+    )
+
     listed = _try_list_attr_followup(
         question,
         settings,
@@ -813,6 +821,7 @@ def run_ask(
     effective = _expand_followup_question(question, session)
     if effective != question.strip():
         progress.emit("route", f"후속 기준 병합: {effective}")
+        contract = extract_contract(effective)
     try:
         if conn is None:
             with connect(settings.database_url) as owned:
@@ -825,6 +834,7 @@ def run_ask(
                     ollama_client=ollama_client,
                     on_token=on_token,
                     preferred_intent=preferred,
+                    contract=contract,
                 )
         else:
             result = _ask_inner(
@@ -836,6 +846,7 @@ def run_ask(
                 ollama_client=ollama_client,
                 on_token=on_token,
                 preferred_intent=preferred,
+                contract=contract,
             )
     except Exception as exc:
         progress.emit("error", f"처리 중 예외: {type(exc).__name__}")
@@ -1109,14 +1120,16 @@ def _ask_inner(
     ollama_client: Any | None,
     on_token: TokenCallback | None = None,
     preferred_intent: IntentPrediction | None = None,
+    contract=None,
 ) -> dict[str, Any]:
-    contract = extract_contract(question)
-    progress.emit(
-        "understand",
-        "Query Contract 생성",
-        operation=contract.operation,
-        complexity=contract.complexity,
-    )
+    if contract is None:
+        contract = extract_contract(question)
+        progress.emit(
+            "understand",
+            "Query Contract 생성",
+            operation=contract.operation,
+            complexity=contract.complexity,
+        )
 
     if (
         session is not None
@@ -1128,7 +1141,8 @@ def _ask_inner(
             from llm2sql.semantic_plan.generator import try_heuristic_plan
 
             heur = try_heuristic_plan(
-                session.last_full_question or session.last_question or ""
+                session.last_full_question or session.last_question or "",
+                contract=contract,
             )
             if heur is not None:
                 usable = (not heur.requires_clarification) or bool(
@@ -1166,6 +1180,7 @@ def _ask_inner(
                     progress=progress,
                     execute=settings.semantic_plan_mode == "hybrid",
                     plan=merged,
+                    contract=contract,
                 )
                 finished = _try_semantic_result(
                     question,
@@ -1263,7 +1278,7 @@ def _ask_inner(
     mode: DispatchMode = (
         "baseline" if settings.route_dispatch_mode == "baseline" else "optimized"
     )
-    route_match = match_route(question, mode=mode, conn=conn)
+    route_match = match_route(question, mode=mode, conn=conn, contract=contract)
     deferred_route = route_match.deferred
     if route_match.early is not None:
         early = route_match.early
@@ -1417,6 +1432,7 @@ def _ask_inner(
             session=session,
             progress=progress,
             execute=settings.semantic_plan_mode == "hybrid",
+            contract=contract,
         )
         finished = _try_semantic_result(
             question,

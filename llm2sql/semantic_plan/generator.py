@@ -359,8 +359,10 @@ def try_heuristic_plan(
     hints: dict[str, Any] | None = None,
     *,
     reference_date: str | None = None,
+    contract=None,
 ) -> SemanticQueryPlan | None:
     """Router가 놓친 단순 건물 질의를 LLM 없이 Plan으로 옮긴다."""
+    bound_contract = contract
     q = question.strip()
     if not q:
         return None
@@ -875,7 +877,7 @@ def try_heuristic_plan(
             k in q for k in ("건수", "채수", "몇 채", "몇채")
         ):
             aggregations = []
-    contract_extra = extract_contract(q)
+    contract_extra = bound_contract if bound_contract is not None else extract_contract(q)
     seen_percentiles: set[tuple[str | None, float]] = set()
     for req in contract_extra.percentile_requests:
         key = (req.field, round(float(req.percentile), 6))
@@ -1061,11 +1063,15 @@ def generate_semantic_plan(
     ollama_client: Any | None = None,
     session: SessionContext | None = None,
     allow_llm: bool = True,
+    contract=None,
 ) -> SemanticQueryPlan:
     hints = extract_plan_hints(question)
-    contract = extract_contract(question)
+    contract = contract if contract is not None else extract_contract(question)
     heuristic = try_heuristic_plan(
-        question, hints, reference_date=settings.reference_date
+        question,
+        hints,
+        reference_date=settings.reference_date,
+        contract=contract,
     )
     if heuristic is not None and heuristic.requires_clarification:
         return heuristic

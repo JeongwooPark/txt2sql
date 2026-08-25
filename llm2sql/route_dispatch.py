@@ -138,11 +138,13 @@ def match_route_baseline(
     question: str,
     *,
     conn: psycopg.Connection | None = None,
+    contract=None,
 ) -> RouteMatch:
     """최적화 전: early 구간에서 try_route / rank를 분리 호출."""
     calls = 0
     q = question.strip()
 
+    _ = contract
     if looks_like_building_name_lookup(q):
         calls += 1
         routed = try_route(q, conn=conn)
@@ -168,8 +170,10 @@ def match_route_optimized(
     question: str,
     *,
     conn: psycopg.Connection | None = None,
+    contract=None,
 ) -> RouteMatch:
     """최적화: try_route 1회. early allowlist면 early, 아니면 deferred로 재사용."""
+    _ = contract
     q = question.strip()
     routed = try_route(q, conn=conn)
     if routed is None:
@@ -187,7 +191,8 @@ def match_route(
     *,
     mode: DispatchMode = "optimized",
     conn: psycopg.Connection | None = None,
+    contract=None,
 ) -> RouteMatch:
     if mode == "baseline":
-        return match_route_baseline(question, conn=conn)
-    return match_route_optimized(question, conn=conn)
+        return match_route_baseline(question, conn=conn, contract=contract)
+    return match_route_optimized(question, conn=conn, contract=contract)

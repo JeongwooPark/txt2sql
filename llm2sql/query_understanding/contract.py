@@ -49,6 +49,27 @@ class OrderRequest(BaseModel):
     field: str | None = None
 
 
+class ContractCoverage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entity_complete: bool = True
+    predicate_complete: bool = True
+    aggregation_complete: bool = True
+    grouping_complete: bool = True
+    output_complete: bool = True
+    ordering_complete: bool = True
+
+    def all_ok(self) -> bool:
+        return (
+            self.entity_complete
+            and self.predicate_complete
+            and self.aggregation_complete
+            and self.grouping_complete
+            and self.output_complete
+            and self.ordering_complete
+        )
+
+
 class QueryContract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -96,6 +117,23 @@ class QueryContract(BaseModel):
             + self.ranges
             + self.groups
         )
+
+    def coverage(self) -> ContractCoverage:
+        grouping_complete = (not self.groups) or bool(self.group_fields)
+        ordering_complete = (not self.order) or bool(self.order_requests)
+        return ContractCoverage(
+            entity_complete=True,
+            predicate_complete=self.boolean_structure_supported
+            and self.all_numeric_expressions_bound,
+            aggregation_complete=self.aggregation_complete,
+            grouping_complete=grouping_complete,
+            output_complete=self.all_requested_outputs_bound,
+            ordering_complete=ordering_complete,
+        )
+
+    def is_sufficient(self) -> bool:
+        """Router에 넘길 만큼 Contract가 닫혀 있는지."""
+        return self.coverage().all_ok()
 
 
 def extract_contract(question: str) -> QueryContract:

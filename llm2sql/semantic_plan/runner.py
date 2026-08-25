@@ -35,6 +35,7 @@ def run_semantic_plan(
     execute: bool = True,
     allow_llm: bool = True,
     plan: SemanticQueryPlan | None = None,
+    contract=None,
 ) -> dict[str, Any]:
     def emit(stage: str, message: str, **extra: Any) -> None:
         if progress is not None:
@@ -48,6 +49,7 @@ def run_semantic_plan(
             ollama_client=ollama_client,
             session=session,
             allow_llm=allow_llm,
+            contract=contract,
         )
     except SemanticPlanGenerationError as exc:
         emit("plan_fallback", f"Plan 생성 실패: {exc}")
