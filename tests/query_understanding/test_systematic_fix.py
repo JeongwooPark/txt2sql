@@ -116,9 +116,9 @@ def test_heuristic_does_not_drop_or_when_compare_present() -> None:
 
 
 def test_try_route_yields_compound_or_to_plan() -> None:
-    from llm2sql.intent_router import try_route
+    from llm2sql.route_capability import select_execution_path
 
-    assert try_route("수영구 숙박시설 또는 위락시설 채수") is None
+    assert select_execution_path("수영구 숙박시설 또는 위락시설 채수") == "semantic_plan"
 
 
 def test_decade_compiles_to_year_between() -> None:
@@ -226,7 +226,9 @@ def test_multi_area_defers_and_heuristic_keeps_both() -> None:
 
     q = "해운대구 연면적 1000㎡ 이상 건축면적 200㎡ 이상인 건물 수"
     assert should_defer_compound_to_plan(q)
-    assert try_route(q) is None
+    from llm2sql.route_capability import select_execution_path
+
+    assert select_execution_path(q) == "semantic_plan"
     plan = try_heuristic_plan(q)
     assert plan is not None
     fields = {item.field for item in plan.filters}
@@ -334,7 +336,9 @@ def test_temporal_plus_floors_yields_to_plan() -> None:
 
     q = "금정구에서 지어진지 20년 넘고 지상 10층 이상인 건물 수"
     assert should_defer_compound_to_plan(q)
-    assert try_route(q) is None
+    from llm2sql.route_capability import select_execution_path
+
+    assert select_execution_path(q) == "semantic_plan"
     plan = try_heuristic_plan(q)
     assert plan is not None
     sql = compile_semantic_plan(plan).sql
@@ -657,7 +661,9 @@ def test_exclude_near_usage_not_legacy_height() -> None:
     from llm2sql.semantic_plan.generator import try_heuristic_plan
 
     q = "부산진구 제1·2종근린생활시설을 뺀 건물 중 높이 25m 이상인 채수"
-    assert try_route(q) is None
+    from llm2sql.route_capability import select_execution_path
+
+    assert select_execution_path(q) == "semantic_plan"
     plan = try_heuristic_plan(q)
     assert plan is not None
     sql = compile_semantic_plan(plan).sql.upper()
@@ -800,7 +806,9 @@ def test_basement_not_stolen_as_ground_floors() -> None:
     from llm2sql.semantic_plan.generator import try_heuristic_plan
 
     q = "해운대구 지하 2층 이상 건물 채수"
-    assert try_route(q) is None
+    from llm2sql.route_capability import select_execution_path
+
+    assert select_execution_path(q) == "semantic_plan"
     plan = try_heuristic_plan(q)
     assert plan is not None
     assert plan.query_kind == "count"
@@ -816,7 +824,9 @@ def test_basement_and_ground_defers_legacy() -> None:
     from llm2sql.semantic_plan.generator import try_heuristic_plan
 
     q = "해운대구 지하 2층 이상이면서 지상 15층 이상인 공동주택 수"
-    assert try_route(q) is None
+    from llm2sql.route_capability import select_execution_path
+
+    assert select_execution_path(q) == "semantic_plan"
     plan = try_heuristic_plan(q)
     assert plan is not None
     fields = {item.field for item in plan.filters}
@@ -841,7 +851,9 @@ def test_area_threshold_without_countish_defers_to_list() -> None:
     from llm2sql.semantic_plan.generator import try_heuristic_plan
 
     q = "북구 교육연구시설 중 대지면적 1500㎡ 이상"
-    assert try_route(q) is None
+    from llm2sql.route_capability import select_execution_path
+
+    assert select_execution_path(q) == "semantic_plan"
     plan = try_heuristic_plan(q)
     assert plan is not None
     assert plan.query_kind == "list"
@@ -936,7 +948,9 @@ def test_main_usage_plans_on_d198() -> None:
     from llm2sql.semantic_plan.generator import try_heuristic_plan
 
     q = "동래구 주요용도별 건수 상위 8"
-    assert try_route(q) is None
+    from llm2sql.route_capability import select_execution_path
+
+    assert select_execution_path(q) == "semantic_plan"
     plan = try_heuristic_plan(q)
     assert plan is not None
     sql = compile_semantic_plan(plan).sql

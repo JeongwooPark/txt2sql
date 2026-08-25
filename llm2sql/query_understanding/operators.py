@@ -34,6 +34,7 @@ METRIC_MAP = {
     "대지면적": "site_area_m2",
     "면적": "gross_floor_area_m2",
     "지상층": "ground_floors",
+    "지하층": "basement_floors",
     "층수": "ground_floors",
     "용도": "usage",
     "건폐율": "building_coverage_ratio",

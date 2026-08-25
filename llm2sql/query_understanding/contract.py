@@ -102,6 +102,9 @@ class QueryContract(BaseModel):
     order_requests: list[OrderRequest] = Field(default_factory=list)
     limit: int | None = None
     fixed_bins: bool = False
+    wants_spatial: bool = False
+    wants_basement: bool = False
+    wants_count: bool = False
 
     def consumed(self) -> list[Span]:
         return (
@@ -134,6 +137,28 @@ class QueryContract(BaseModel):
     def is_sufficient(self) -> bool:
         """Router에 넘길 만큼 Contract가 닫혀 있는지."""
         return self.coverage().all_ok()
+
+
+_COUNTISH = (
+    "몇 채",
+    "몇채",
+    "건수",
+    "채수",
+    "개수",
+    "채야",
+    "건물 수",
+    "건물수",
+    "몇 개",
+    "몇개",
+    "수는",
+    "개가",
+)
+
+
+def _explicit_count(question: str) -> bool:
+    if any(k in question for k in _COUNTISH):
+        return True
+    return bool(re.search(r"몇\s*(채|동|개)(?!%)", question))
 
 
 def extract_contract(question: str) -> QueryContract:
@@ -187,6 +212,26 @@ def extract_contract(question: str) -> QueryContract:
     ratios = _extract_ratios(q)
     derived_metrics = _extract_derived(q)
     fixed_bins = any(h in q for h in ops.BIN_HINTS)
+    wants_spatial = any(
+        h in q
+        for h in (
+            "안에",
+            "내에",
+            "내부",
+            "안쪽",
+            "주변",
+            "이내",
+            "반경",
+            "버퍼",
+            "교차",
+            "겹치",
+            "맞닿",
+            "경계 안",
+            "경계안",
+        )
+    )
+    wants_basement = bool(re.search(r"지하(?!철)", q))
+    wants_count = _explicit_count(q)
 
     contract = QueryContract(
         question=q,
@@ -205,6 +250,9 @@ def extract_contract(question: str) -> QueryContract:
         ratios=ratios,
         derived_metrics=derived_metrics,
         fixed_bins=fixed_bins,
+        wants_spatial=wants_spatial,
+        wants_basement=wants_basement,
+        wants_count=wants_count,
     )
     consumed = contract.consumed()
     conflicts = conflicting_ranges(ranges)
@@ -446,6 +494,12 @@ def _bind_numbers_greedily(question: str, numbers: list[Span]) -> None:
         field, metric_span = _nearest_unused_metric(question, span.start, used_spans)
         if not field:
             field = unit_fields.get(str(span.meta.get("unit") or ""))
+        if str(span.meta.get("unit") or "") == "층":
+            window = question[max(0, span.start - 6) : span.start]
+            if re.search(r"지하(?!철)", window):
+                field = "basement_floors"
+            elif "지상" in window:
+                field = "ground_floors"
         span.meta["field"] = field
         if metric_span is not None:
             used_spans.add(metric_span)
@@ -575,7 +629,7 @@ def _finalize_requests(contract: QueryContract) -> None:
             contract.aggregation_requests.append(
                 AggregationRequest(function=fn, field=str(field) if field else None)
             )
-    if any(k in q for k in ("건수", "채수", "몇 채", "몇채", "건물 수")) and "count" not in seen_fn:
+    if contract.wants_count and "count" not in seen_fn:
         contract.aggregation_requests.append(AggregationRequest(function="count"))
     for item in contract.percentile_requests:
         contract.aggregation_requests.append(

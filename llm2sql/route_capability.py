@@ -30,9 +30,22 @@ class RouteCapability:
     supports_percentile: bool = False
     supports_derived_metric: bool = False
     supports_fixed_bins: bool = False
+    supports_basement: bool = False
     supported_fields: frozenset[str] = field(default_factory=frozenset)
 
 
+_THRESHOLD_FIELDS = frozenset(
+    {
+        "height_m",
+        "gross_floor_area_m2",
+        "building_area_m2",
+        "site_area_m2",
+        "ground_floors",
+        "basement_floors",
+        "building_coverage_ratio",
+        "floor_area_ratio",
+    }
+)
 _COUNT_ONLY = frozenset({"count"})
 _BASIC_AGGS = frozenset({"count", "avg", "sum", "min", "max", "median"})
 _ALL_AGGS = _BASIC_AGGS | frozenset({"stddev", "percentile"})
@@ -43,6 +56,19 @@ _ALL_GROUPS = frozenset(
 SIMPLE_COUNT = RouteCapability(
     route="legacy_simple_count",
     supports_multiple_predicates=False,
+    supported_aggregations=_COUNT_ONLY,
+)
+THRESHOLD_COUNT = RouteCapability(
+    route="building_threshold_count",
+    supports_between=True,
+    supported_aggregations=_COUNT_ONLY,
+)
+THRESHOLD_LIST = RouteCapability(
+    route="building_threshold_list",
+    supports_between=True,
+    supports_output_projection=True,
+    supports_rank=True,
+    supports_top_n=True,
     supported_aggregations=_COUNT_ONLY,
 )
 PROFILE = RouteCapability(
@@ -94,6 +120,12 @@ BAS = RouteCapability(
     supports_top_n=True,
     supported_aggregations=_COUNT_ONLY,
 )
+SPATIAL = RouteCapability(
+    route="spatial",
+    supports_spatial=True,
+    supported_aggregations=_COUNT_ONLY,
+    supports_output_projection=True,
+)
 PLAN_ROUTE = RouteCapability(
     route="semantic_plan",
     entities=frozenset(
@@ -118,6 +150,7 @@ PLAN_ROUTE = RouteCapability(
     supports_percentile=True,
     supports_derived_metric=True,
     supports_fixed_bins=True,
+    supports_basement=True,
 )
 
 
@@ -137,18 +170,57 @@ def capability_for(route: str) -> RouteCapability:
         return D198
     if intent.startswith("bas_") or intent.startswith("bas_area"):
         return BAS
+    if (
+        intent.startswith("spatial_")
+        or intent.startswith("place_buffer")
+        or intent.startswith("buffer_")
+        or intent in {
+            "building_in_dong_spatial",
+            "building_in_dong_spatial_list",
+        }
+    ):
+        return SPATIAL
+    if intent == "building_rank_compare":
+        return RANK
     if intent in {
         "building_place_count",
         "building_usage_count",
-        "building_height_count",
-        "building_floor_count",
         "building_structure_count",
         "building_special_land_count",
-        "building_attr_count",
         "building_admin_dong_usage_count",
     }:
         return SIMPLE_COUNT
+    if intent in {
+        "building_height_count",
+        "building_floor_count",
+        "building_attr_count",
+        "building_area_threshold_count",
+    }:
+        return THRESHOLD_COUNT
+    if intent in {
+        "building_area_threshold_list",
+        "building_height_threshold_list",
+        "building_floor_threshold_list",
+        "building_attr_list",
+        "building_structure_list",
+        "building_special_land_list",
+        "building_area_topn",
+        "building_area_top1_value",
+    }:
+        return THRESHOLD_LIST
     return SIMPLE_COUNT
+
+
+def _constraint_fields(contract: QueryContract) -> set[str]:
+    fields: set[str] = set()
+    for span in contract.metrics:
+        if span.value:
+            fields.add(str(span.value))
+    for span in contract.numbers + contract.ranges:
+        field = span.meta.get("field")
+        if field:
+            fields.add(str(field))
+    return fields
 
 
 def missing_requirements(capability: RouteCapability, contract: QueryContract) -> list[str]:
@@ -161,7 +233,8 @@ def missing_requirements(capability: RouteCapability, contract: QueryContract) -
         missing.append("between")
     if contract.comparisons and not capability.supports_field_compare:
         missing.append("field_compare")
-    n_pred = len(contract.ranges) + len(contract.comparisons) + len(contract.metrics)
+    pred_fields = _constraint_fields(contract)
+    n_pred = len(pred_fields) + len(contract.comparisons)
     if n_pred >= 2 and not capability.supports_multiple_predicates:
         missing.append("multiple_predicates")
     needed_aggs = {item.function for item in contract.aggregation_requests}
@@ -170,10 +243,12 @@ def missing_requirements(capability: RouteCapability, contract: QueryContract) -
     unsupported = needed_aggs - set(capability.supported_aggregations)
     if unsupported:
         missing.append("unsupported_aggregation")
+        missing.extend(f"aggregation:{fn}" for fn in sorted(unsupported))
     group_fields = list(contract.group_fields)
     if group_fields:
         if not capability.supports_group_by:
             missing.append("group_by")
+            missing.extend(f"group_by:{item}" for item in group_fields)
         elif capability.supported_group_fields and not set(group_fields) <= set(
             capability.supported_group_fields
         ):
@@ -199,6 +274,24 @@ def missing_requirements(capability: RouteCapability, contract: QueryContract) -
         missing.append("derived_metric")
     if contract.fixed_bins and not capability.supports_fixed_bins:
         missing.append("fixed_bins")
+    if contract.wants_spatial and not capability.supports_spatial:
+        missing.append("spatial")
+    if (
+        contract.wants_basement or "basement_floors" in pred_fields
+    ) and not capability.supports_basement:
+        missing.append("basement")
+    threshold_fields = pred_fields & _THRESHOLD_FIELDS
+    if (
+        threshold_fields
+        and capability.route in {"legacy_simple_count", "building_threshold_count"}
+        and not contract.wants_count
+    ):
+        missing.append("explicit_count")
+    if capability.supported_fields:
+        extra = (pred_fields | set(contract.output_fields)) - set(capability.supported_fields)
+        extra -= {"usage", "structure", "special_land", "legal_dong", "name"}
+        if extra:
+            missing.append("unsupported_field")
     return list(dict.fromkeys(missing))
 
 
@@ -206,16 +299,46 @@ def missing_slots(capability: RouteCapability, contract: QueryContract) -> list[
     return missing_requirements(capability, contract)
 
 
+def contract_is_complete(contract: QueryContract) -> bool:
+    return contract.is_sufficient()
+
+
 def fully_supports(capability: RouteCapability, contract: QueryContract) -> bool:
     return len(missing_requirements(capability, contract)) == 0
 
 
-def legacy_route_eligible(contract: QueryContract) -> bool:
-    return fully_supports(SIMPLE_COUNT, contract)
+def legacy_route_eligible(route: str, contract: QueryContract) -> bool:
+    if not contract_is_complete(contract):
+        return False
+    return not missing_requirements(capability_for(route), contract)
 
 
 def route_allowed(intent: str, contract: QueryContract) -> bool:
-    return fully_supports(capability_for(intent), contract)
+    return legacy_route_eligible(intent, contract)
+
+
+def detect_route_candidates(
+    question: str,
+    contract: QueryContract | None = None,
+    *,
+    conn=None,
+) -> list[str]:
+    from llm2sql.intent_router import try_route
+    from llm2sql.profile_qa import is_profile_question
+    from llm2sql.route_dispatch import match_route
+
+    match = match_route(question, conn=conn, contract=contract)
+    candidates: list[str] = []
+    if match.early is not None:
+        candidates.append(match.early.intent)
+    if is_profile_question(question):
+        candidates.append("building_profile")
+    deferred = match.deferred
+    if deferred is None and match.early is None:
+        deferred = try_route(question, conn=conn)
+    if deferred is not None and deferred.intent not in candidates:
+        candidates.append(deferred.intent)
+    return candidates
 
 
 def select_execution_path(
@@ -225,23 +348,10 @@ def select_execution_path(
     contract: QueryContract | None = None,
 ) -> str:
     """Contract → candidate routes → 전부 지원하는 첫 경로, 아니면 semantic_plan."""
-    from llm2sql.intent_router import try_route
-    from llm2sql.profile_qa import is_profile_question
-    from llm2sql.route_dispatch import match_route
-
     contract = contract or extract_contract(question)
-    match = match_route(question, conn=conn)
-    candidates: list[str] = []
-    if match.early is not None:
-        candidates.append(match.early.intent)
-    if is_profile_question(question):
-        candidates.append("building_profile")
-    deferred = match.deferred
-    if deferred is None:
-        deferred = try_route(question, conn=conn)
-    if deferred is not None and deferred.intent not in candidates:
-        candidates.append(deferred.intent)
-    for intent in candidates:
-        if fully_supports(capability_for(intent), contract):
+    if not contract_is_complete(contract):
+        return "semantic_plan"
+    for intent in detect_route_candidates(question, contract, conn=conn):
+        if legacy_route_eligible(intent, contract):
             return intent
     return "semantic_plan"

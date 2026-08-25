@@ -925,111 +925,10 @@ _METRIC_FAMILY_KEYS = (
 
 
 def _legacy_must_yield_to_plan(question: str) -> bool:
-    """OR/NOT·다중집계·공간+속성은 부분 라우트 대신 Plan으로 넘긴다.
+    """복합 Contract는 capability 평가 후 Plan으로 넘긴다."""
+    from llm2sql.route_capability import select_execution_path
 
-    단일 구간(BETWEEN) 질의는 전용 레거시 라우트가 상·하한을 유지하므로 여기서 막지 않는다.
-    """
-    from llm2sql.query_understanding.contract import extract_contract
-
-    try:
-        contract = extract_contract(question)
-    except Exception:
-        return False
-    if any(span.kind == "or" for span in contract.boolean_ops):
-        if not _d198_exclusive_question(question):
-            return True
-    if any(span.kind == "not" for span in contract.boolean_ops):
-        if not _d198_exclusive_question(question):
-            return True
-    if len(contract.aggregations) >= 2 or contract.groups:
-        return True
-    spatial_cue = any(
-        k in question
-        for k in ("안에", "내에", "내부", "안쪽", "경계 안", "경계안", "산업단지")
-    )
-    has_attr = bool(
-        contract.metrics
-        or contract.ranges
-        or contract.comparisons
-        or contract.boolean_ops
-    )
-    if spatial_cue and has_attr:
-        if _catalog_owns_industrial(question) and not any(
-            k in question for k in ("건물", "공장", "창고", "채")
-        ):
-            return False
-        return True
-    from llm2sql.query_understanding.temporal import parse_temporal_filters
-
-    temporal = bool(parse_temporal_filters(question)) or "년대" in question or looks_like_age_question(
-        question
-    )
-    other_metric = any(
-        (span.value or span.meta.get("field"))
-        in {
-            "height_m",
-            "ground_floors",
-            "gross_floor_area_m2",
-            "building_area_m2",
-            "site_area_m2",
-            "structure",
-        }
-        for span in (contract.metrics + contract.numbers + contract.ranges)
-    ) or extract_structure(question) is not None
-    if temporal and other_metric:
-        return True
-    if len(contract.ranges) >= 2:
-        return True
-    family_hits = sum(
-        1 for keys in _METRIC_FAMILY_KEYS if any(k in question for k in keys)
-    )
-    if family_hits >= 2 and any(
-        k in question for k in ("이상", "이하", "초과", "미만", "사이", "~")
-    ):
-        return True
-    if any(k in question for k in ("건물동명", "동명이")):
-        return True
-    if extract_industrial_name(question) and any(
-        k in question for k in ("공장", "창고")
-    ):
-        return True
-    if "기초구역" in question and any(
-        k in question for k in ("이상", "이하", "초과", "미만")
-    ) and any(k in question for k in ("개수", "몇", "개야", "채수")):
-        return True
-    if re.search(r"(공장|창고시설|창고)[·･、,/]", question):
-        return True
-    if any(k in question for k in ("vs", "VS", "이상과 미만")):
-        return True
-    if any(k in question for k in ("주변", "이내", "반경", "중심에서")) and extract_usage(
-        question
-    ):
-        return True
-    if "이동사유별" in question or ("이동사유" in question and "별" in question):
-        return True
-    if looks_like_age_question(question) and not _d198_exclusive_question(question):
-        return True
-    if "주요용도별" in question or (
-        "주요용도" in question
-        and (
-            extract_structure(question) is not None
-            or any(k in question for k in ("상위", "별 건수", "용도별", "층"))
-        )
-    ):
-        return True
-    if "세부용도" in question and (
-        looks_like_age_question(question) or re.search(r"(?:19|20)\d{2}\s*년", question)
-    ):
-        return True
-    if "허가일" in question and "사용승인일" in question and "차이" in question:
-        return True
-    if "허가" in question and "년대" in question and any(
-        k in question for k in ("상업용", "주거용", "문교", "공공용")
-    ):
-        return True
-    if "지하층" in question and any(k in question for k in ("있는", "있")):
-        return True
-    return False
+    return select_execution_path(question) == "semantic_plan"
 
 
 def try_route(
@@ -1037,8 +936,7 @@ def try_route(
     conn: psycopg.Connection | None = None,
 ) -> RoutedQuery | None:
     q = question.strip()
-    if _legacy_must_yield_to_plan(q):
-        return None
+    # Candidate detection only. Execution is gated by RouteCapability.
 
     name_cmp = _route_building_name_set_compare(q)
     if name_cmp is not None:
@@ -1068,9 +966,6 @@ def try_route(
     map_hit = _route_map_display(q)
     if map_hit is not None:
         return map_hit
-
-    if should_defer_compound_to_plan(q):
-        return None
 
     # 용도별건물공간정보(D198) 전 속성 — D010 면적/산지 오탐보다 우선
     # 특정 건물명+사용승인일 조회는 카탈로그(A13 있음) 오탐보다 이름 조회가 우선

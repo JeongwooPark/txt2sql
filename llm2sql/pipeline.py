@@ -75,7 +75,12 @@ from llm2sql.progress import ProgressCallback, ProgressTracker, TokenCallback
 from llm2sql.query_understanding.contract import extract_contract
 from llm2sql.rag_sql import run_rag_sql
 from llm2sql.rank_compare_qa import answer_rank_compare, is_rank_compare_question
-from llm2sql.route_capability import route_allowed
+from llm2sql.route_capability import (
+    capability_for,
+    detect_route_candidates,
+    missing_requirements,
+    route_allowed,
+)
 from llm2sql.route_dispatch import (
     DispatchMode,
     match_route,
@@ -1280,6 +1285,7 @@ def _ask_inner(
     )
     route_match = match_route(question, mode=mode, conn=conn, contract=contract)
     deferred_route = route_match.deferred
+    candidates = detect_route_candidates(question, contract, conn=conn)
     if route_match.early is not None:
         early = route_match.early
         if route_allowed(early.intent, contract):
@@ -1301,7 +1307,13 @@ def _ask_inner(
                 routed=early,
                 route_label=label,
             )
-        progress.emit("route", f"early route capability 부족: {early.intent}")
+        miss = missing_requirements(capability_for(early.intent), contract)
+        progress.emit(
+            "route",
+            f"early route capability 부족: {early.intent}",
+            missing=miss,
+            candidates=candidates,
+        )
 
     if preferred_intent is not None and settings.intent_mode in {"hybrid", "llm"}:
         dispatched = _try_preferred_intent(
@@ -1398,7 +1410,13 @@ def _ask_inner(
     progress.emit("route", "규칙 라우터 매칭 시도")
     routed = deferred_route if deferred_route is not None else try_route(question, conn=conn)
     if routed is not None and not route_allowed(routed.intent, contract):
-        progress.emit("route", f"라우트 capability 부족: {routed.intent} → Semantic Plan")
+        miss = missing_requirements(capability_for(routed.intent), contract)
+        progress.emit(
+            "route",
+            f"라우트 capability 부족: {routed.intent} → Semantic Plan",
+            missing=miss,
+            candidates=candidates,
+        )
         routed = None
     if routed is not None:
         progress.emit(

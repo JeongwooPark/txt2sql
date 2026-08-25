@@ -1,5 +1,6 @@
 from llm2sql.answer import _subject_phrase
 from llm2sql.intent_router import should_defer_compound_to_plan, try_route
+from llm2sql.route_capability import select_execution_path
 from llm2sql.semantic_plan.compiler import compile_semantic_plan
 from llm2sql.semantic_plan.generator import try_heuristic_plan
 from llm2sql.semantic_plan.normalizer import normalize_semantic_plan
@@ -26,7 +27,7 @@ def test_router_keeps_simple_area_count() -> None:
 def test_router_misses_height_and_gfa() -> None:
     q = "해운대구 아파트 중 높이 70m 이상이고 연면적 10000㎡ 이상인 건물 이름과 높이"
     assert should_defer_compound_to_plan(q)
-    assert try_route(q) is None
+    assert select_execution_path(q) == "semantic_plan"
     sql = _sql(q)
     assert '"A16"' in sql
     assert '"A14"' in sql
@@ -36,7 +37,7 @@ def test_router_misses_height_and_gfa() -> None:
 def test_router_misses_spatial_inside_rank() -> None:
     q = "연산동 안에 있는 공동주택 중 연면적 상위 10개"
     assert should_defer_compound_to_plan(q)
-    assert try_route(q) is None
+    assert select_execution_path(q) == "semantic_plan"
     sql = _sql(q)
     assert "ST_Intersects" in sql
     assert "BND_ADM" in sql
@@ -46,7 +47,7 @@ def test_router_misses_spatial_inside_rank() -> None:
 def test_router_misses_buffer_plus_height() -> None:
     q = "구서동 주변 500m 이내에 있는 공동주택 중 높이 40m 이상"
     assert should_defer_compound_to_plan(q)
-    assert try_route(q) is None
+    assert select_execution_path(q) == "semantic_plan"
     sql = _sql(q)
     assert "ST_DWithin" in sql
     assert '"A16"' in sql
