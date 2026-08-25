@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from llm2sql.clarify_qa import check_ambiguity
-from llm2sql.domain import is_vague_age_threshold, looks_like_building_name_lookup
-from llm2sql.guide_qa import try_guide
-from llm2sql.intent_router import _wants_count, fix_common_sql_mistakes, try_route
-from llm2sql.sql_validator import diagnose_sql
+from txt2sql.clarify_qa import check_ambiguity
+from txt2sql.domain import is_vague_age_threshold, looks_like_building_name_lookup
+from txt2sql.guide_qa import try_guide
+from txt2sql.intent_router import _wants_count, fix_common_sql_mistakes, try_route
+from txt2sql.sql_validator import diagnose_sql
 
 
 def main() -> int:

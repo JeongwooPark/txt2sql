@@ -14,8 +14,8 @@ import statistics
 import time
 from pathlib import Path
 
-from llm2sql.config import load_settings
-from llm2sql.intent_classifier import (
+from txt2sql.config import load_settings
+from txt2sql.intent_classifier import (
     classify_intent_hybrid,
     classify_intent_llm,
     predict_intent_rules,

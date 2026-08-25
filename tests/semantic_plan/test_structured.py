@@ -1,6 +1,6 @@
-from llm2sql.config import Settings
-from llm2sql.semantic_plan.generator import _generate_with_llm, parse_plan_json
-from llm2sql.semantic_plan.models import SemanticPlanGenerationError, SemanticQueryPlan
+from txt2sql.config import Settings
+from txt2sql.semantic_plan.generator import _generate_with_llm, parse_plan_json
+from txt2sql.semantic_plan.models import SemanticPlanGenerationError, SemanticQueryPlan
 
 
 def test_parse_migrates_to_v11() -> None:
@@ -17,7 +17,7 @@ def test_repair_once_then_fail(monkeypatch) -> None:
         calls.append(kwargs.get("response_format"))
         return "not-json"
 
-    monkeypatch.setattr("llm2sql.semantic_plan.generator.chat", fake_chat)
+    monkeypatch.setattr("txt2sql.semantic_plan.generator.chat", fake_chat)
     settings = Settings(database_url="postgresql://x:x@localhost/x", semantic_plan_max_retries=1)
     try:
         _generate_with_llm("질문", settings, hints={}, ollama_client=object())

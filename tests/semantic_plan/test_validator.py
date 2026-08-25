@@ -1,5 +1,5 @@
-from llm2sql.semantic_plan.models import FilterSpec, PlaceSpec, ScopeSpec, SemanticQueryPlan
-from llm2sql.semantic_plan.validator import validate_semantic_plan
+from txt2sql.semantic_plan.models import FilterSpec, PlaceSpec, ScopeSpec, SemanticQueryPlan
+from txt2sql.semantic_plan.validator import validate_semantic_plan
 
 
 def test_unknown_field_falls_back() -> None:

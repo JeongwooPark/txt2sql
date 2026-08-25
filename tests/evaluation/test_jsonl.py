@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from llm2sql.evaluation.import_smoke import compound30_cases, nl100_cases
-from llm2sql.evaluation.jsonl import dump_jsonl, load_jsonl
-from llm2sql.evaluation.schema import GoldPlanCase
+from txt2sql.evaluation.import_smoke import compound30_cases, nl100_cases
+from txt2sql.evaluation.jsonl import dump_jsonl, load_jsonl
+from txt2sql.evaluation.schema import GoldPlanCase
 
 
 def test_gold_schema_roundtrip(tmp_path: Path) -> None:

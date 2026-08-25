@@ -1,4 +1,4 @@
-# llm2sql Semantic Query Plan (0.3.0)
+# txt2sql Semantic Query Plan (0.3.0)
 
 > 대상: `JeongwooPark/txt2sql` (구 `JeongwooPark/llm2sql`)  
 > 도입 버전: **0.2.2** · 현재 제품: **0.3.0**  

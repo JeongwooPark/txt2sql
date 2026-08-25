@@ -3,12 +3,12 @@
 | 항목 | 내용 |
 |------|------|
 | 기준 시스템 | `llm2_geodb` (LM2GISDB **v0.1.0**) — 대화형 GIS 해석·오케스트레이션 |
-| 고도화 시스템 | **`llm2sql` v0.3.0** — 자연어→SQL→한국어 답변 + 지도·데이터 관리 + Semantic Query Plan (기본 `hybrid`) |
+| 고도화 시스템 | **`txt2sql` v0.3.0** — 자연어→SQL→한국어 답변 + 지도·데이터 관리 + Semantic Query Plan (기본 `hybrid`) |
 | 비교 범위 | 자연어·SQL·의도·메타데이터·안전·세션·답변·지도·데이터 관리·제품 표면 |
 | 작성 기준일 | 2026-08-25 |
-| 작성 목적 | `llm2_geodb`에서 `llm2sql`로 이어진 **고도화 내용** 문서화 |
+| 작성 목적 | `llm2_geodb`에서 `txt2sql`로 이어진 **고도화 내용** 문서화 |
 
-> **현재 버전: llm2sql 0.3.0** (`pyproject.toml`, FastAPI `version`, 웹 Head/Bottom 패널 표기와 동일). SQP Plan 스키마는 v1.1이고 `SEMANTIC_PLAN_MODE` 기본값은 `hybrid`다. 0.3.0 상세는 `docs/20260825_txt2sql_v0.3.0.md`.
+> **현재 버전: txt2sql 0.3.0** (`pyproject.toml`, FastAPI `version`, 웹 Head/Bottom 패널 표기와 동일). SQP Plan 스키마는 v1.1이고 `SEMANTIC_PLAN_MODE` 기본값은 `hybrid`다. 0.3.0 상세는 `docs/20260825_txt2sql_v0.3.0.md`.
 
 ---
 
@@ -39,7 +39,7 @@
 
 `llm2_geodb`(LM2GISDB v0.1.0)는 행정 GIS DB의 **스키마·질의·결과 이해 장벽**을 완화하기 위해, 사용자가 제공한 Spatial SQL을 **안전하게 실행**하고 결과를 **메타데이터 주입 한국어로 해석**한 뒤 **GeoServer·OpenLayers 지도**에 올리는 대화 계층을 정립했다. 다만 **자연어→SQL 생성(NL→SQL)** 은 의도적으로 비어 있었고, 연구보고서에서도 **L5: 스키마 RAG + Text-to-SQL + 검증 실행** 을 후속 과제로 명시했다. UI의 자연어→SQL 버튼은 stub였다.
 
-**`llm2sql` v0.2.1**은 이 기반(읽기 전용 거버넌스, 메타데이터 정렬 답변, 의도 분기, 다턴 맥락, 로컬 Ollama, GeoServer 지도, Shapefile·메타데이터 관리)을 계승하면서, L5를 중심으로 **자연어 질의만으로 SELECT를 생성·검증·실행하고 한국어·차트·지도로 답하는 파이프라인**을 구현했다. **현재 배포는 v0.2.3**이다. 라우터 미적중·복합조건 구간에 Semantic Query Plan을 끼우고, 기본 `SEMANTIC_PLAN_MODE=hybrid`이면 검증된 Plan SQL을 실행한다. `off`이면 0.2.1과 같다.
+**`txt2sql` v0.2.1**은 이 기반(읽기 전용 거버넌스, 메타데이터 정렬 답변, 의도 분기, 다턴 맥락, 로컬 Ollama, GeoServer 지도, Shapefile·메타데이터 관리)을 계승하면서, L5를 중심으로 **자연어 질의만으로 SELECT를 생성·검증·실행하고 한국어·차트·지도로 답하는 파이프라인**을 구현했다. **현재 배포는 v0.2.3**이다. 라우터 미적중·복합조건 구간에 Semantic Query Plan을 끼우고, 기본 `SEMANTIC_PLAN_MODE=hybrid`이면 검증된 Plan SQL을 실행한다. `off`이면 0.2.1과 같다.
 
 > 한 줄: **해석·안전 실행·사용자 SQL 지도화(llm2_geodb) → 자연어 조회 완결 + 자동 지도·제품화(llm2sql) → 복합조건은 canonical Plan→확정 SQL(0.2.3, 기본 `hybrid`)**.
 
@@ -76,7 +76,7 @@
 3. 가능하면 **온프레미스 LLM(Ollama)** 으로 처리
 4. 규칙과 LLM을 **계층화**하여 비용·안정성 균형
 
-`llm2sql`은 여기에 **“질문을 SQL로 바꿀 책임”** 을 시스템이 지고, 그 책임을 **검증 루프**로 뒷받침한다. 지도는 사용자가 SQL을 넣을 때가 아니라 **채팅 성공 결과에서 자동 발행**된다.
+`txt2sql`은 여기에 **“질문을 SQL로 바꿀 책임”** 을 시스템이 지고, 그 책임을 **검증 루프**로 뒷받침한다. 지도는 사용자가 SQL을 넣을 때가 아니라 **채팅 성공 결과에서 자동 발행**된다.
 
 ---
 
@@ -95,7 +95,7 @@
 
 `llm2_geodb`는 실행 SQL에서 주 테이블을 추출한 뒤 `table_metadata` / `column_metadata`(및 col_def·pnu_def 계열)로 **표시명·설명·단위**를 프롬프트에 넣어 해석한다. SQL 재출력을 억제하는 **해석 모드**와 일반 **상담 모드**를 분리한다.
 
-`llm2sql`은 동일 메타 자산을 다음으로 확장한다.
+`txt2sql`은 동일 메타 자산을 다음으로 확장한다.
 
 - 답변·프로필 서술에서 컬럼코드(`A9` 등) **비노출**
 - 생성 SQL의 한글 display → 물리명 **rewrite** (`sql_fix.py`)
@@ -107,7 +107,7 @@
 
 `llm2_geodb`의 ORCH는 **규칙 게이트**(단문 실행, 발화 내 SQL 추출) 후 **LLM 의도 분류**(EXECUTE/SQL/CHAT)로 분기한다. 실행과 상담을 API·프롬프트 수준에서 분리한다.
 
-`llm2sql`은 “실행할지 말지”를 넘어 **어떤 스킬로 답할지** 까지 라우팅한다. 고빈도 조회는 규칙 라우터로 LLM을 우회하고, 애매한 경우만 생성 경로로 보낸다.
+`txt2sql`은 “실행할지 말지”를 넘어 **어떤 스킬로 답할지** 까지 라우팅한다. 고빈도 조회는 규칙 라우터로 LLM을 우회하고, 애매한 경우만 생성 경로로 보낸다.
 
 ### 3.4 다턴 대화 상태
 
@@ -120,11 +120,11 @@
 ### 3.5 로컬 LLM·후처리
 
 - Ollama 기반 호출, 모델 교체 가능 사상
-- think 태그·역할 접두어 등 출력 정규화 아이디어 → `llm2sql` 답변 경로에서도 정제·템플릿 폴백으로 품질 관리
+- think 태그·역할 접두어 등 출력 정규화 아이디어 → `txt2sql` 답변 경로에서도 정제·템플릿 폴백으로 품질 관리
 
 ### 3.6 지도·데이터 인프라
 
-`llm2_geodb`가 정립한 GeoServer 워크스페이스(`korDB`)·PostGIS 데이터스토어(`KoreaDB`)·Shapefile ZIP 적재·메타데이터 화면을 `llm2sql` v0.2~0.2.1이 **엔진 파이프라인에 결합**하여 재구현했다. 입력은 자연어 채팅만 쓰고, Spatial SQL 텍스트 영역은 이식하지 않았다.
+`llm2_geodb`가 정립한 GeoServer 워크스페이스(`korDB`)·PostGIS 데이터스토어(`KoreaDB`)·Shapefile ZIP 적재·메타데이터 화면을 `txt2sql` v0.2~0.2.1이 **엔진 파이프라인에 결합**하여 재구현했다. 입력은 자연어 채팅만 쓰고, Spatial SQL 텍스트 영역은 이식하지 않았다.
 
 ---
 
@@ -214,7 +214,7 @@ UI에도 자연어→SQL 버튼이 stub로 남아 “아직 구현되지 않았�
 
 ### 5.3 파이프라인 상 스킬 순서 (개념)
 
-`llm2sql` `_ask_inner` / `run_ask` 기준 개념 순서:
+`txt2sql` `_ask_inner` / `run_ask` 기준 개념 순서:
 
 1. 세션 전처리 (clarify 번호 선택, 차트 수락/거절/종류, 짧은 기준 보정 등)
 2. 의도 분류 (hybrid/llm)
@@ -245,8 +245,8 @@ UI에도 자연어→SQL 버튼이 stub로 남아 “아직 구현되지 않았�
 
 ### 6.2 의미 메타·동의어
 
-`llm2sql`은 `semantic_meta.py`로 테이블/컬럼 동의어를 보강하고, 컴팩트 스키마 텍스트에 샘플값·한글 설명을 실어 생성 프롬프트의 적중률을 높인다.  
-`llm2_geodb`의 “메타 주입 해석”이 **실행 후 설명**에 쓰였다면, `llm2sql`에서는 **생성 전 스키마 선택·프롬프트**와 **실행 후 답변·Identify** 양쪽에 쓰인다.
+`txt2sql`은 `semantic_meta.py`로 테이블/컬럼 동의어를 보강하고, 컴팩트 스키마 텍스트에 샘플값·한글 설명을 실어 생성 프롬프트의 적중률을 높인다.  
+`llm2_geodb`의 “메타 주입 해석”이 **실행 후 설명**에 쓰였다면, `txt2sql`에서는 **생성 전 스키마 선택·프롬프트**와 **실행 후 답변·Identify** 양쪽에 쓰인다.
 
 ### 6.3 메타 QA 전용 경로
 
@@ -276,7 +276,7 @@ UI에도 자연어→SQL 버튼이 stub로 남아 “아직 구현되지 않았�
 ### 7.2 안전 속성 강화 포인트
 
 `llm2_geodb`도 3층 안전 정책을 명시했으나, 가드가 **선두 키워드**에 치우친 단순 패턴이었다.  
-`llm2sql`은 생성 SQL이 시스템에 의해 만들어지므로 **사전 검증 체인**이 더 중요하다. 여전히 범용 SQL 인젝션·CTE 우회에 대한 완전 형식 검증은 아니며, **읽기 전용 + 단일 SELECT + LIMIT** 을 운영 전제로 한다.
+`txt2sql`은 생성 SQL이 시스템에 의해 만들어지므로 **사전 검증 체인**이 더 중요하다. 여전히 범용 SQL 인젝션·CTE 우회에 대한 완전 형식 검증은 아니며, **읽기 전용 + 단일 SELECT + LIMIT** 을 운영 전제로 한다.
 
 지도 DDL은 `temp_[0-9a-f]{8,32}` 이름에만 허용하고, 원본 KorDB 테이블 삭제는 API가 거부한다. `execute_query`는 SQL 오류 시 `conn.rollback()` 하여 aborted transaction이 다음 질의를 오염하지 않게 한다.
 
@@ -351,7 +351,7 @@ UI에도 자연어→SQL 버튼이 stub로 남아 “아직 구현되지 않았�
 
 ## 10. 지도 시각화 고도화
 
-`llm2_geodb`는 **사용자가 넣은 Spatial SQL**을 실행한 뒤 GeoServer 레이어를 만들고 OpenLayers로 그렸다. `llm2sql` v0.2부터는 **시스템이 만든 SELECT**에 geometry를 주입(또는 집계를 행정 경계로 대체)해 자동 발행한다. v0.2.1에서 UI·수명·Identify를 제품 수준으로 다듬었다.
+`llm2_geodb`는 **사용자가 넣은 Spatial SQL**을 실행한 뒤 GeoServer 레이어를 만들고 OpenLayers로 그렸다. `txt2sql` v0.2부터는 **시스템이 만든 SELECT**에 geometry를 주입(또는 집계를 행정 경계로 대체)해 자동 발행한다. v0.2.1에서 UI·수명·Identify를 제품 수준으로 다듬었다.
 
 ### 10.1 발행 모델
 
@@ -375,7 +375,7 @@ UI에도 자연어→SQL 버튼이 stub로 남아 “아직 구현되지 않았�
 
 ### 10.3 레이어 체계
 
-`llm2sql`은 z-index의 유일한 기준을 **출력 레이어**로 둔다.
+`txt2sql`은 z-index의 유일한 기준을 **출력 레이어**로 둔다.
 
 | 구분 | 동작 |
 |------|------|
@@ -417,12 +417,12 @@ v0.2.1에서 `llm2_geodb`의 공간데이터 업로드·메타데이터 화면�
 
 | 구분 | llm2_geodb | llm2sql v0.2.1 |
 |------|------------|----------------|
-| 웹 | Flask `:5000` 단일 앱 | FastAPI `llm2sql-web` (`127.0.0.1:8000`) |
+| 웹 | Flask `:5000` 단일 앱 | FastAPI `txt2sql-web` (`127.0.0.1:8000`) |
 | 지도 | 앱의 본체 | `GET /map` |
 | 채팅 | 지도 화면 부속 | `GET /` · `/chat` (지도 없이 대화·차트) |
 | 데이터 | 서브 템플릿 | `/data`, `/data/upload`, `/data/metadata` |
-| CLI | (대화는 웹 중심) | `llm2sql.cli` 일회·`--chat`, progress/verbose/json |
-| 라이브러리 | 모듈 직접 호출 | `Llm2SqlEngine.ask`, `AskResult`, `SessionContext` |
+| CLI | (대화는 웹 중심) | `txt2sql.cli` 일회·`--chat`, progress/verbose/json |
+| 라이브러리 | 모듈 직접 호출 | `Txt2SqlEngine.ask`, `AskResult`, `SessionContext` |
 
 ### 12.2 HTTP API (고도화 쪽)
 
@@ -456,7 +456,7 @@ v0.2.1에서 `llm2_geodb`의 공간데이터 업로드·메타데이터 화면�
 ### 12.5 평가·회귀
 
 `llm2_geodb`는 연구용 검증 축(의도 accuracy, 해석 인간평가, 안전 차단율)을 **제시**했다.  
-`llm2sql`은 실행 가능한 스크립트로 일부를 상시화한다.
+`txt2sql`은 실행 가능한 스크립트로 일부를 상시화한다.
 
 예시:
 
@@ -590,11 +590,11 @@ v0.2.1에서 `llm2_geodb`의 공간데이터 업로드·메타데이터 화면�
 
 ## 17. 버전별 고도화
 
-`llm2sql`이 `llm2_geodb` 이후 쌓아 온 단계이다. **현재 배포 버전은 0.2.3**이고, SQP는 v1.1·기본 `hybrid`다.
+`txt2sql`이 `llm2_geodb` 이후 쌓아 온 단계이다. **현재 배포 버전은 0.2.3**이고, SQP는 v1.1·기본 `hybrid`다.
 
 | 버전 | 요지 |
 |------|------|
-| **0.1.0** | `Llm2SqlEngine`, 웹 SSE, clarify 번호 선택, 부산시 전역 순위, 이상값 필터, 특징·최고건물 비교, 컬럼코드 비노출 |
+| **0.1.0** | `Txt2SqlEngine`, 웹 SSE, clarify 번호 선택, 부산시 전역 순위, 이상값 필터, 특징·최고건물 비교, 컬럼코드 비노출 |
 | **0.1.1** | 하이브리드 의도, 차트, 데이터셋 요약, 메타/프로필 오분류 수정, RAG·example store·벤치 |
 | **0.1.2** | route_dispatch 최적화, 건물명·산업단지·차트 시리즈 필터, `benchmark_route_opt` |
 | **0.1.3** | 파이프라인·Ollama·RAG 경로 단순화, 용적율/산업단지 프로필 비교, 고도화 문서 초안 |
@@ -613,7 +613,7 @@ v0.2.1에서 `llm2_geodb`의 공간데이터 업로드·메타데이터 화면�
 
 `llm2_geodb`는 GIS DB에 대한 **질문–(사용자 SQL)–실행–메타데이터 해석–지도** 순환과 **다층 안전·대화 오케스트레이션**을 연구·프로토타입으로 정립했다.
 
-**`llm2sql`**은 그 계층을 전제로 다음을 고도화했다. 0.2.1까지가 L5·제품화의 골격이고, 0.2.3이 Plan SQL을 기본 실행하며, **현재 배포는 0.3.0**이다.
+**`txt2sql`**은 그 계층을 전제로 다음을 고도화했다. 0.2.1까지가 L5·제품화의 골격이고, 0.2.3이 Plan SQL을 기본 실행하며, **현재 배포는 0.3.0**이다.
 
 1. **L5 완결**: 스키마 RAG + Text-to-SQL + 검증·재시도 실행  
 2. **규칙/하이브리드 라우팅**: 고빈도 LLM 우회 + 9라벨 다스킬 의도. 복합조건은 라우터 미적중으로 두고 SQP에 넘김  
@@ -624,7 +624,7 @@ v0.2.1에서 `llm2_geodb`의 공간데이터 업로드·메타데이터 화면�
 7. **데이터 관리 이식**: Shapefile 업로드·한글 메타데이터를 Head 메뉴로 제품화  
 8. **제품화**: 재사용 엔진, SSE 챗봇, CLI, 벤치·스모크(`smoke_compound30.py`), 공통 사이트 프레임
 
-따라서 `llm2sql` v0.3.0는 `llm2_geodb`의 **대화형 이해·안전 실행·지도·데이터 관리** 성과를 계승하면서, 실무 사용자가 SQL을 직접 쓰지 않아도 되는 **자연어 조회 완결형**으로 발전한 결과물이다. SQP v1.1 기본값은 `hybrid`라 라우터 미적중 복합 질의는 Plan SQL로 닫고, 실패 시 RAG로 내려간다. 장애 롤백은 `SEMANTIC_PLAN_MODE=off`다.
+따라서 `txt2sql` v0.3.0는 `llm2_geodb`의 **대화형 이해·안전 실행·지도·데이터 관리** 성과를 계승하면서, 실무 사용자가 SQL을 직접 쓰지 않아도 되는 **자연어 조회 완결형**으로 발전한 결과물이다. SQP v1.1 기본값은 `hybrid`라 라우터 미적중 복합 질의는 Plan SQL로 닫고, 실패 시 RAG로 내려간다. 장애 롤백은 `SEMANTIC_PLAN_MODE=off`다.
 
 ---
 
@@ -635,4 +635,4 @@ v0.2.1에서 `llm2_geodb`의 공간데이터 업로드·메타데이터 화면�
 - 제품 README: `README.md` (버전 **0.3.0**, SQP v1.1 기본 `hybrid`)
 - 0.3.0 변경: `docs/20260825_txt2sql_v0.3.0.md`
 - Semantic Query Plan: `D:\py_workspace\llm2sql\docs\Semantic_Query_Plan_구현.md`
-- 본 문서: `D:\py_workspace\llm2sql\docs\고도화_llm2_geodb_to_llm2sql.md`
+- 본 문서: `D:\py_workspace\llm2sql\docs\고도화_llm2_geodb_to_txt2sql.md`

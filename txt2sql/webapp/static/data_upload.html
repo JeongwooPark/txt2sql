@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>txt2sql · 공간데이터 업로드</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/app.css?v=18" />
+  </head>
+  <body class="site" data-ui="data-upload">
+    <header class="site-head">
+      <a class="site-brand" href="/map">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <strong>txt2sql</strong>
+        <span class="sub">부산 GIS</span>
+      </a>
+      <nav class="site-nav" aria-label="메인 메뉴">
+        <a class="nav-link" href="/map" data-nav="map">지도</a>
+        <a class="nav-link" href="/chat" data-nav="chat">채팅</a>
+        <div class="nav-drop" data-nav="data">
+          <button type="button" class="nav-drop-btn" aria-expanded="false" aria-haspopup="true">데이터 관리</button>
+          <div class="nav-drop-menu" role="menu">
+            <a href="/data" role="menuitem">개요</a>
+            <a href="/data/upload" role="menuitem" class="active">공간데이터 업로드</a>
+            <a href="/data/metadata" role="menuitem">메타데이터 업데이트</a>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <div class="site-body">
+      <div class="data-split">
+        <aside class="data-side">
+          <h2>등록된 공간 테이블</h2>
+          <p class="data-lead">PostGIS 테이블입니다. 클릭하면 메타데이터 화면으로 이동합니다.</p>
+          <div id="dataset-list">
+            <p class="layer-empty">불러오는 중…</p>
+          </div>
+        </aside>
+        <main class="data-main">
+          <h1>공간데이터 업로드</h1>
+          <p class="data-lead">
+            Shapefile ZIP을 올리면 PostGIS에 같은 이름 테이블로 적재하고
+            GeoServer KorDB 레이어로 발행합니다. 같은 이름이 있으면 기존 데이터를
+            덮어씁니다. 예: 남구 용도별건물공간정보 <code>AL_D198_26_…</code>
+          </p>
+          <div class="drop-zone" id="file-upload-area">
+            <h2>ZIP 파일을 놓거나 클릭하여 선택</h2>
+            <p>.shp / .dbf / .shx / .prj 가 포함된 ZIP</p>
+            <input type="file" id="shapefile-input" accept=".zip" hidden />
+          </div>
+          <div class="file-info" id="file-info" hidden>
+            <p>파일: <strong id="file-name"></strong></p>
+            <p>크기: <span id="file-size"></span></p>
+            <p>테이블명: <span id="table-name"></span></p>
+            <button type="button" class="pane-btn" id="upload-btn" disabled>PostgreSQL에 업로드</button>
+            <div class="progress-bar" id="upload-progress"><span></span></div>
+          </div>
+          <div class="status-log" id="status-list"></div>
+        </main>
+      </div>
+    </div>
+    <footer class="site-foot">
+      <span>txt2sql 0.3.0</span>
+      <span>PostgreSQL/PostGIS · GeoServer · OpenLayers · Ollama</span>
+    </footer>
+    <script src="/static/js/site.js?v=1"></script>
+    <script src="/static/js/data.js?v=2"></script>
+    <script src="/static/js/data-upload.js?v=2"></script>
+  </body>
+</html>

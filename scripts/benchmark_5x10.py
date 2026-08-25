@@ -14,9 +14,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from llm2sql.config import load_settings
-from llm2sql.db import connect
-from llm2sql.pipeline import ask
+from txt2sql.config import load_settings
+from txt2sql.db import connect
+from txt2sql.pipeline import ask
 
 # 라운드마다 문장·정답이 다름 (금 SQL로 검증)
 ROUNDS: list[list[dict[str, Any]]] = [

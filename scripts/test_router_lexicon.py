@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import sys
 
-from llm2sql.clarify_qa import unknown_term_guidance, _unknown_terms
-from llm2sql.router_lexicon import (
+from txt2sql.clarify_qa import unknown_term_guidance, _unknown_terms
+from txt2sql.router_lexicon import (
     all_router_terms,
     apply_router_mappings,
     map_unknown_to_router,

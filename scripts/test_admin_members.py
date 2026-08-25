@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from llm2sql.intent_router import try_route
-from llm2sql.spatial_router import _looks_like_admin_members
+from txt2sql.intent_router import try_route
+from txt2sql.spatial_router import _looks_like_admin_members
 
 Q = "연산동 내에 행정동은 무엇이 있어?"
 

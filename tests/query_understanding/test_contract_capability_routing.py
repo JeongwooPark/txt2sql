@@ -1,6 +1,6 @@
-from llm2sql.profile_qa import is_profile_question
-from llm2sql.query_understanding.contract import extract_contract
-from llm2sql.route_capability import (
+from txt2sql.profile_qa import is_profile_question
+from txt2sql.query_understanding.contract import extract_contract
+from txt2sql.route_capability import (
     PROFILE,
     fully_supports,
     select_execution_path,

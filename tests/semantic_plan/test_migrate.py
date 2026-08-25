@@ -1,5 +1,5 @@
-from llm2sql.semantic_plan.migrate import migrate_plan_v11, validate_predicate
-from llm2sql.semantic_plan.models import (
+from txt2sql.semantic_plan.migrate import migrate_plan_v11, validate_predicate
+from txt2sql.semantic_plan.models import (
     FilterSpec,
     OperandSpec,
     PredicateSpec,

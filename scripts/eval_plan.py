@@ -16,12 +16,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from llm2sql.config import Settings
-from llm2sql.evaluation.harness import evaluate_case
-from llm2sql.evaluation.jsonl import load_jsonl
-from llm2sql.evaluation.schema import EvalSummary, GoldPlanCase
-from llm2sql.semantic_plan.generator import try_heuristic_plan
-from llm2sql.semantic_plan.generator import extract_plan_hints
+from txt2sql.config import Settings
+from txt2sql.evaluation.harness import evaluate_case
+from txt2sql.evaluation.jsonl import load_jsonl
+from txt2sql.evaluation.schema import EvalSummary, GoldPlanCase
+from txt2sql.semantic_plan.generator import try_heuristic_plan
+from txt2sql.semantic_plan.generator import extract_plan_hints
 
 
 def _load_predictions(path: Path) -> dict[str, dict]:

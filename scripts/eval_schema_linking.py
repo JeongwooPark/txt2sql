@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from llm2sql.semantic_catalog.linking import retrieve_columns, retrieve_tables, retrieve_values
+from txt2sql.semantic_catalog.linking import retrieve_columns, retrieve_tables, retrieve_values
 
 
 def recall_at_k(gold: list[str], predicted: list[str], k: int) -> float:

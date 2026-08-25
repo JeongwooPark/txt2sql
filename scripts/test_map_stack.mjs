@@ -1,6 +1,6 @@
-import { LayerStack, ANALYSIS_Z_BASE, ANALYSIS_Z_STEP } from "../llm2sql/webapp/static/js/map/stack.js";
-import { padLonLatExtent } from "../llm2sql/webapp/static/js/map/core.js";
-import { sldBody, shouldLabel } from "../llm2sql/webapp/static/js/map/styles.js";
+import { LayerStack, ANALYSIS_Z_BASE, ANALYSIS_Z_STEP } from "../txt2sql/webapp/static/js/map/stack.js";
+import { padLonLatExtent } from "../txt2sql/webapp/static/js/map/core.js";
+import { sldBody, shouldLabel } from "../txt2sql/webapp/static/js/map/styles.js";
 
 const failed = [];
 let passed = 0;

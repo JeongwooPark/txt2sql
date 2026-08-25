@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import sys
 
-from llm2sql.config import load_settings
-from llm2sql.gazetteer_build import rebuild_gazetteer
+from txt2sql.config import load_settings
+from txt2sql.gazetteer_build import rebuild_gazetteer
 
 
 def main() -> int:

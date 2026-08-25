@@ -13,9 +13,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from llm2sql import Llm2SqlEngine
-from llm2sql.domain import extract_gu, extract_place, extract_places
-from llm2sql.gazetteer import (
+from txt2sql import Txt2SqlEngine
+from txt2sql.domain import extract_gu, extract_place, extract_places
+from txt2sql.gazetteer import (
     KIND_ADMIN,
     KIND_LEGAL,
     KIND_SIDO,
@@ -24,9 +24,9 @@ from llm2sql.gazetteer import (
     find_places,
     uses_admin_boundary,
 )
-from llm2sql.guide_qa import try_guide
-from llm2sql.intent_router import try_route
-from llm2sql.profile_qa import is_profile_question
+from txt2sql.guide_qa import try_guide
+from txt2sql.intent_router import try_route
+from txt2sql.profile_qa import is_profile_question
 
 KIND_LABEL = {
     KIND_LEGAL: "법정동",
@@ -650,9 +650,9 @@ def main() -> int:
     asked = 0
     t0 = time.perf_counter()
 
-    engine: Llm2SqlEngine | None = None
+    engine: Txt2SqlEngine | None = None
     if any(c.ask for c in CASES):
-        engine = Llm2SqlEngine.from_env()
+        engine = Txt2SqlEngine.from_env()
 
     try:
         print("=== 지명 사전 자연어 스모크 ===\n")

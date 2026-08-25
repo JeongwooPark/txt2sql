@@ -1,10 +1,10 @@
-from llm2sql.answer import format_map_display_answer, format_success_template
-from llm2sql.domain import wants_map_display
-from llm2sql.intent_router import try_route
-from llm2sql.map.sql import plan_map_sql
-from llm2sql.profile_qa import is_profile_question
-from llm2sql.semantic_plan.answer import format_semantic_answer
-from llm2sql.semantic_plan.generator import try_heuristic_plan
+from txt2sql.answer import format_map_display_answer, format_success_template
+from txt2sql.domain import wants_map_display
+from txt2sql.intent_router import try_route
+from txt2sql.map.sql import plan_map_sql
+from txt2sql.profile_qa import is_profile_question
+from txt2sql.semantic_plan.answer import format_semantic_answer
+from txt2sql.semantic_plan.generator import try_heuristic_plan
 
 
 def test_wants_map_display_geumjeong() -> None:

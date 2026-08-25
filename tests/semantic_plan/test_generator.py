@@ -1,5 +1,5 @@
-from llm2sql.semantic_plan.generator import parse_plan_json, try_heuristic_plan
-from llm2sql.semantic_plan.models import SemanticPlanGenerationError
+from txt2sql.semantic_plan.generator import parse_plan_json, try_heuristic_plan
+from txt2sql.semantic_plan.models import SemanticPlanGenerationError
 
 
 def test_parse_rejects_physical_column() -> None:

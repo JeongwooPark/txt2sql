@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from llm2sql.domain import extract_gu, extract_place, extract_places
-from llm2sql.gazetteer import (
+from txt2sql.domain import extract_gu, extract_place, extract_places
+from txt2sql.gazetteer import (
     KIND_ADMIN,
     KIND_LEGAL,
     KIND_SIDO,
@@ -11,7 +11,7 @@ from llm2sql.gazetteer import (
     classify_place,
     uses_admin_boundary,
 )
-from llm2sql.profile_qa import _use_admin_boundary
+from txt2sql.profile_qa import _use_admin_boundary
 
 
 def main() -> int:
@@ -74,7 +74,7 @@ def main() -> int:
     if extract_place("기장읍 건물 몇 채야?") != "기장읍":
         failed.append(f"기장읍 미추출: {extract_place('기장읍 건물 몇 채야?')}")
 
-    from llm2sql.gazetteer import find_places, load_gazetteer
+    from txt2sql.gazetteer import find_places, load_gazetteer
 
     # 트라이 최장일치가 선형 스캔과 같은 지명을 내는지
     samples = (
@@ -93,7 +93,7 @@ def main() -> int:
             best = None
             for name in gaz.names_by_len:
                 if sample.startswith(name, i):
-                    from llm2sql.gazetteer import _short_ri_ok
+                    from txt2sql.gazetteer import _short_ri_ok
 
                     if _short_ri_ok(sample, i, i + len(name), name):
                         best = name

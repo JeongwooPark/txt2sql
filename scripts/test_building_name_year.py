@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from llm2sql.answer import _natural_building_name_lookup
-from llm2sql.clarify_qa import _unknown_terms
-from llm2sql.domain import (
+from txt2sql.answer import _natural_building_name_lookup
+from txt2sql.clarify_qa import _unknown_terms
+from txt2sql.domain import (
     extract_building_name_candidate,
     looks_like_building_name_lookup,
 )
-from llm2sql.intent_router import try_route
-from llm2sql.router_lexicon import _looks_like_entity_name, map_unknown_to_router
+from txt2sql.intent_router import try_route
+from txt2sql.router_lexicon import _looks_like_entity_name, map_unknown_to_router
 
 
 def main() -> int:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from llm2sql.answer import (
+from txt2sql.answer import (
     _is_stiff_answer,
     _natural_threshold_list,
     _prose_without_markdown_table,
@@ -96,7 +96,7 @@ def main() -> int:
         "금정구에서 사용승인일이 있는 아파트 5개는 다음과 같습니다. "
         "휴림 아르페, 헤리티지 우석, 구서 다움 파크입니다."
     )
-    from llm2sql.answer import _list_omits_dates
+    from txt2sql.answer import _list_omits_dates
 
     if not _list_omits_dates(
         names_only, rows + [{**rows[0], "A13": "헤리티지 우석"}]
@@ -161,7 +161,7 @@ def main() -> int:
     if not share or share.get("total") != 503 or not share.get("rows"):
         failed.append(f"행정동 비율 표: {share}")
 
-    from llm2sql.intent_router import try_route
+    from txt2sql.intent_router import try_route
 
     thr_q = "100평 이상의 건물을 구서동에서 찾아라"
     routed = try_route(thr_q)

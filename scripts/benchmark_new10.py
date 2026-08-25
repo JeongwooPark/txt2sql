@@ -7,9 +7,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from llm2sql.config import load_settings
-from llm2sql.pipeline import ask
-from llm2sql.session import SessionContext
+from txt2sql.config import load_settings
+from txt2sql.pipeline import ask
+from txt2sql.session import SessionContext
 
 CASES: list[dict[str, Any]] = [
     {

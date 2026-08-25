@@ -1,16 +1,16 @@
 """Contract → Capability → Router/SQP 결정 케이스 A–F."""
 
-from llm2sql.intent_router import try_route
-from llm2sql.profile_qa import is_profile_question
-from llm2sql.query_understanding.contract import extract_contract, merge_contract
-from llm2sql.route_capability import (
+from txt2sql.intent_router import try_route
+from txt2sql.profile_qa import is_profile_question
+from txt2sql.query_understanding.contract import extract_contract, merge_contract
+from txt2sql.route_capability import (
     PROFILE,
     fully_supports,
     legacy_route_eligible,
     select_execution_path,
 )
-from llm2sql.semantic_plan.contract_verifier import verify_contract
-from llm2sql.semantic_plan.generator import try_heuristic_plan
+from txt2sql.semantic_plan.contract_verifier import verify_contract
+from txt2sql.semantic_plan.generator import try_heuristic_plan
 
 
 def test_case_a_simple_count_uses_router() -> None:
@@ -129,7 +129,7 @@ def test_structure_plus_area_rejects_threshold() -> None:
 
 
 def test_verify_result_count_rejects_multi_numeric() -> None:
-    from llm2sql.semantic_plan.result_shape import verify_result
+    from txt2sql.semantic_plan.result_shape import verify_result
 
     contract = extract_contract("해운대구 건물 몇 채야")
     contract.query_kind = "count"
@@ -140,8 +140,8 @@ def test_verify_result_count_rejects_multi_numeric() -> None:
 
 
 def test_verify_result_keeps_plan_list_despite_contract_count() -> None:
-    from llm2sql.semantic_plan.models import SemanticQueryPlan
-    from llm2sql.semantic_plan.result_shape import verify_result
+    from txt2sql.semantic_plan.models import SemanticQueryPlan
+    from txt2sql.semantic_plan.result_shape import verify_result
 
     contract = extract_contract("해운대구 건물 몇 채야")
     contract.query_kind = "count"
@@ -154,8 +154,8 @@ def test_verify_result_keeps_plan_list_despite_contract_count() -> None:
 
 
 def test_verify_result_keeps_grouped_bins_despite_contract_count() -> None:
-    from llm2sql.semantic_plan.models import AggregationSpec, SemanticQueryPlan
-    from llm2sql.semantic_plan.result_shape import verify_result
+    from txt2sql.semantic_plan.models import AggregationSpec, SemanticQueryPlan
+    from txt2sql.semantic_plan.result_shape import verify_result
 
     contract = extract_contract("금정구 사용승인 연도 구간별 공동주택 수")
     contract.query_kind = "count"
@@ -194,7 +194,7 @@ def test_merge_contract_keeps_place_adds_filter() -> None:
 
 
 def test_bind_d198_vs_d010() -> None:
-    from llm2sql.query_understanding.bind import bind_catalog, lookup_spatial_path
+    from txt2sql.query_understanding.bind import bind_catalog, lookup_spatial_path
 
     d198 = bind_catalog("동래구 사용승인 2010년 이후 건물 수")
     assert any(item.id == "d198" for item in d198.datasets)

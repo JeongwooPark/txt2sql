@@ -1,7 +1,7 @@
-from llm2sql.domain import USAGE_ALIASES
-from llm2sql.semantic_plan.models import FilterSpec, SemanticQueryPlan
-from llm2sql.semantic_plan.normalizer import normalize_semantic_plan
-from llm2sql.units import PYEONG_TO_M2
+from txt2sql.domain import USAGE_ALIASES
+from txt2sql.semantic_plan.models import FilterSpec, SemanticQueryPlan
+from txt2sql.semantic_plan.normalizer import normalize_semantic_plan
+from txt2sql.units import PYEONG_TO_M2
 
 
 def test_usage_apartment_to_multiunit() -> None:

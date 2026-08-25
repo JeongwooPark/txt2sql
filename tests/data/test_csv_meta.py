@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm2sql.data.csv_meta import (
+from txt2sql.data.csv_meta import (
     build_metadata_csv,
     merge_parsed_with_existing,
     parse_metadata_csv,

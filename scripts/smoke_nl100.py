@@ -1,4 +1,4 @@
-"""100문항 자연어 스모크 — Llm2SqlEngine.from_env() (CLI/웹과 동일 경로)."""
+"""100문항 자연어 스모크 — Txt2SqlEngine.from_env() (CLI/웹과 동일 경로)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from pathlib import Path
 from typing import Any
 
-from llm2sql import Llm2SqlEngine, SessionContext
+from txt2sql import Txt2SqlEngine, SessionContext
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).with_name("smoke_nl100.json")
@@ -22,7 +22,7 @@ def _clip(text: str, n: int = 220) -> str:
     return t if len(t) <= n else t[: n - 3] + "..."
 
 
-def _ask(engine: Llm2SqlEngine, q: str, session: SessionContext | None):
+def _ask(engine: Txt2SqlEngine, q: str, session: SessionContext | None):
     return engine.ask(q, session=session)
 
 
@@ -43,7 +43,7 @@ def _diagnose() -> dict[str, Any]:
     except Exception as exc:
         info["db"] = {"ok": False, "error": str(exc)[:200]}
     try:
-        from llm2sql.config import load_settings
+        from txt2sql.config import load_settings
         import urllib.request
 
         settings = load_settings()
@@ -86,7 +86,7 @@ def main() -> int:
     rows: list[dict[str, Any]] = []
     t0 = time.perf_counter()
     passed = 0
-    engine = Llm2SqlEngine.from_env()
+    engine = Txt2SqlEngine.from_env()
     try:
         print(f"=== 신규 100문항 자연어 스모크 (timeout={TIMEOUT_S}s) ===\n")
         for i, case in enumerate(questions, 1):
@@ -110,14 +110,14 @@ def main() -> int:
                     engine.close()
                 except Exception:
                     pass
-                engine = Llm2SqlEngine.from_env()
+                engine = Txt2SqlEngine.from_env()
             except Exception as exc:
                 error = str(exc)[:300]
                 try:
                     engine.close()
                 except Exception:
                     pass
-                engine = Llm2SqlEngine.from_env()
+                engine = Txt2SqlEngine.from_env()
             ms = int((time.perf_counter() - t1) * 1000)
             ok = bool(r and r.ok and str(r.answer or "").strip() and not timed_out)
             if ok:

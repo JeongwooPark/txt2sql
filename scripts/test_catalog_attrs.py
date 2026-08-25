@@ -5,11 +5,11 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from llm2sql.catalog_attrs import Attr, Dataset, all_attrs, parse_dataset
-from llm2sql.catalog_attrs import BAS, BND, D010, D060
-from llm2sql.config import load_settings
-from llm2sql.db import connect, execute_query
-from llm2sql.intent_router import try_route
+from txt2sql.catalog_attrs import Attr, Dataset, all_attrs, parse_dataset
+from txt2sql.catalog_attrs import BAS, BND, D010, D060
+from txt2sql.config import load_settings
+from txt2sql.db import connect, execute_query
+from txt2sql.intent_router import try_route
 
 PREFIX: dict[str, str] = {
     "d010": "GIS건물통합정보에서 해운대구",
@@ -159,8 +159,8 @@ def main() -> int:
             print("[reg] OK  구서1동 포르투나 찾기")
 
         q_univ = "부산대학교를 찾아라"
-        from llm2sql.clarify_qa import check_ambiguity
-        from llm2sql.domain import looks_like_building_name_lookup
+        from txt2sql.clarify_qa import check_ambiguity
+        from txt2sql.domain import looks_like_building_name_lookup
 
         if not looks_like_building_name_lookup(q_univ):
             failed.append("부산대학교 찾기가 건물명 조회로 안 잡힘")

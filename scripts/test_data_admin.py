@@ -6,8 +6,8 @@ import io
 import zipfile
 from pathlib import Path
 
-from llm2sql.config import Settings
-from llm2sql.data.names import (
+from txt2sql.config import Settings
+from txt2sql.data.names import (
     create_column_description,
     extract_display_name_and_unit,
     is_protected_table,
@@ -16,7 +16,7 @@ from llm2sql.data.names import (
     split_schema_table,
     table_from_shapefile,
 )
-from llm2sql.data.upload import process_zip_upload
+from txt2sql.data.upload import process_zip_upload
 
 
 def main() -> int:
@@ -52,9 +52,9 @@ def main() -> int:
     ok("parse date", bool(parsed and parsed["formatted_date"].startswith("2025")))
     ok("parse short", parse_al_table_name("BND_ADM_DONG_PG") is None)
 
-    from llm2sql.data.coverage import register_uploaded_dataset
-    from llm2sql.gazetteer_build import rebuild_gazetteer
-    from llm2sql.domain import (
+    from txt2sql.data.coverage import register_uploaded_dataset
+    from txt2sql.gazetteer_build import rebuild_gazetteer
+    from txt2sql.domain import (
         d198_coverage_label,
         d198_gu_mentioned,
         d198_table_for_gu,
@@ -62,7 +62,7 @@ def main() -> int:
         reset_d198_coverage,
         set_d198_coverage,
     )
-    from llm2sql.sql_validator import diagnose_sql
+    from txt2sql.sql_validator import diagnose_sql
 
     ok("pnu namgu", gu_from_d198_table("AL_D198_26290_20250704") == "남구")
     ok("pnu dongrae", gu_from_d198_table("AL_D198_26260_20250115") == "동래구")
@@ -96,7 +96,7 @@ def main() -> int:
             f'SELECT COUNT(*) FROM "{namgu_table}";',
         )
         ok("validator rejects haeundae d198", diag2 is not None)
-        from llm2sql.intent_router import fix_common_sql_mistakes
+        from txt2sql.intent_router import fix_common_sql_mistakes
 
         kept = fix_common_sql_mistakes(
             f'SELECT COUNT(*) FROM "{namgu_table}";',

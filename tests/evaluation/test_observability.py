@@ -1,10 +1,10 @@
-from llm2sql.observability import (
+from txt2sql.observability import (
     is_unpinned_latest,
     mask_mapping,
     mask_text,
     official_benchmark_allowed,
 )
-from llm2sql.progress import ProgressTracker
+from txt2sql.progress import ProgressTracker
 
 
 def test_mask_hides_database_url_and_password() -> None:

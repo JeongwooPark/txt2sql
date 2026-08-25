@@ -1,8 +1,8 @@
-from llm2sql.evaluation.harness import evaluate_case
-from llm2sql.evaluation.plan_compare import classify_plan_errors, plans_match
-from llm2sql.evaluation.results import result_hash
-from llm2sql.evaluation.schema import GoldPlanCase
-from llm2sql.semantic_plan.models import SemanticQueryPlan
+from txt2sql.evaluation.harness import evaluate_case
+from txt2sql.evaluation.plan_compare import classify_plan_errors, plans_match
+from txt2sql.evaluation.results import result_hash
+from txt2sql.evaluation.schema import GoldPlanCase
+from txt2sql.semantic_plan.models import SemanticQueryPlan
 
 
 def _gold(**kwargs) -> dict:

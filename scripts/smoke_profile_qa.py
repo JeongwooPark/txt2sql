@@ -1,7 +1,7 @@
-from llm2sql.config import load_settings
-from llm2sql.pipeline import ask
-from llm2sql.meta_qa import is_metadata_question
-from llm2sql.profile_qa import is_profile_question
+from txt2sql.config import load_settings
+from txt2sql.pipeline import ask
+from txt2sql.meta_qa import is_metadata_question
+from txt2sql.profile_qa import is_profile_question
 
 s = load_settings()
 cases = [

@@ -1,5 +1,5 @@
-from llm2sql.config import load_settings
-from llm2sql.db import connect, execute_query
+from txt2sql.config import load_settings
+from txt2sql.db import connect, execute_query
 
 s = load_settings()
 with connect(s.database_url) as c:

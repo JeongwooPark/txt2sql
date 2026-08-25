@@ -1,10 +1,10 @@
-from llm2sql.answer import _subject_phrase
-from llm2sql.intent_router import should_defer_compound_to_plan, try_route
-from llm2sql.route_capability import select_execution_path
-from llm2sql.semantic_plan.compiler import compile_semantic_plan
-from llm2sql.semantic_plan.generator import try_heuristic_plan
-from llm2sql.semantic_plan.normalizer import normalize_semantic_plan
-from llm2sql.semantic_plan.validator import validate_semantic_plan
+from txt2sql.answer import _subject_phrase
+from txt2sql.intent_router import should_defer_compound_to_plan, try_route
+from txt2sql.route_capability import select_execution_path
+from txt2sql.semantic_plan.compiler import compile_semantic_plan
+from txt2sql.semantic_plan.generator import try_heuristic_plan
+from txt2sql.semantic_plan.normalizer import normalize_semantic_plan
+from txt2sql.semantic_plan.validator import validate_semantic_plan
 
 
 def _sql(question: str) -> str:

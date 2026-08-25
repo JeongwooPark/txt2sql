@@ -1,5 +1,5 @@
-from llm2sql.domain import place_a4_predicate
-from llm2sql.map.sql import plan_map_sql
+from txt2sql.domain import place_a4_predicate
+from txt2sql.map.sql import plan_map_sql
 
 
 def test_gu_profile_compare_uses_boundaries() -> None:

@@ -1,4 +1,4 @@
-from llm2sql.evaluation.taxonomy import ERROR_LABELS
+from txt2sql.evaluation.taxonomy import ERROR_LABELS
 
 
 def test_taxonomy_covers_required_codes() -> None:

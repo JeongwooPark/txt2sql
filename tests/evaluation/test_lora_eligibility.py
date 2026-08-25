@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from llm2sql.evaluation.lora_eligibility import (
+from txt2sql.evaluation.lora_eligibility import (
     MIN_VERIFIED_PAIRS,
     assess_lora_eligibility,
     count_verified_pairs,

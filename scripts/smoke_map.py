@@ -22,9 +22,9 @@ if str(ROOT) not in sys.path:
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-from llm2sql import Llm2SqlEngine, SessionContext
-from llm2sql.config import load_settings
-from llm2sql.map.publish import cleanup_session_layers
+from txt2sql import Txt2SqlEngine, SessionContext
+from txt2sql.config import load_settings
+from txt2sql.map.publish import cleanup_session_layers
 
 WEB = "http://127.0.0.1:8000"
 
@@ -204,7 +204,7 @@ def main() -> int:
     session_id = uuid.uuid4().hex
     session = SessionContext()
     reports = []
-    with Llm2SqlEngine.from_env() as engine:
+    with Txt2SqlEngine.from_env() as engine:
         guide = engine.ask("기능 알려줘", include_map=True)
         assert guide.ok
         assert not (guide.map or {}).get("available"), guide.map

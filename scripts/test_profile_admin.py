@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from llm2sql.profile_qa import _profile_from_where, _use_admin_boundary
+from txt2sql.profile_qa import _profile_from_where, _use_admin_boundary
 
 
 def main() -> int:

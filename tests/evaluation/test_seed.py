@@ -1,6 +1,6 @@
-from llm2sql.evaluation.harness import evaluate_case
-from llm2sql.evaluation.jsonl import dump_jsonl, load_jsonl
-from llm2sql.evaluation.seed_cases import seed_cases
+from txt2sql.evaluation.harness import evaluate_case
+from txt2sql.evaluation.jsonl import dump_jsonl, load_jsonl
+from txt2sql.evaluation.seed_cases import seed_cases
 
 
 def test_seed_schema_and_count() -> None:

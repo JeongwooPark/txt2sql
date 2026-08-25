@@ -1,16 +1,16 @@
-from llm2sql.semantic_plan.followup import (
+from txt2sql.semantic_plan.followup import (
     apply_followup_history,
     apply_plan_delta,
     is_semantic_plan_followup,
     parse_followup_delta,
 )
-from llm2sql.semantic_plan.models import (
+from txt2sql.semantic_plan.models import (
     FilterSpec,
     PlaceSpec,
     ScopeSpec,
     SemanticQueryPlan,
 )
-from llm2sql.session import SessionContext
+from txt2sql.session import SessionContext
 
 
 def _base_plan() -> SemanticQueryPlan:
@@ -51,7 +51,7 @@ def test_change_sort_and_limit() -> None:
 
 
 def test_followup_merge_keeps_ready_score() -> None:
-    from llm2sql.semantic_plan.validator import validate_semantic_plan
+    from txt2sql.semantic_plan.validator import validate_semantic_plan
 
     delta = parse_followup_delta("건물명과 지번도 같이")
     assert delta is not None

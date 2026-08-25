@@ -1,8 +1,8 @@
 """엔진 재사용·후속 질문 스모크."""
 
-from llm2sql import Llm2SqlEngine, SessionContext
+from txt2sql import Txt2SqlEngine, SessionContext
 
-with Llm2SqlEngine.from_env() as engine:
+with Txt2SqlEngine.from_env() as engine:
     session = SessionContext()
     r1 = engine.ask("기능 알려줘")
     assert r1.ok and r1.route == "guide_help", r1

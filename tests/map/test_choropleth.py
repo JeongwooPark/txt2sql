@@ -2,7 +2,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from llm2sql.map.choropleth import (
+from txt2sql.map.choropleth import (
     PALETTES,
     ChoroplethError,
     _is_numeric_type,
@@ -69,7 +69,7 @@ def test_equal_interval_constant_values() -> None:
 
 
 def test_quantile_duplicate_values() -> None:
-    from llm2sql.map.choropleth import _dedupe_edges
+    from txt2sql.map.choropleth import _dedupe_edges
 
     edges = _dedupe_edges([1.0, 1.0, 1.0, 5.0, 5.0, 9.0])
     assert edges == [1.0, 5.0, 9.0]

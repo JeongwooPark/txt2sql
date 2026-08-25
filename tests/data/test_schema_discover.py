@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from llm2sql.schema_retriever import is_searchable_table_name, searchable_fqnames
-from llm2sql.semantic_meta import (
+from txt2sql.schema_retriever import is_searchable_table_name, searchable_fqnames
+from txt2sql.semantic_meta import (
     distinctive_label_tokens,
     synonyms_from_labels,
     table_synonyms,

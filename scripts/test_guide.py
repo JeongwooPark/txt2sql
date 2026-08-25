@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from llm2sql.guide_qa import try_guide
-from llm2sql.intent_classifier import predict_intent_rules
+from txt2sql.guide_qa import try_guide
+from txt2sql.intent_classifier import predict_intent_rules
 
 
 def main() -> int:

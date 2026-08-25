@@ -1,5 +1,5 @@
-from llm2sql.semantic_plan.compiler import compile_semantic_plan
-from llm2sql.semantic_plan.models import (
+from txt2sql.semantic_plan.compiler import compile_semantic_plan
+from txt2sql.semantic_plan.models import (
     JoinSpec,
     PlaceSpec,
     SemanticCompileError,
@@ -7,8 +7,8 @@ from llm2sql.semantic_plan.models import (
     SpatialRelationSpec,
     SpatialTargetSpec,
 )
-from llm2sql.semantic_plan.spatial_policy import resolve_spatial_policy
-from llm2sql.semantic_plan.validator import validate_semantic_plan
+from txt2sql.semantic_plan.spatial_policy import resolve_spatial_policy
+from txt2sql.semantic_plan.validator import validate_semantic_plan
 
 
 def _place_rel(relation: str, **extra: object) -> SpatialRelationSpec:

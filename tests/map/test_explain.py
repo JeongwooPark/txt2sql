@@ -1,8 +1,8 @@
 """속성 테이블 LLM 설명: 넓은 업로드 레이어도 422 없이 통과한다."""
 
-from llm2sql.config import Settings
-from llm2sql.map.explain import explain_attributes
-from llm2sql.map.router import ExplainRequest
+from txt2sql.config import Settings
+from txt2sql.map.explain import explain_attributes
+from txt2sql.map.router import ExplainRequest
 
 
 class _BoomClient:

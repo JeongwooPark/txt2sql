@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from llm2sql.config import Settings
-from llm2sql.map.router import create_map_router
+from txt2sql.config import Settings
+from txt2sql.map.router import create_map_router
 
 
 def _client() -> TestClient:

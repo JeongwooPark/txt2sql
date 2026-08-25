@@ -5,9 +5,9 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from llm2sql.config import load_settings
-from llm2sql.db import connect, execute_query
-from llm2sql.intent_router import try_route
+from txt2sql.config import load_settings
+from txt2sql.db import connect, execute_query
+from txt2sql.intent_router import try_route
 
 CASES: list[dict[str, Any]] = [
     {

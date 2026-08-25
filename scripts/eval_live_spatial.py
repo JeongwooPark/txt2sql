@@ -16,14 +16,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from llm2sql.semantic_plan.compiler import compile_semantic_plan
-from llm2sql.semantic_plan.models import (
+from txt2sql.semantic_plan.compiler import compile_semantic_plan
+from txt2sql.semantic_plan.models import (
     PlaceSpec,
     SemanticQueryPlan,
     SpatialRelationSpec,
     SpatialTargetSpec,
 )
-from llm2sql.semantic_plan.spatial_policy import POLICIES, resolve_spatial_policy
+from txt2sql.semantic_plan.spatial_policy import POLICIES, resolve_spatial_policy
 
 _PLACE = PlaceSpec(name="연산동", kind="admin_dong")
 
@@ -70,7 +70,7 @@ def _function_ok(sql: str, relation: str) -> tuple[bool, str]:
 def _load_database_url() -> tuple[str | None, str]:
     from dotenv import load_dotenv
 
-    from llm2sql.config import load_settings
+    from txt2sql.config import load_settings
 
     load_dotenv(ROOT / ".env")
     alt = Path(r"D:\py_workspace\llm2sql\.env")
@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         for item in reports:
             item["live"] = "ENV_BLOCKED"
     else:
-        from llm2sql.db import assert_readonly_sql, connect, execute_query
+        from txt2sql.db import assert_readonly_sql, connect, execute_query
 
         try:
             with connect(url) as conn:

@@ -25,9 +25,9 @@ from typing import Any
 
 import ollama
 
-from llm2sql.config import load_settings
-from llm2sql.db import connect
-from llm2sql.rag_sql import run_rag_sql
+from txt2sql.config import load_settings
+from txt2sql.db import connect
+from txt2sql.rag_sql import run_rag_sql
 
 # benchmark_gt10과 동일 GT (모델에게는 질문만 전달)
 GT_CASES: list[dict[str, Any]] = [

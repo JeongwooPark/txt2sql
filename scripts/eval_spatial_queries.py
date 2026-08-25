@@ -7,9 +7,9 @@ import json
 import sys
 import time
 
-from llm2sql.config import load_settings
-from llm2sql.db import assert_readonly_sql, connect
-from llm2sql.pipeline import ask
+from txt2sql.config import load_settings
+from txt2sql.db import assert_readonly_sql, connect
+from txt2sql.pipeline import ask
 
 EVAL_CASES_BASE = [
     {

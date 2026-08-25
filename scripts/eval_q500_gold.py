@@ -13,8 +13,8 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from pathlib import Path
 from typing import Any
 
-from llm2sql import Llm2SqlEngine, SessionContext
-from llm2sql.evaluation.taxonomy import diagnose_eval_failure
+from txt2sql import Txt2SqlEngine, SessionContext
+from txt2sql.evaluation.taxonomy import diagnose_eval_failure
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLD = ROOT / "docs" / "평가문항_500.json"
@@ -207,7 +207,7 @@ def score(kind: str, gold: str, answer: str, rows: list[dict[str, Any]] | None) 
     return bool(a.strip()), "fallback"
 
 
-def _ask(engine: Llm2SqlEngine, q: str, session: SessionContext | None):
+def _ask(engine: Txt2SqlEngine, q: str, session: SessionContext | None):
     return engine.ask(q, session=session, include_map=False)
 
 
@@ -512,7 +512,7 @@ def main() -> int:
     sessions: dict[str, SessionContext] = {}
     rows: list[dict[str, Any]] = []
     t0 = time.perf_counter()
-    engine = Llm2SqlEngine.from_env()
+    engine = Txt2SqlEngine.from_env()
     try:
         print(f"=== 평가문항 500 골드채점 timeout={TIMEOUT_S}s ===\n", flush=True)
         for i, case in enumerate(questions, 1):
@@ -536,14 +536,14 @@ def main() -> int:
                     engine.close()
                 except Exception:
                     pass
-                engine = Llm2SqlEngine.from_env()
+                engine = Txt2SqlEngine.from_env()
             except Exception as exc:
                 error = f"{type(exc).__name__}: {exc}"[:300]
                 try:
                     engine.close()
                 except Exception:
                     pass
-                engine = Llm2SqlEngine.from_env()
+                engine = Txt2SqlEngine.from_env()
             finally:
                 pool.shutdown(wait=False, cancel_futures=True)
             ms = int((time.perf_counter() - t1) * 1000)

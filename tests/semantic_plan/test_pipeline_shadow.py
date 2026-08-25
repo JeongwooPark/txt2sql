@@ -1,7 +1,7 @@
-from llm2sql.config import Settings
-from llm2sql.semantic_plan.compiler import compile_semantic_plan
-from llm2sql.semantic_plan.generator import generate_semantic_plan
-from llm2sql.semantic_plan.models import SemanticQueryPlan
+from txt2sql.config import Settings
+from txt2sql.semantic_plan.compiler import compile_semantic_plan
+from txt2sql.semantic_plan.generator import generate_semantic_plan
+from txt2sql.semantic_plan.models import SemanticQueryPlan
 
 
 def test_default_mode_is_hybrid() -> None:

@@ -15,9 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from llm2sql.config import load_settings
-from llm2sql.db import connect
-from llm2sql.pipeline import ask
+from txt2sql.config import load_settings
+from txt2sql.db import connect
+from txt2sql.pipeline import ask
 
 # 정답 SQL은 벤치마크 채점용. 모델에게는 질문만 전달한다.
 GT_CASES: list[dict[str, Any]] = [

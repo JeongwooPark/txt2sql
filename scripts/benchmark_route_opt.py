@@ -15,8 +15,8 @@ import argparse
 import statistics
 import time
 
-from llm2sql.intent_router import try_route
-from llm2sql.route_dispatch import match_route_baseline, match_route_optimized
+from txt2sql.intent_router import try_route
+from txt2sql.route_dispatch import match_route_baseline, match_route_optimized
 
 CASES: list[str] = [
     # building name (looks_like True)

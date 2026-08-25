@@ -5,12 +5,12 @@ from __future__ import annotations
 import re
 import sys
 
-from llm2sql.config import load_settings
-from llm2sql.db import connect
-from llm2sql.followup_qa import try_subset_followup
-from llm2sql.intent_router import try_route
-from llm2sql.pipeline import _expand_followup_question, ask
-from llm2sql.session import SessionContext
+from txt2sql.config import load_settings
+from txt2sql.db import connect
+from txt2sql.followup_qa import try_subset_followup
+from txt2sql.intent_router import try_route
+from txt2sql.pipeline import _expand_followup_question, ask
+from txt2sql.session import SessionContext
 
 
 def main() -> int:
@@ -236,8 +236,8 @@ def main() -> int:
         failed.append("금정구 질의에 안내 머리말")
 
     # 5건 목록 후 '각각의 사용승인일'은 건수를 3으로 줄이지 않는다
-    from llm2sql.followup_qa import is_list_attr_followup
-    from llm2sql.intent_router import _extract_top_n
+    from txt2sql.followup_qa import is_list_attr_followup
+    from txt2sql.intent_router import _extract_top_n
 
     if _extract_top_n("최근 3개를 출력해줘 중에서 5개는", default=1) != 5:
         failed.append("여러 N이 있으면 마지막 값을 써야 함")

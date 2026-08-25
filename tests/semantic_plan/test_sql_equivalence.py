@@ -1,14 +1,14 @@
-from llm2sql.semantic_plan.compiler import compile_semantic_plan
-from llm2sql.semantic_plan.models import (
+from txt2sql.semantic_plan.compiler import compile_semantic_plan
+from txt2sql.semantic_plan.models import (
     AggregationSpec,
     OperandSpec,
     OrderSpec,
     PredicateSpec,
     SemanticQueryPlan,
 )
-from llm2sql.semantic_plan.result_shape import diagnose_result_shape
-from llm2sql.semantic_plan.selector import select_candidate, should_enumerate_candidates
-from llm2sql.semantic_plan.sql_equivalence import verify_plan_sql_equivalence
+from txt2sql.semantic_plan.result_shape import diagnose_result_shape
+from txt2sql.semantic_plan.selector import select_candidate, should_enumerate_candidates
+from txt2sql.semantic_plan.sql_equivalence import verify_plan_sql_equivalence
 
 
 def test_detects_or_missing_and_agg_change() -> None:

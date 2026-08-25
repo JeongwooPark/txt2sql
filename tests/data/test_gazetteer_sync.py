@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from llm2sql.config import Settings
-from llm2sql.data.coverage import sync_dataset_after_change
-from llm2sql.gazetteer import invalidate_gazetteer, load_gazetteer
-from llm2sql.gazetteer_build import names_from_rows, write_gazetteer_payload
+from txt2sql.config import Settings
+from txt2sql.data.coverage import sync_dataset_after_change
+from txt2sql.gazetteer import invalidate_gazetteer, load_gazetteer
+from txt2sql.gazetteer_build import names_from_rows, write_gazetteer_payload
 
 
 def test_names_from_rows_skips_false_tails() -> None:
@@ -34,13 +34,13 @@ def test_sync_rebuilds_gazetteer_on_upload_and_metadata(monkeypatch) -> None:
     calls: list[str] = []
 
     monkeypatch.setattr(
-        "llm2sql.data.coverage._upsert_embedding", lambda *a, **k: True
+        "txt2sql.data.coverage._upsert_embedding", lambda *a, **k: True
     )
     monkeypatch.setattr(
-        "llm2sql.data.coverage.refresh_dataset_coverage", lambda s: {}
+        "txt2sql.data.coverage.refresh_dataset_coverage", lambda s: {}
     )
     monkeypatch.setattr(
-        "llm2sql.data.coverage._auto_fill_metadata", lambda *a, **k: True
+        "txt2sql.data.coverage._auto_fill_metadata", lambda *a, **k: True
     )
 
     def fake_rebuild(settings: Settings, **kwargs):
@@ -48,7 +48,7 @@ def test_sync_rebuilds_gazetteer_on_upload_and_metadata(monkeypatch) -> None:
         return {"ok": True, "counts": {"sido": 1}}
 
     monkeypatch.setattr(
-        "llm2sql.gazetteer_build.rebuild_gazetteer", fake_rebuild
+        "txt2sql.gazetteer_build.rebuild_gazetteer", fake_rebuild
     )
 
     settings = Settings(database_url="postgresql://x:x@127.0.0.1/x")

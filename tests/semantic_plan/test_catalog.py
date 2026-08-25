@@ -1,5 +1,5 @@
-from llm2sql.semantic_plan.catalog import get_field
-from llm2sql.semantic_plan.models import UnknownSemanticFieldError
+from txt2sql.semantic_plan.catalog import get_field
+from txt2sql.semantic_plan.models import UnknownSemanticFieldError
 
 
 def test_building_name_maps_to_a24() -> None:

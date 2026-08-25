@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from llm2sql.config import Settings
-from llm2sql.map import (
+from txt2sql.config import Settings
+from txt2sql.map import (
     GeoServerClient,
     attach_map,
     is_safe_layer_name,
     publish_query_layer,
 )
-from llm2sql.map.sql import (
+from txt2sql.map.sql import (
     boundary_sql,
     count_to_feature_sql,
     ensure_geometry_select,
@@ -20,14 +20,14 @@ from llm2sql.map.sql import (
     pad_lonlat_extent,
     plan_map_sql,
 )
-from llm2sql.spatial_templates import (
+from txt2sql.spatial_templates import (
     building_in_dong_count_sql,
     building_in_dong_list_sql,
     scoped_count_sql,
     scoped_list_sql,
 )
-from llm2sql.session import SessionContext
-from llm2sql.types import AskResult
+from txt2sql.session import SessionContext
+from txt2sql.types import AskResult
 
 
 def main() -> int:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import sys
 
-from llm2sql.d198_attrs import format_value_bin_label, parse_d198_question, parse_value_bin
-from llm2sql.units import PYEONG_TO_M2, convert_for_schema, sql_number, with_pyeong
+from txt2sql.d198_attrs import format_value_bin_label, parse_d198_question, parse_value_bin
+from txt2sql.units import PYEONG_TO_M2, convert_for_schema, sql_number, with_pyeong
 
 
 def main() -> int:

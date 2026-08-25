@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from llm2sql import Llm2SqlEngine, SessionContext
-from llm2sql.config import load_settings
+from txt2sql import Txt2SqlEngine, SessionContext
+from txt2sql.config import load_settings
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = Path(__file__).with_name("_out_compound30.json")
@@ -243,7 +243,7 @@ def _clip(text: str, n: int = 200) -> str:
     return t if len(t) <= n else t[: n - 3] + "..."
 
 
-def _ask(engine: Llm2SqlEngine, q: str, session: SessionContext | None):
+def _ask(engine: Txt2SqlEngine, q: str, session: SessionContext | None):
     return engine.ask(q, session=session, include_map=False)
 
 
@@ -279,7 +279,7 @@ def main() -> int:
     rows: list[dict[str, Any]] = []
     passed = 0
     t0 = time.perf_counter()
-    engine = Llm2SqlEngine.from_settings(settings)
+    engine = Txt2SqlEngine.from_settings(settings)
     try:
         print("=== 복합질문 30 스모크 (SEMANTIC_PLAN_MODE=hybrid, map=off) ===\n")
         for i, case in enumerate(CASES, 1):
@@ -303,14 +303,14 @@ def main() -> int:
                     engine.close()
                 except Exception:
                     pass
-                engine = Llm2SqlEngine.from_settings(settings)
+                engine = Txt2SqlEngine.from_settings(settings)
             except Exception as exc:
                 error = f"{type(exc).__name__}: {exc}"[:300]
                 try:
                     engine.close()
                 except Exception:
                     pass
-                engine = Llm2SqlEngine.from_settings(settings)
+                engine = Txt2SqlEngine.from_settings(settings)
             ms = int((time.perf_counter() - t1) * 1000)
             reasons: list[str] = []
             if timed_out:

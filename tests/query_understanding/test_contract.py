@@ -1,5 +1,5 @@
-from llm2sql.query_understanding.contract import extract_contract
-from llm2sql.evaluation.seed_cases import seed_cases
+from txt2sql.query_understanding.contract import extract_contract
+from txt2sql.evaluation.seed_cases import seed_cases
 
 
 def test_and_or_not_spans() -> None:

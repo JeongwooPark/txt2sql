@@ -1,5 +1,5 @@
-from llm2sql.semantic_plan.compiler import compile_semantic_plan
-from llm2sql.semantic_plan.models import (
+from txt2sql.semantic_plan.compiler import compile_semantic_plan
+from txt2sql.semantic_plan.models import (
     FilterSpec,
     PlaceSpec,
     ScopeSpec,

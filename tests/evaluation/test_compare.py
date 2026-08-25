@@ -1,5 +1,5 @@
-from llm2sql.evaluation.compare import compare, to_markdown
-from llm2sql.evaluation.results import compare_result_sets
+from txt2sql.evaluation.compare import compare, to_markdown
+from txt2sql.evaluation.results import compare_result_sets
 
 
 def test_compare_runs_delta() -> None:

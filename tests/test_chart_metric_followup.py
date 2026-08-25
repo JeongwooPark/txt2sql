@@ -1,12 +1,12 @@
-from llm2sql.chart_qa import (
+from txt2sql.chart_qa import (
     build_chart_spec,
     filter_chart_series,
     is_chart_metric_draw_question,
     is_chart_series_filter_question,
 )
-from llm2sql.pipeline import _try_chart_turn
-from llm2sql.progress import ProgressTracker
-from llm2sql.session import SessionContext
+from txt2sql.pipeline import _try_chart_turn
+from txt2sql.progress import ProgressTracker
+from txt2sql.session import SessionContext
 
 COMPARE_ROWS = [
     {

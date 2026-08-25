@@ -1,7 +1,7 @@
-from llm2sql.query_understanding.contract import extract_contract
-from llm2sql.semantic_plan.contract_verifier import verify_contract
-from llm2sql.semantic_plan.generator import try_heuristic_plan
-from llm2sql.semantic_plan.models import (
+from txt2sql.query_understanding.contract import extract_contract
+from txt2sql.semantic_plan.contract_verifier import verify_contract
+from txt2sql.semantic_plan.generator import try_heuristic_plan
+from txt2sql.semantic_plan.models import (
     AggregationSpec,
     FilterSpec,
     PlaceSpec,

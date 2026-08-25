@@ -9,11 +9,11 @@ from __future__ import annotations
 import argparse
 import sys
 
-from llm2sql.config import load_settings
-from llm2sql.data.coverage import refresh_dataset_coverage
-from llm2sql.db import connect
-from llm2sql.domain import D198_TABLES
-from llm2sql.schema_retriever import discover_searchable_tables, upsert_catalog_embedding
+from txt2sql.config import load_settings
+from txt2sql.data.coverage import refresh_dataset_coverage
+from txt2sql.db import connect
+from txt2sql.domain import D198_TABLES
+from txt2sql.schema_retriever import discover_searchable_tables, upsert_catalog_embedding
 
 _FALLBACK_TABLES = [
     "AL_D010_26_20250704",

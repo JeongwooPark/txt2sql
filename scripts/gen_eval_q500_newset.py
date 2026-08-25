@@ -61,7 +61,7 @@ def parse_testset(path: Path) -> dict[str, dict]:
 
 def write_md(cases, meta: dict) -> str:
     lines = [
-        "# llm2sql 신규 자연어 질의 테스트셋 500건 정답표",
+        "# txt2sql 신규 자연어 질의 테스트셋 500건 정답표",
         "",
         f"- 생성 시각: {meta['when']}",
         f"- 데이터베이스: gisdb (KorDB)",

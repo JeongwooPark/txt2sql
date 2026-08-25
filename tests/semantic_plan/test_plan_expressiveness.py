@@ -1,11 +1,11 @@
-from llm2sql.semantic_plan.generator import try_heuristic_plan
-from llm2sql.semantic_plan.models import (
+from txt2sql.semantic_plan.generator import try_heuristic_plan
+from txt2sql.semantic_plan.models import (
     AggregationSpec,
     ExpressionSpec,
     OrderSpec,
     SemanticQueryPlan,
 )
-from llm2sql.semantic_plan.validator import validate_semantic_plan
+from txt2sql.semantic_plan.validator import validate_semantic_plan
 
 
 def test_semantic_plan_supports_stddev() -> None:

@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 import sys
 
-from llm2sql import Llm2SqlEngine, SessionContext
+from txt2sql import Txt2SqlEngine, SessionContext
 
 # (질문, 세션키|None, 기대 route 접두/정확값|None)
 # 세션키 rank/year/area 는 같은 대화로 이어진다.
@@ -95,7 +95,7 @@ def main() -> int:
     sessions: dict[str, SessionContext] = {}
     passed = 0
     failed: list[str] = []
-    with Llm2SqlEngine.from_env() as engine:
+    with Txt2SqlEngine.from_env() as engine:
         print("=== 자연어 질의 스모크 ===\n")
         for i, raw in enumerate(CASES, 1):
             q, sid, expect = _norm(raw)

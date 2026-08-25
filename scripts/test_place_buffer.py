@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import sys
 
-from llm2sql.domain import looks_like_building_name_lookup
-from llm2sql.intent_router import try_route
-from llm2sql.sql_validator import diagnose_sql
+from txt2sql.domain import looks_like_building_name_lookup
+from txt2sql.intent_router import try_route
+from txt2sql.sql_validator import diagnose_sql
 
 
 def main() -> int:

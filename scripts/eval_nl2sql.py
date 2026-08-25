@@ -32,7 +32,7 @@ def _env_ready() -> tuple[bool, str]:
     try:
         import psycopg
         import urllib.request
-        from llm2sql.config import load_settings
+        from txt2sql.config import load_settings
 
         with psycopg.connect(url, connect_timeout=5) as conn:
             with conn.cursor() as cur:
@@ -55,9 +55,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--official", action="store_true")
     args = parser.parse_args(argv)
 
-    from llm2sql.evaluation.jsonl import load_jsonl
-    from llm2sql.evaluation.harness import evaluate_case
-    from llm2sql.evaluation.schema import EvalSummary
+    from txt2sql.evaluation.jsonl import load_jsonl
+    from txt2sql.evaluation.harness import evaluate_case
+    from txt2sql.evaluation.schema import EvalSummary
 
     cases = load_jsonl(args.gold)
     if args.verified_only:
@@ -86,9 +86,9 @@ def main(argv: list[str] | None = None) -> int:
         print(text)
         return 2
 
-    from llm2sql import Llm2SqlEngine
-    from llm2sql.config import load_settings
-    from llm2sql.observability import official_benchmark_allowed
+    from txt2sql import Txt2SqlEngine
+    from txt2sql.config import load_settings
+    from txt2sql.observability import official_benchmark_allowed
 
     settings = load_settings().with_overrides(semantic_plan_mode=args.mode)
     if args.official:
@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.out.write_text(text, encoding="utf-8")
             print(text)
             return 2
-    engine = Llm2SqlEngine.from_settings(settings)
+    engine = Txt2SqlEngine.from_settings(settings)
     items = []
     errors: Counter[str] = Counter()
     try:

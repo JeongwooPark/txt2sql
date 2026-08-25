@@ -1,11 +1,11 @@
-from llm2sql.semantic_plan.compiler import compile_semantic_plan
-from llm2sql.semantic_plan.models import (
+from txt2sql.semantic_plan.compiler import compile_semantic_plan
+from txt2sql.semantic_plan.models import (
     FilterSpec,
     OperandSpec,
     PredicateSpec,
     SemanticQueryPlan,
 )
-from llm2sql.semantic_plan.predicate_utils import effective_predicate, has_op, range_bounds
+from txt2sql.semantic_plan.predicate_utils import effective_predicate, has_op, range_bounds
 
 
 def _or_usage() -> PredicateSpec:

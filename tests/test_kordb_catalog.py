@@ -45,7 +45,7 @@ def test_catalog_json_has_core_tables_and_no_password() -> None:
 
 
 def test_download_routes_registered() -> None:
-    from llm2sql.webapp.app import app
+    from txt2sql.webapp.app import app
 
     paths = {getattr(route, "path", "") for route in app.routes}
     assert "/download/kordb-catalog.json" in paths

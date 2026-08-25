@@ -5,10 +5,10 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from llm2sql.config import load_settings
-from llm2sql.d198_attrs import D198_ATTRS, D198Attr, parse_d198_question
-from llm2sql.db import connect, execute_query
-from llm2sql.intent_router import try_route
+from txt2sql.config import load_settings
+from txt2sql.d198_attrs import D198_ATTRS, D198Attr, parse_d198_question
+from txt2sql.db import connect, execute_query
+from txt2sql.intent_router import try_route
 
 DONGRAE = "AL_D198_26260_20250115"
 PREFIX = "용도별건물에서 동래구"
@@ -301,8 +301,8 @@ def main() -> int:
             if r_exd is not None:
                 print(sql_exd)
 
-        from llm2sql.answer import format_success_template
-        from llm2sql.d198_attrs import parse_year_stats
+        from txt2sql.answer import format_success_template
+        from txt2sql.d198_attrs import parse_year_stats
 
         q_year = "각년도별 아파트 건립 수는?"
         spec_y = parse_year_stats(q_year)
@@ -372,15 +372,15 @@ def main() -> int:
             if r_dec is not None:
                 print(sql_dec)
 
-        from llm2sql.d198_attrs import (
+        from txt2sql.d198_attrs import (
             is_year_grain_followup,
             parse_year_stats,
             rows_as_decade_counts,
             wrap_year_sql_as_decade,
             year_stats_grain,
         )
-        from llm2sql.pipeline import _expand_followup_question, ask
-        from llm2sql.session import SessionContext
+        from txt2sql.pipeline import _expand_followup_question, ask
+        from txt2sql.session import SessionContext
 
         year_rows_src = (
             rows_year
@@ -482,7 +482,7 @@ def main() -> int:
         elif "10년단위 후속 미인식" not in failed and "10년단위 SQL이 서울/D010" not in failed:
             failed.append("10년단위 후속")
 
-        from llm2sql.d198_attrs import rows_as_bin_counts, wrap_year_sql_as_bin
+        from txt2sql.d198_attrs import rows_as_bin_counts, wrap_year_sql_as_bin
 
         ok_5 = True
         q_5 = "5년 단위로 출력하라"
@@ -541,7 +541,7 @@ def main() -> int:
         elif "5년단위 후속 미인식" not in failed:
             failed.append("5년단위 후속")
 
-        from llm2sql.d198_attrs import parse_value_bin, year_stats_grain as ygrain
+        from txt2sql.d198_attrs import parse_value_bin, year_stats_grain as ygrain
 
         ok_var = True
         if ygrain("이십년 단위로 출력하라") != 20:
@@ -663,7 +663,7 @@ def main() -> int:
         elif "연면적 크기별 parse/route" not in failed:
             failed.append("면적 크기 단위별")
 
-        from llm2sql.d198_attrs import looks_like_value_bin_question
+        from txt2sql.d198_attrs import looks_like_value_bin_question
 
         ok_bind = True
         q_guseo = "구서동의 면적별 아파트의 숫자를 구하라"
@@ -711,7 +711,7 @@ def main() -> int:
         elif "면적별 아파트 숫자 미인식" not in failed:
             failed.append("2000단위로 묶어라 후속")
 
-        from llm2sql.router_lexicon import map_unknown_to_router
+        from txt2sql.router_lexicon import map_unknown_to_router
 
         ok_syn = True
         q_pyeong = "금정구 구서동의 평수별 아파트의 숫자를 구하라"

@@ -1,6 +1,6 @@
-from llm2sql.config import load_settings
-from llm2sql.pipeline import ask
-from llm2sql.session import SessionContext
+from txt2sql.config import load_settings
+from txt2sql.pipeline import ask
+from txt2sql.session import SessionContext
 
 s = load_settings()
 session = SessionContext()

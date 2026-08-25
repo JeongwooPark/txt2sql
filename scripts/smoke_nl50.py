@@ -14,11 +14,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from llm2sql import Llm2SqlEngine, SessionContext
-from llm2sql.domain import extract_gu, extract_place, extract_places
-from llm2sql.gazetteer import uses_admin_boundary
-from llm2sql.guide_qa import try_guide
-from llm2sql.intent_router import try_route
+from txt2sql import Txt2SqlEngine, SessionContext
+from txt2sql.domain import extract_gu, extract_place, extract_places
+from txt2sql.gazetteer import uses_admin_boundary
+from txt2sql.guide_qa import try_guide
+from txt2sql.intent_router import try_route
 
 
 @dataclass
@@ -565,7 +565,7 @@ def main() -> int:
     passed = 0
     failed: list[str] = []
 
-    with Llm2SqlEngine.from_env() as engine:
+    with Txt2SqlEngine.from_env() as engine:
         print("=== 신규 50문항 자연어 스모크 ===\n")
         for case in CASES:
             reasons: list[str] = []

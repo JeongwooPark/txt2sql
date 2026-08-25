@@ -6,11 +6,11 @@
 |------|------|
 | 연구 과제명 | 행정거버넌스 지원을 위한 알고리즘 작성 (후속·고도화) |
 | 선행 연구 | `llm2_geodb` — GIS DB 대화형 이해·오케스트레이션 (해석·안전 실행) |
-| 본 결과물 | `llm2sql` v0.1.4 시점의 자연어→SQL 생성·검증·실행·한국어 답변·지도 발행 |
+| 본 결과물 | `txt2sql` v0.1.4 시점의 자연어→SQL 생성·검증·실행·한국어 답변·지도 발행 |
 | 본 보고서 범위 | **개선·신규 알고리즘** (의도 하이브리드, 규칙 SQL 라우터, 스키마 RAG, Text-to-SQL 검증 루프, 지명 사전, 세션·모호성, 단위 정규화, 지도 발행) |
 | 선행 보고서 | `llm2_geodb/docs/RND_대화형GIS해석_알고리즘_연구결과보고서.md` |
 | 구현 스택 | Ollama(로컬 LLM·임베딩) · PostgreSQL/PostGIS · FastAPI/CLI · GeoServer(선택) · sqlglot |
-| 현재 제품 | **llm2sql 0.3.0** (SQP v1.1, 기본 `hybrid`). 본문은 0.1.4 알고리즘을 보존한다. 복합조건·SQP는 [§9.4](#94-semantic-query-plan-022-추가)와 부록 C를 본다 |
+| 현재 제품 | **txt2sql 0.3.0** (SQP v1.1, 기본 `hybrid`). 본문은 0.1.4 알고리즘을 보존한다. 복합조건·SQP는 [§9.4](#94-semantic-query-plan-022-추가)와 부록 C를 본다 |
 
 > **문서 성격**: 이 보고서는 고도화 연구 당시(v0.1.4)의 알고리즘을 고정한 기록이다. 제품 동작·설정·복합질의는 `README.md`, `docs/작동방식_및_알고리즘.md`, `docs/Semantic_Query_Plan_구현.md`가 우선한다.
 
@@ -110,7 +110,7 @@
 
 ## 3. 선행 대비 고도화 요약
 
-| 항목 | `llm2_geodb` (선행) | `llm2sql` (본 연구) |
+| 항목 | `llm2_geodb` (선행) | `txt2sql` (본 연구) |
 |------|---------------------|---------------------|
 | 핵심 I/O | 사용자 SQL → 실행 → 해석 | **자연어 → SQL → 실행 → 답변** |
 | 의도 | EXECUTE / SQL / CHAT (3라벨) | guide·meta·profile·rank_compare·sql·clarify 등 **9라벨** |
@@ -150,7 +150,7 @@ flowchart TB
 
 | 계층 | 책임 | 비책임 |
 |------|------|--------|
-| 엔진 (`Llm2SqlEngine`) | DB·Ollama 재사용, `AskResult` | 질의 의미 해석 본체 |
+| 엔진 (`Txt2SqlEngine`) | DB·Ollama 재사용, `AskResult` | 질의 의미 해석 본체 |
 | 파이프라인 (`run_ask`) | 게이트 순서, 세션 갱신, 지도 부착 | SQL 템플릿 내용 |
 | 의도 분류기 | 스킬 라벨 선택 | SQL 생성 |
 | 규칙 라우터 | 고빈도 패턴 → 확정 SQL | 열린 질의 |
@@ -912,7 +912,7 @@ SQL 생성 시스템 프롬프트의 하드 제약: 한글 테이블명 금지, 
 8. **SessionContext**: 번호 선택, focus 후속, Plan delta, 재집계, 차트 pending
 9. **PlanMapSql / Publish**: 채팅 SELECT를 피처 또는 행정 경계 레이어로 비파괴 발행
 
-이에 따라 실무 사용자는 SQL을 작성하지 않고도 부산 GIS 자산에 대해 질문–확인–조회–이해–시각화 순환을 수행할 수 있다. `llm2sql`은 선행 프로토타입의 대화 계층을 **조회 생성의 책임을 시스템이 지는 거버넌스형 Text-to-SQL** 로 발전시킨 결과물이다.
+이에 따라 실무 사용자는 SQL을 작성하지 않고도 부산 GIS 자산에 대해 질문–확인–조회–이해–시각화 순환을 수행할 수 있다. `txt2sql`은 선행 프로토타입의 대화 계층을 **조회 생성의 책임을 시스템이 지는 거버넌스형 Text-to-SQL** 로 발전시킨 결과물이다.
 
 ---
 
@@ -981,7 +981,7 @@ SQL 생성 시스템 프롬프트의 하드 제약: 한글 테이블명 금지, 
 ### 부록 E. 참고 문서
 
 - `llm2_geodb/docs/RND_대화형GIS해석_알고리즘_연구결과보고서.md` — 선행 대화 계층
-- `llm2sql/docs/고도화_llm2_geodb_to_llm2sql.md` — 기능 대조·모듈 매핑
+- `llm2sql/docs/고도화_llm2_geodb_to_txt2sql.md` — 기능 대조·모듈 매핑
 - `llm2sql/docs/작동방식_및_알고리즘.md` — 0.3.0 시나리오 설명
 - `llm2sql/docs/Semantic_Query_Plan_구현.md` — SQP 명세 (기본 `hybrid`)
 - `llm2sql/README.md` — 사용·파이프라인 요약 (버전 **0.3.0**, SQP v1.1)

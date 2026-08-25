@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llm2sql.config import Settings
-from llm2sql.map import ANALYSIS_Z_BASE, ANALYSIS_Z_STEP, LayerStack
-from llm2sql.map.publish import (
+from txt2sql.config import Settings
+from txt2sql.map import ANALYSIS_Z_BASE, ANALYSIS_Z_STEP, LayerStack
+from txt2sql.map.publish import (
     cleanup_session_layers,
     delete_published_layer,
     is_catalog_layer_name,
@@ -153,7 +153,7 @@ def main() -> int:
     ok("applyTheme updateParams", "updateParams" in styles)
     ok("geomKind helper", "export function geomKind" in styles)
     ok("polygon sld skips centroid points", 'kind === "polygon"' in styles)
-    from llm2sql.map.labels import MetaIndex, infer_label_field, normalize_field_key, table_name_candidates
+    from txt2sql.map.labels import MetaIndex, infer_label_field, normalize_field_key, table_name_candidates
 
     cands = table_name_candidates("AL_D010_26_20250704")
     ok("candidates include full", "AL_D010_26_20250704" in cands)
@@ -191,7 +191,7 @@ def main() -> int:
     ok("kordb stays TileWMS", "ol.source.TileWMS" in core_js)
     ok("sld text symbol", "TextSymbolizer" in styles)
 
-    from llm2sql.map.geoserver import parse_latlon_bbox
+    from txt2sql.map.geoserver import parse_latlon_bbox
 
     good = parse_latlon_bbox(
         {

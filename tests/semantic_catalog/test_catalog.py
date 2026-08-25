@@ -1,6 +1,6 @@
-from llm2sql.semantic_catalog.linking import retrieve_columns, retrieve_tables, retrieve_values
-from llm2sql.semantic_catalog.loader import load_bindings
-from llm2sql.semantic_catalog.registry import duplicate_bindings, get_binding, get_edge, list_entities
+from txt2sql.semantic_catalog.linking import retrieve_columns, retrieve_tables, retrieve_values
+from txt2sql.semantic_catalog.loader import load_bindings
+from txt2sql.semantic_catalog.registry import duplicate_bindings, get_binding, get_edge, list_entities
 
 
 def test_bindings_and_no_duplicates() -> None:
@@ -30,7 +30,7 @@ def test_holdout_aliases_link_area_and_usage() -> None:
 
 
 def test_poi_without_canonical_name_clarifies() -> None:
-    from llm2sql.semantic_catalog.linking import retrieve_poi
+    from txt2sql.semantic_catalog.linking import retrieve_poi
 
     unclear = retrieve_poi("역 근처 아파트")
     assert unclear.clarify is True

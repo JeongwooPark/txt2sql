@@ -1,7 +1,7 @@
-from llm2sql.answer import _natural_threshold_list, _subject_phrase
-from llm2sql.followup_qa import is_subset_followup, try_subset_followup
-from llm2sql.intent_router import try_route
-from llm2sql.session import SessionContext
+from txt2sql.answer import _natural_threshold_list, _subject_phrase
+from txt2sql.followup_qa import is_subset_followup, try_subset_followup
+from txt2sql.intent_router import try_route
+from txt2sql.session import SessionContext
 
 _LAST_SQL = """
 SELECT b."A0", b."A4", b."A5", b."A9", b."A12", b."A14", b."A16", b."A24", b."A26",
@@ -43,9 +43,9 @@ def test_subset_followup_injects_calendar_year() -> None:
 
 
 def test_router_area_range_plus_calendar_year() -> None:
-    from llm2sql.route_capability import select_execution_path
-    from llm2sql.semantic_plan.compiler import compile_semantic_plan
-    from llm2sql.semantic_plan.generator import try_heuristic_plan
+    from txt2sql.route_capability import select_execution_path
+    from txt2sql.semantic_plan.compiler import compile_semantic_plan
+    from txt2sql.semantic_plan.generator import try_heuristic_plan
 
     q = "구서1동에서 면적이 100평이상 200평이하 2000년 이후 건물을 찾아라"
     assert select_execution_path(q) == "semantic_plan"
@@ -99,8 +99,8 @@ def test_subset_map_display_year_without_space() -> None:
 
 
 def test_name_lookup_does_not_steal_year_followup() -> None:
-    from llm2sql.domain import looks_like_building_name_lookup
-    from llm2sql.intent_router import try_route
+    from txt2sql.domain import looks_like_building_name_lookup
+    from txt2sql.intent_router import try_route
 
     q = "이중에 2000년 이후에 지어진 건물은?"
     assert not looks_like_building_name_lookup(q)

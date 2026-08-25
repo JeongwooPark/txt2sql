@@ -1,6 +1,6 @@
-from llm2sql.config import load_settings
-from llm2sql.pipeline import ask
-from llm2sql.meta_qa import is_metadata_question
+from txt2sql.config import load_settings
+from txt2sql.pipeline import ask
+from txt2sql.meta_qa import is_metadata_question
 
 settings = load_settings()
 meta_cases = [

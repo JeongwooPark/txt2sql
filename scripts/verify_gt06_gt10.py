@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import ollama
 
-from llm2sql.config import load_settings
-from llm2sql.db import connect
-from llm2sql.intent_router import fix_common_sql_mistakes, try_route
-from llm2sql.rag_sql import run_rag_sql
+from txt2sql.config import load_settings
+from txt2sql.db import connect
+from txt2sql.intent_router import fix_common_sql_mistakes, try_route
+from txt2sql.rag_sql import run_rag_sql
 
 CASES = [
     ("gt06", "동래구 건물의 주요용도명 종류는 몇 가지야?", 29),

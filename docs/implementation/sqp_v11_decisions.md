@@ -20,7 +20,7 @@
 - 결정: `pg_class.relname` 실측 목록을 snapshot 식별자로 사용
 - 식별자: `public.AL_D010_26_20250704`, `public.BND_ADM_DONG_PG`, `public.TL_KODIS_BAS_26_202507`, `public.AL_D060_00_20250804`
 
-## ADR-0004 평가 로직은 `llm2sql.evaluation`에 두고 스크립트는 CLI만 담당한다
+## ADR-0004 평가 로직은 `txt2sql.evaluation`에 두고 스크립트는 CLI만 담당한다
 
 - 상태: accepted
 - 맥락: 작업지시서는 `scripts/eval_*.py`를 요구하지만 단위 테스트가 필요함

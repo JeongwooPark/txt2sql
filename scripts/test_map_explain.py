@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from llm2sql.config import Settings
-from llm2sql.map.explain import (
+from txt2sql.config import Settings
+from txt2sql.map.explain import (
     explain_attributes,
     fallback_identify,
     fallback_table,
@@ -113,7 +113,7 @@ def main() -> int:
     ok("table still explains", "196건" in (tabled.get("explanation") or ""))
 
     wide_cols = [f"col_{i:02d}" for i in range(66)]
-    from llm2sql.map.router import ExplainRequest
+    from txt2sql.map.router import ExplainRequest
 
     wide_req = ExplainRequest.model_validate(
         {

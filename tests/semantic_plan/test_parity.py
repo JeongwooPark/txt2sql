@@ -3,11 +3,11 @@
 Router를 대체하지 않는다. 동등 컴파일이 확인된 패턴만 문서/테스트로 고정한다.
 """
 
-from llm2sql.config import Settings
-from llm2sql.semantic_plan.compiler import compile_semantic_plan
-from llm2sql.semantic_plan.generator import generate_semantic_plan
-from llm2sql.semantic_plan.normalizer import normalize_semantic_plan
-from llm2sql.semantic_plan.validator import validate_semantic_plan
+from txt2sql.config import Settings
+from txt2sql.semantic_plan.compiler import compile_semantic_plan
+from txt2sql.semantic_plan.generator import generate_semantic_plan
+from txt2sql.semantic_plan.normalizer import normalize_semantic_plan
+from txt2sql.semantic_plan.validator import validate_semantic_plan
 
 _SETTINGS = Settings(database_url="postgresql://x")
 

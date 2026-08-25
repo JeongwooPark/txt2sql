@@ -1,5 +1,5 @@
 [project]
-name = "llm2sql"
+name = "txt2sql"
 version = "0.3.0"
 description = "자연어 질의를 PostgreSQL SQL로 변환해 실행합니다 (Ollama)."
 readme = "README.md"
@@ -19,19 +19,19 @@ dependencies = [
 ]
 
 [project.scripts]
-llm2sql = "llm2sql.cli:main"
-llm2sql-web = "llm2sql.webapp.app:main"
+txt2sql = "txt2sql.cli:main"
+txt2sql-web = "txt2sql.webapp.app:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["llm2sql"]
+packages = ["txt2sql"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"llm2sql/webapp/static" = "llm2sql/webapp/static"
-"llm2sql/gazetteer_data.json" = "llm2sql/gazetteer_data.json"
+"txt2sql/webapp/static" = "txt2sql/webapp/static"
+"txt2sql/gazetteer_data.json" = "txt2sql/gazetteer_data.json"
 
 [dependency-groups]
 dev = [

@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from llm2sql.evaluation.compare import compare, to_markdown
+from txt2sql.evaluation.compare import compare, to_markdown
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,4 +1,4 @@
-# llm2sql
+# txt2sql
 
 **버전 0.3.0** (SQP Plan v1.1, 기본 `SEMANTIC_PLAN_MODE=hybrid`)
 
@@ -23,7 +23,7 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 | `docs/implementation/sqp_v11_migration.md` | v1.1 hybrid 적용 |
 | `docs/implementation/sqp_v11_rollback.md` | `off`로 되돌리기 |
 | `docs/implementation/sqp_v11_rollout_report.md` | FIX-4 승격 결과 |
-| `docs/고도화_llm2_geodb_to_llm2sql.md` | llm2_geodb 대비 고도화 |
+| `docs/고도화_llm2_geodb_to_txt2sql.md` | llm2_geodb 대비 고도화 |
 | `docs/RND_자연어GIS질의_알고리즘_연구결과보고서.md` | 0.1.4 알고리즘 기록 + SQP 보론 |
 
 ---
@@ -72,7 +72,7 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 | 후속 | 직전 건물 focus, Plan delta(「그중 100m 이상」「10개만」「지번도 같이」) |
 | 안내 | 역할·기능·제한, 범위 외 거절·유도 |
 | 성능 | 고빈도 패턴은 규칙 라우터로 LLM 우회. 복합조건은 SQP(`hybrid`) |
-| 엔진 | `Llm2SqlEngine` (연결·Ollama 재사용, `on_progress` / `on_token`) |
+| 엔진 | `Txt2SqlEngine` (연결·Ollama 재사용, `on_progress` / `on_token`) |
 | 웹 UI | 공통 Head/Bottom · 지도(`/map`) · 채팅(`/`, `/chat`) · 데이터 관리(업로드·메타데이터) |
 | 지도 | GeoServer WMS(기본)·WFS, KorDB 카탈로그, 분석결과 중첩, Identify·속성 설명 |
 | 레이어 | 출력 레이어에서 z-index 관리, 우클릭 삭제·속성 테이블, 분석 레이어 재사용 |
@@ -100,7 +100,7 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 
 ```bash
 git clone https://github.com/JeongwooPark/txt2sql.git
-cd llm2sql
+cd txt2sql
 uv sync
 cp .env.example .env
 # .env 에 DATABASE_URL, Ollama, (선택) GeoServer 설정 입력
@@ -160,9 +160,9 @@ uv run python scripts/refresh_schema_catalog.py   # 스키마 임베딩 갱신 �
 ## 엔진 API (라이브러리)
 
 ```python
-from llm2sql import Llm2SqlEngine, SessionContext, Settings
+from txt2sql import Txt2SqlEngine, SessionContext, Settings
 
-with Llm2SqlEngine.from_env() as engine:
+with Txt2SqlEngine.from_env() as engine:
     session = SessionContext()
     r = engine.ask(
         "구서동에서 건물면적이 가장 큰 아파트는?",
@@ -181,18 +181,18 @@ with Llm2SqlEngine.from_env() as engine:
 - 세션은 호출자가 `SessionContext`를 유지 (`clarify_place` 후보·focus 건물)
 - 채팅 SQL은 읽기 전용. geometry는 채팅 JSON에 넣지 않고 지도 경로에서만 주입합니다
 
-일회성 호환: `from llm2sql import ask, load_settings` → `ask(q, load_settings())`.
+일회성 호환: `from txt2sql import ask, load_settings` → `ask(q, load_settings())`.
 
 ---
 
 ## 웹 UI
 
-서버 하나(`llm2sql-web`)에서 **지도**, **채팅**, **데이터 관리** 화면을 함께 제공합니다. CLI는 별도입니다.
+서버 하나(`txt2sql-web`)에서 **지도**, **채팅**, **데이터 관리** 화면을 함께 제공합니다. CLI는 별도입니다.
 
 ```bash
 uv sync
-uv run llm2sql-web
-# 또는: uv run python -m llm2sql.webapp
+uv run txt2sql-web
+# 또는: uv run python -m txt2sql.webapp
 ```
 
 기본 바인딩은 `127.0.0.1:8000`, 코드 변경 시 uvicorn `--reload`로 재시작됩니다. 종료는 `Ctrl+C`.
@@ -206,7 +206,7 @@ uv run llm2sql-web
 | 데이터 관리 | `/data` | 개요. 업로드·메타데이터 진입 |
 | 공간데이터 업로드 | `/data/upload` | Shapefile ZIP 적재 골격 (API는 후속) |
 | 메타데이터 업데이트 | `/data/metadata` | 테이블·컬럼 한글명 편집 골격 (API는 후속) |
-| CLI | `uv run llm2sql --chat` | 터미널 대화. 지도 UI 없음 |
+| CLI | `uv run txt2sql --chat` | 터미널 대화. 지도 UI 없음 |
 
 채팅 전용은 `include_map=false`라 임시 GeoServer 레이어를 만들지 않습니다. 지도 화면 채팅만 `include_map=true`입니다.
 
@@ -326,12 +326,12 @@ OpenStreetMap, Carto Dark, ESRI Imagery **최대 1개**만 켤 수 있습니다.
 CLI는 채팅과 같은 엔진을 쓰며 **웹 UI와 별개**입니다. 지도 화면은 브라우저 `/map` 전용입니다.
 
 ```bash
-uv run python -m llm2sql.cli "해운대구 건물 몇 채야?"
-uv run python -m llm2sql.cli --chat          # 대화형
-uv run python -m llm2sql.cli -p "..."        # 진행 로그
-uv run python -m llm2sql.cli -v "..."        # SQL·rows
-uv run python -m llm2sql.cli --json "..."
-uv run llm2sql --chat
+uv run python -m txt2sql.cli "해운대구 건물 몇 채야?"
+uv run python -m txt2sql.cli --chat          # 대화형
+uv run python -m txt2sql.cli -p "..."        # 진행 로그
+uv run python -m txt2sql.cli -v "..."        # SQL·rows
+uv run python -m txt2sql.cli --json "..."
+uv run txt2sql --chat
 ```
 
 | 옵션 | 설명 |
@@ -469,7 +469,7 @@ GeoServer가 꺼져 있거나 발행에 실패해도 **채팅 답변은 그대�
 
 | 모듈 | 역할 |
 |------|------|
-| `engine.py` | `Llm2SqlEngine` |
+| `engine.py` | `Txt2SqlEngine` |
 | `pipeline.py` | `run_ask` / `ask` → `_with_map` |
 | `domain.py` | 구·동·용도·부산시·이상값 SQL |
 | `rank_compare_qa.py` | 지역 간 최고 건물 비교 |
@@ -538,8 +538,8 @@ node scripts/test_map_stack.mjs            # 프론트 LayerStack
 ## 프로젝트 구조
 
 ```text
-llm2sql/
-  llm2sql/
+txt2sql/
+  txt2sql/
     engine.py, types.py, domain.py, pipeline.py
     data/                # Shapefile 업로드·메타데이터
     map/                 # 발행·GeoServer·레이어 스택·/api/map
@@ -562,7 +562,7 @@ llm2sql/
   scripts/
     test_semantic_plan.py, smoke_compound30.py, test_map_sql.py, test_map_layers.py, test_map_stack.mjs
   main.py
-  pyproject.toml         # llm2sql, llm2sql-web
+  pyproject.toml         # txt2sql, txt2sql-web
   .env.example
 ```
 
@@ -593,7 +593,7 @@ llm2sql/
 - **단계구분도**: 출력 레이어 우클릭 **구간별 색상...**. GeoServer named style, NULL은 데이터 없음
 - **속성 설명**: 열이 많은 레이어도 `/api/map/explain`이 앞부분만 잘라 LLM을 호출한다
 - **데이터 관리**: 메타데이터 CSV 내려받기·업로드
-- **원격 저장소**: GitHub 저장소 이름을 `txt2sql`로 변경. Python 패키지명은 `llm2sql` 유지
+- **원격·패키지명**: GitHub·Python 패키지·CLI를 `txt2sql`로 통일 (`Txt2SqlEngine`, `txt2sql-web`)
 - **문서**: `docs/20260825_txt2sql_v0.3.0.md`, `docs/map_choropleth.md`
 
 ## 0.2.3 변경 요약
@@ -633,7 +633,7 @@ llm2sql/
 
 ## 0.2 변경 요약
 
-- **웹 UI 이원화**: 채팅 전용(`/`, `/chat`)과 지도 3분할(`/map`)을 같은 `llm2sql-web`에서 제공. CLI는 기존 유지
+- **웹 UI 이원화**: 채팅 전용(`/`, `/chat`)과 지도 3분할(`/map`)을 같은 `txt2sql-web`에서 제공. CLI는 기존 유지
 - **지도 웹앱**: 레이어 패널 · OpenLayers 지도 · 기존 SSE 채팅을 한 화면에 배치
 - **질의 → 지도**: 성공한 GIS SELECT에 geometry를 넣어 `temp_*` UNLOGGED 테이블로 발행, GeoServer WMS(기본)/WFS
 - **KorDB**: 카탈로그 체크 시 출력 레이어·지도에 추가, 해제 시 출력에서 제거
@@ -660,7 +660,7 @@ llm2sql/
 - **설정**: `Settings.from_mapping` / `load_settings` 로딩 경로 통합
 - **프로필**: 용적율·건폐율 집계, 지역 전체 vs 산업단지 내 비교
 - **차트**: 비교 차트에 평균 용적율 시리즈 지원
-- **문서**: `llm2_geodb` 대비 고도화 비교(`docs/고도화_llm2_geodb_to_llm2sql.md`)
+- **문서**: `llm2_geodb` 대비 고도화 비교(`docs/고도화_llm2_geodb_to_txt2sql.md`)
 
 ## 0.1.2 변경 요약
 
@@ -680,7 +680,7 @@ llm2sql/
 
 ## 0.1.0 변경 요약
 
-- **`Llm2SqlEngine`**: 재사용 엔진, `AskResult`, `on_progress` / `on_token` 스트림
+- **`Txt2SqlEngine`**: 재사용 엔진, `AskResult`, `on_progress` / `on_token` 스트림
 - **웹 챗봇**: FastAPI + 버블 UI + SSE, 로딩·스크롤·모호 보기 버튼
 - **모호 동**: 번호(`1`/`1번`)·구 이름 선택 후 재질의
 - **부산시 전역** 순위·「제일 넓은」 등 구어 매칭, D198 오판 교정

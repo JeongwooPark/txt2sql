@@ -1,11 +1,11 @@
-from llm2sql.semantic_plan.compiler import compile_semantic_plan
-from llm2sql.semantic_plan.models import (
+from txt2sql.semantic_plan.compiler import compile_semantic_plan
+from txt2sql.semantic_plan.models import (
     FilterSpec,
     PlaceSpec,
     ScopeSpec,
     SemanticQueryPlan,
 )
-from llm2sql.semantic_plan.normalizer import normalize_semantic_plan
+from txt2sql.semantic_plan.normalizer import normalize_semantic_plan
 
 
 def _plan_height_list() -> SemanticQueryPlan:

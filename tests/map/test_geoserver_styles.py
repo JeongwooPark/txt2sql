@@ -1,5 +1,5 @@
-from llm2sql.config import Settings
-from llm2sql.map.geoserver import GeoServerClient
+from txt2sql.config import Settings
+from txt2sql.map.geoserver import GeoServerClient
 
 
 def _client() -> GeoServerClient:

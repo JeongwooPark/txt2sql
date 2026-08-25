@@ -1,6 +1,6 @@
-from llm2sql.evaluation.taxonomy import classify_root_causes
-from llm2sql.semantic_plan.followup import apply_plan_delta, parse_followup_delta
-from llm2sql.semantic_plan.models import (
+from txt2sql.evaluation.taxonomy import classify_root_causes
+from txt2sql.semantic_plan.followup import apply_plan_delta, parse_followup_delta
+from txt2sql.semantic_plan.models import (
     FilterSpec,
     OperandSpec,
     PlaceSpec,
@@ -8,7 +8,7 @@ from llm2sql.semantic_plan.models import (
     ScopeSpec,
     SemanticQueryPlan,
 )
-from llm2sql.semantic_plan.predicate_utils import effective_predicate, has_op
+from txt2sql.semantic_plan.predicate_utils import effective_predicate, has_op
 
 
 def test_followup_ands_into_canonical_predicate() -> None:
@@ -57,7 +57,7 @@ def test_followup_uses_contract_range() -> None:
 
 
 def test_diagnose_eval_failure_or_drop() -> None:
-    from llm2sql.evaluation.taxonomy import diagnose_eval_failure
+    from txt2sql.evaluation.taxonomy import diagnose_eval_failure
 
     causes = diagnose_eval_failure(
         question="수영구 숙박시설 또는 위락시설 채수",
@@ -121,7 +121,7 @@ def test_followup_industrial_spatial() -> None:
 
 
 def test_followup_spatial_event_survives_next_aggregate() -> None:
-    from llm2sql.semantic_plan.followup import apply_followup_history, parse_followup_events
+    from txt2sql.semantic_plan.followup import apply_followup_history, parse_followup_events
 
     base = SemanticQueryPlan(
         query_kind="count",
@@ -142,8 +142,8 @@ def test_followup_spatial_event_survives_next_aggregate() -> None:
 
 
 def test_followup_filter_only_from_list_becomes_count() -> None:
-    from llm2sql.semantic_plan.followup import apply_count_display_followup
-    from llm2sql.session import SessionContext
+    from txt2sql.semantic_plan.followup import apply_count_display_followup
+    from txt2sql.session import SessionContext
 
     plan = {"query_kind": "list", "limit": 100, "select": ["name"]}
     SessionContext._coerce_count_display_plan(
@@ -191,8 +191,8 @@ def test_followup_sum_keeps_count() -> None:
 
 
 def test_expand_skips_semantic_plan_followup() -> None:
-    from llm2sql.pipeline import _expand_followup_question
-    from llm2sql.session import SessionContext
+    from txt2sql.pipeline import _expand_followup_question
+    from txt2sql.session import SessionContext
 
     session = SessionContext()
     session.last_semantic_plan = {"query_kind": "list", "entity": "building"}
