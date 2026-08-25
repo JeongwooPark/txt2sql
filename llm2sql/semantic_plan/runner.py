@@ -63,7 +63,9 @@ def run_semantic_plan(
         plan_version=generated.version,
     )
     normalized = normalize_semantic_plan(generated, question, conn=conn)
-    checked = validate_semantic_plan(normalized, question, conn=conn)
+    checked = validate_semantic_plan(
+        normalized, question, conn=conn, contract=contract
+    )
     emit(
         "plan_validate",
         f"Plan 검증 완료 status={checked.status} score={checked.score:.2f}",

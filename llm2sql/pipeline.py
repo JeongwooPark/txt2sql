@@ -882,6 +882,42 @@ def run_ask(
     return finish(result, effective)
 
 
+def _emit_contract_routing(
+    progress: ProgressTracker,
+    contract,
+    candidates: list[str],
+    *,
+    missing: list[str] | None = None,
+    decision: str | None = None,
+) -> None:
+    places = ",".join(str(item.value or item.text) for item in contract.places[:3]) or "-"
+    groups = ",".join(contract.group_fields) or "-"
+    aggs = ",".join(item.function for item in contract.aggregation_requests) or "-"
+    progress.emit(
+        "understand",
+        f"[contract] entity={places}/group={groups}/aggs={aggs}/limit={contract.limit}",
+    )
+    progress.emit("route", f"[route] candidates={list(candidates)}")
+    if missing is not None:
+        miss_txt = ",".join(missing) if missing else "-"
+        progress.emit("route", f"[capability] missing={miss_txt}")
+    if decision is not None:
+        progress.emit("route", f"[decision] {decision}")
+
+
+def _capability_missing_for_candidates(candidates: list[str], contract) -> list[str]:
+    if not contract.is_sufficient():
+        return ["incomplete_contract"]
+    last: list[str] = ["no_eligible_route"]
+    for intent in candidates:
+        miss = missing_requirements(capability_for(intent), contract)
+        if miss:
+            last = miss
+        else:
+            return []
+    return last
+
+
 _PREFERRED_ROUTE = {
     "rank_compare": "building_rank_compare",
     "usage_overview": "building_usage_count",
@@ -1298,6 +1334,7 @@ def _ask_inner(
     route_match = match_route(question, mode=mode, conn=conn, contract=contract)
     deferred_route = route_match.deferred
     candidates = detect_route_candidates(question, contract, conn=conn)
+    _emit_contract_routing(progress, contract, candidates)
     if route_match.early is not None:
         early = route_match.early
         if route_allowed(early.intent, contract):
@@ -1309,6 +1346,9 @@ def _ask_inner(
                 label = "법정동 구성 행정동 목록"
             else:
                 label = f"산업단지 라우트 ({early.intent})"
+            _emit_contract_routing(
+                progress, contract, candidates, missing=[], decision="ROUTER"
+            )
             return _finish_routed_query(
                 question,
                 settings,
@@ -1339,6 +1379,9 @@ def _ask_inner(
             contract=contract,
         )
         if dispatched is not None:
+            _emit_contract_routing(
+                progress, contract, candidates, missing=[], decision="ROUTER"
+            )
             return dispatched
         progress.emit("route", "선호 의도 처리 실패 → 규칙 체인")
 
@@ -1349,6 +1392,9 @@ def _ask_inner(
         ranked = answer_rank_compare(conn, question, on_token=on_token, **llm)
         if ranked is not None:
             progress.emit("answer", "최고 건물 비교 완료")
+            _emit_contract_routing(
+                progress, contract, candidates, missing=[], decision="ROUTER"
+            )
             return _qa_ok(ranked)
         progress.emit("route", "최고 건물 비교 매칭 실패 → 계속 진행")
 
@@ -1366,6 +1412,9 @@ def _ask_inner(
                 sql=usage_ov.sql,
             )
             progress.emit("answer", "한국어 용도 설명 완료")
+            _emit_contract_routing(
+                progress, contract, candidates, missing=[], decision="ROUTER"
+            )
             return _qa_ok(usage_ov)
         progress.emit("route", "용도 구성 설명 매칭 실패 → 계속 진행")
 
@@ -1381,6 +1430,9 @@ def _ask_inner(
                 sql=profile.sql,
             )
             progress.emit("answer", "한국어 특징 답변 완료")
+            _emit_contract_routing(
+                progress, contract, candidates, missing=[], decision="ROUTER"
+            )
             return _qa_ok(profile)
         progress.emit("route", "특징 요약 매칭 실패 → 계속 진행")
 
@@ -1442,6 +1494,9 @@ def _ask_inner(
                 "clarify",
                 "건축년수는 동래·금정만 지원 → 해당 범위로 조회",
             )
+        _emit_contract_routing(
+            progress, contract, candidates, missing=[], decision="ROUTER"
+        )
         return _finish_routed_query(
             question,
             settings,
@@ -1454,6 +1509,13 @@ def _ask_inner(
         )
 
     if settings.semantic_plan_mode in {"shadow", "hybrid"}:
+        _emit_contract_routing(
+            progress,
+            contract,
+            candidates,
+            missing=_capability_missing_for_candidates(candidates, contract),
+            decision="SEMANTIC_PLAN",
+        )
         progress.emit("route", "라우트 미매칭 → Semantic Query Plan")
         semantic = run_semantic_plan(
             question,

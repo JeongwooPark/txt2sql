@@ -46,6 +46,7 @@ def validate_semantic_plan(
     question: str,
     *,
     conn: psycopg.Connection | None = None,
+    contract=None,
 ) -> PlanValidationResult:
     errors: list[str] = []
     warnings: list[str] = []
@@ -309,7 +310,7 @@ def validate_semantic_plan(
 
     from llm2sql.semantic_plan.contract_verifier import verify_contract
 
-    verified = verify_contract(question, plan)
+    verified = verify_contract(question, plan, contract=contract)
     plan = plan.model_copy(update={"slot_confidence": verified.confidence})
     followup_plan = any(
         item in (plan.assumptions or [])

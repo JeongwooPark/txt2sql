@@ -112,6 +112,14 @@ def verify_contract(
             reasons.append("P03")
 
     agg_score = 1.0
+    plan_fns = {item.function for item in plan.aggregations}
+    if plan.query_kind == "count":
+        plan_fns.add("count")
+    wanted_aggs = {item.function for item in contract.aggregation_requests}
+    if wanted_aggs and not wanted_aggs <= plan_fns:
+        agg_score = 0.0
+        reasons.append("missing_aggregation")
+        reasons.append("P05")
     if contract.aggregations:
         wanted = {span.value for span in contract.aggregations}
         got = {item.function for item in plan.aggregations}
@@ -121,6 +129,11 @@ def verify_contract(
         if contract.groups and not plan.group_by:
             agg_score = 0.0
             reasons.append("P05")
+    if contract.group_fields:
+        if not set(contract.group_fields) <= set(plan.group_by):
+            agg_score = 0.0
+            reasons.append("missing_group")
+            reasons.append("P05")
 
     if contract.order:
         want_dir = contract.order[0].value
@@ -128,6 +141,38 @@ def verify_contract(
         if got_dir != want_dir:
             reasons.append("P06")
             agg_score = min(agg_score, 0.2)
+    if contract.order_requests and not plan.order_by:
+        reasons.append("missing_order")
+        agg_score = min(agg_score, 0.0)
+    elif contract.order_requests and contract.order_requests[0].field:
+        got_field = plan.order_by[0].field if plan.order_by else None
+        if got_field != contract.order_requests[0].field:
+            reasons.append("missing_order_field")
+            agg_score = min(agg_score, 0.0)
+
+    if contract.limit is not None and plan.limit != contract.limit:
+        reasons.append("missing_limit")
+        agg_score = min(agg_score, 0.0)
+
+    if plan.query_kind in {"list", "rank"} and contract.output_fields:
+        got_out = (
+            set(plan.select)
+            | {item.field for item in plan.projections}
+            | {item.field for item in plan.aggregations if item.field}
+        )
+        if not set(contract.output_fields) <= got_out:
+            reasons.append("missing_output")
+            agg_score = min(agg_score, 0.0)
+
+    if contract.ratios:
+        if not plan.ratios:
+            reasons.append("missing_ratio")
+            agg_score = min(agg_score, 0.0)
+        elif any(item.has_denominator for item in contract.ratios) and any(
+            item.denominator_predicate is None for item in plan.ratios
+        ):
+            reasons.append("missing_ratio_denominator")
+            agg_score = min(agg_score, 0.0)
 
     spatial_score = 1.0
     if contract.places and plan.spatial_relations:
