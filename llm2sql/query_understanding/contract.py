@@ -396,8 +396,18 @@ def _outputs_bound(outputs: list[Span]) -> bool:
 
 def _bind_numbers_greedily(question: str, numbers: list[Span]) -> None:
     used_spans: set[tuple[int, int]] = set()
+    unit_fields = {
+        "층": "ground_floors",
+        "m": "height_m",
+        "미터": "height_m",
+        "㎡": "gross_floor_area_m2",
+        "m2": "gross_floor_area_m2",
+        "평": "gross_floor_area_m2",
+    }
     for span in numbers:
         field, metric_span = _nearest_unused_metric(question, span.start, used_spans)
+        if not field:
+            field = unit_fields.get(str(span.meta.get("unit") or ""))
         span.meta["field"] = field
         if metric_span is not None:
             used_spans.add(metric_span)

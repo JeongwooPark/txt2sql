@@ -10,7 +10,9 @@ from llm2sql.domain import AGE_HINTS, looks_like_age_question
 from llm2sql.gazetteer import find_places, load_gazetteer
 from llm2sql.semantic_plan.catalog import get_entity, get_field
 from llm2sql.semantic_plan.models import (
+    ExpressionSpec,
     PlanValidationResult,
+    PredicateSpec,
     SemanticQueryPlan,
     UnknownSemanticFieldError,
 )
@@ -113,9 +115,14 @@ def validate_semantic_plan(
                 plan=clarified,
             )
 
+    agg_aliases = {item.alias for item in plan.aggregations if item.alias}
+    ratio_aliases = {item.alias for item in plan.ratios if item.alias}
+    known_aliases = agg_aliases | ratio_aliases | {"n", "count", "matching_n", "ratio_pct"}
     used_fields = list(plan.select) + list(plan.group_by)
     used_fields.extend(item.field for item in plan.filters)
-    used_fields.extend(item.field for item in plan.order_by)
+    used_fields.extend(
+        item.field for item in plan.order_by if item.field not in known_aliases
+    )
     used_fields.extend(item.field for item in plan.aggregations if item.field)
 
     for key in used_fields:
@@ -153,6 +160,32 @@ def validate_semantic_plan(
             errors.append("between requires value2")
             status = "fallback"
             score -= 0.4
+
+    alias_names = [name for name in list(agg_aliases) + list(ratio_aliases) if name]
+    if len(alias_names) != len(set(alias_names)):
+        return _fallback(plan, "duplicate alias", score - 0.4)
+
+    for agg in plan.aggregations:
+        if agg.function == "percentile" and agg.percentile is None:
+            return _fallback(plan, "percentile requires a value", score - 0.4)
+        if agg.expression is not None:
+            expr_error = _validate_expression(plan.entity, agg.expression)
+            if expr_error:
+                return _fallback(plan, expr_error, score - 0.4)
+        if agg.predicate is not None:
+            pred_error = _validate_predicate_fields(plan.entity, agg.predicate)
+            if pred_error:
+                return _fallback(plan, pred_error, score - 0.4)
+
+    for ratio in plan.ratios:
+        if ratio.numerator_predicate is None:
+            return _fallback(plan, "ratio numerator required", score - 0.4)
+        for pred in (ratio.numerator_predicate, ratio.denominator_predicate):
+            if pred is None:
+                continue
+            pred_error = _validate_predicate_fields(plan.entity, pred)
+            if pred_error:
+                return _fallback(plan, pred_error, score - 0.4)
 
     if plan.scope and plan.scope.place and plan.scope.place.name.strip():
         place_status, place_error = _validate_place(plan.scope.place.name)
@@ -293,6 +326,55 @@ def validate_semantic_plan(
         warnings=warnings,
         plan=plan,
     )
+
+
+def _expression_fields(expr: ExpressionSpec | None) -> list[str]:
+    if expr is None:
+        return []
+    if expr.kind == "field":
+        return [expr.field] if expr.field else []
+    return _expression_fields(expr.left) + _expression_fields(expr.right)
+
+
+def _validate_expression(entity: str, expr: ExpressionSpec) -> str | None:
+    if expr.kind == "field":
+        if not expr.field:
+            return "expression field missing"
+        try:
+            get_field(entity, expr.field)
+        except UnknownSemanticFieldError:
+            return f"unknown field: {expr.field}"
+        return None
+    if expr.left is None or expr.right is None:
+        return "divide requires denominator" if expr.kind == "divide" else "expression operands required"
+    if expr.kind == "divide" and expr.right is None:
+        return "divide requires denominator"
+    left_error = _validate_expression(entity, expr.left)
+    if left_error:
+        return left_error
+    return _validate_expression(entity, expr.right)
+
+
+def _predicate_fields(pred: PredicateSpec | None) -> list[str]:
+    if pred is None:
+        return []
+    found: list[str] = []
+    if pred.left and pred.left.kind == "field" and pred.left.field:
+        found.append(pred.left.field)
+    if pred.right and pred.right.kind == "field" and pred.right.field:
+        found.append(pred.right.field)
+    for arg in pred.args or []:
+        found.extend(_predicate_fields(arg))
+    return found
+
+
+def _validate_predicate_fields(entity: str, pred: PredicateSpec) -> str | None:
+    for key in _predicate_fields(pred):
+        try:
+            get_field(entity, key)
+        except UnknownSemanticFieldError:
+            return f"unknown field: {key}"
+    return None
 
 
 def _fallback(plan: SemanticQueryPlan, reason: str, score: float) -> PlanValidationResult:

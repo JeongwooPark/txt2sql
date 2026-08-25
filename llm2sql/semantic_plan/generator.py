@@ -40,11 +40,13 @@ from llm2sql.semantic_plan.migrate import filter_to_predicate, migrate_plan_v11
 from llm2sql.semantic_plan.predicate_utils import effective_predicate, has_op
 from llm2sql.semantic_plan.models import (
     AggregationSpec,
+    ExpressionSpec,
     FilterSpec,
     OperandSpec,
     OrderSpec,
     PlaceSpec,
     PredicateSpec,
+    RatioSpec,
     ScopeSpec,
     SemanticPlanGenerationError,
     SemanticQueryPlan,
@@ -271,7 +273,7 @@ def extract_plan_hints(question: str) -> dict[str, Any]:
                 {"field": "special_land", "operator": land_op, "value": land_value}
             )
     dong_quoted = re.search(
-        r"건물동명[이은는가]?\s*[''\"]([^'\"]+)[''\"]",
+        r"건물동명[이은는가에을를]?\s*[''\"]([^'\"]+)[''\"]",
         q,
     )
     if dong_quoted:
@@ -428,6 +430,8 @@ def try_heuristic_plan(
         and not hints.get("basic_zone")
         and "산업단지" not in q
         and "사업지구" not in q
+        and not hints.get("ratio")
+        and not hints.get("extra_filters")
     ):
         return None
     if _catalog_owns_d060_only(q):
@@ -454,6 +458,10 @@ def try_heuristic_plan(
             "기초구역",
             "사업지구",
             "채수",
+            "비율",
+            "산지",
+            "구조별",
+            "법정동별",
         )
     ):
         if (
@@ -462,6 +470,8 @@ def try_heuristic_plan(
             and not hints.get("detail_usages")
             and not hints.get("usage_classes")
             and not hints.get("distance_m")
+            and not hints.get("ratio")
+            and not hints.get("extra_filters")
             and not temporal_filters
         ):
             return None
@@ -748,9 +758,16 @@ def try_heuristic_plan(
                         alias=f"{fn}_{metric}",
                     )
                 )
-        if any(k in q for k in ("용도별",)):
+        if any(k in q for k in ("용도별", "구조별", "법정동별", "구별")):
             query_kind = "aggregate"
-            group_by = ["usage"]
+            if "구조별" in q:
+                group_by = ["structure"]
+            elif "법정동별" in q:
+                group_by = ["legal_dong"]
+            elif "구별" in q:
+                group_by = ["sigungu_name"]
+            else:
+                group_by = ["usage"]
     elif query_kind == "distribution":
         if any(k in q for k in ("평균", "합계", "총합", "최대", "최소")):
             metric = _rank_metric(q)
@@ -830,14 +847,79 @@ def try_heuristic_plan(
             AggregationSpec(function="count", field=None, alias="n")
         ]
         select = []
-        order_by = []
-        limit = None
+        if any(k in q for k in ("상위", "순위")):
+            order_by = [OrderSpec(field="n", direction="desc", nulls="last")]
+            extracted = _extract_limit(q)
+            if extracted:
+                limit = extracted
+        else:
+            order_by = []
+            limit = None
+    ratios: list[RatioSpec] = []
     if hints.get("ratio"):
         query_kind = "aggregate"
         aggregations = [
             AggregationSpec(function="count", field=None, alias="matching_n"),
         ]
         assumptions.append("ratio_percent")
+        ratios = _build_ratio_specs(q, filters)
+    contract_extra = extract_contract(q)
+    seen_percentiles: set[tuple[str | None, float]] = set()
+    for req in contract_extra.percentile_requests:
+        key = (req.field, round(float(req.percentile), 6))
+        if key in seen_percentiles:
+            continue
+        seen_percentiles.add(key)
+        query_kind = "aggregate"
+        aggregations.append(
+            AggregationSpec(
+                function="percentile",
+                field=req.field or _rank_metric(q),
+                percentile=req.percentile,
+                alias="pctl" if len(seen_percentiles) == 1 else f"pctl_{len(seen_percentiles)}",
+            )
+        )
+        select = []
+        if not contract_extra.limit:
+            limit = None
+            order_by = []
+    for req in contract_extra.derived_metrics:
+        query_kind = "aggregate"
+        aggregations.append(
+            AggregationSpec(
+                function="avg",
+                expression=ExpressionSpec(
+                    kind="divide",
+                    left=ExpressionSpec(kind="field", field=req.left),
+                    right=ExpressionSpec(kind="field", field=req.right),
+                ),
+                alias="avg_ratio",
+            )
+        )
+        select = []
+    if "지하층" in q and "합계" in q:
+        query_kind = "aggregate"
+        basement_pred = PredicateSpec(
+            op="cmp",
+            operator="gte",
+            left=OperandSpec(kind="field", field="basement_floors"),
+            right=OperandSpec(kind="literal", value=1),
+        )
+        aggregations = [
+            AggregationSpec(function="sum", field="basement_floors", alias="sum_basement"),
+            AggregationSpec(function="count", alias="n", predicate=basement_pred),
+        ]
+    if group_by and aggregations and not order_by and (
+        limit or any(k in q for k in ("상위", "순위"))
+    ):
+        alias = aggregations[0].alias or aggregations[0].function
+        for item in aggregations:
+            if item.function == "count" and item.alias:
+                alias = item.alias
+                break
+        order_by = [OrderSpec(field=alias, direction="desc", nulls="last")]
+        if limit is None:
+            limit = _extract_limit(q)
     if dual_subset_usage:
         query_kind = "aggregate"
         aggregations = [
@@ -907,6 +989,7 @@ def try_heuristic_plan(
         predicate=predicate,
         select=select,
         aggregations=aggregations,
+        ratios=ratios,
         group_by=group_by,
         order_by=order_by,
         limit=limit,
@@ -1138,6 +1221,85 @@ def _and_pred(
     return PredicateSpec(op="and", args=[existing, extra])
 
 
+def _filters_to_predicate(items: list[FilterSpec]) -> PredicateSpec | None:
+    from llm2sql.semantic_plan.migrate import filter_to_predicate
+
+    pred = None
+    for item in items:
+        pred = _and_pred(pred, filter_to_predicate(item))
+    return pred
+
+
+def _build_ratio_specs(question: str, filters: list[FilterSpec]) -> list[RatioSpec]:
+    usage_f = [item for item in filters if item.field == "usage"]
+    violate_f = [item for item in filters if item.field == "violation_status"]
+    land_f = [item for item in filters if item.field == "special_land"]
+    numeric_f = [
+        item
+        for item in filters
+        if item.field
+        not in {"usage", "violation_status", "special_land", "legal_dong", "building_dong_name"}
+    ]
+    compact = question.replace(" ", "")
+    if "위반" in question and ("위반+N" in compact or "/(위반" in compact):
+        return [
+            RatioSpec(
+                numerator_predicate=PredicateSpec(
+                    op="cmp",
+                    operator="eq",
+                    left=OperandSpec(kind="field", field="violation_status"),
+                    right=OperandSpec(kind="literal", value="Y"),
+                ),
+                denominator_predicate=PredicateSpec(
+                    op="cmp",
+                    operator="in",
+                    left=OperandSpec(kind="field", field="violation_status"),
+                    right=OperandSpec(kind="literal", value=["Y", "N"]),
+                ),
+            )
+        ]
+    if question.count("비율") >= 2:
+        from llm2sql.query_understanding.contract import extract_contract
+
+        specs: list[RatioSpec] = []
+        for index, span in enumerate(extract_contract(question).numbers):
+            field = span.meta.get("field")
+            if not field:
+                continue
+            specs.append(
+                RatioSpec(
+                    numerator_predicate=PredicateSpec(
+                        op="cmp",
+                        operator="gte",
+                        left=OperandSpec(kind="field", field=str(field)),
+                        right=OperandSpec(kind="literal", value=span.value),
+                    ),
+                    alias=f"ratio_{index + 1}",
+                )
+            )
+        if specs:
+            return specs
+    if "중" in question:
+        left = question[: question.rfind("중")]
+        usage_before = extract_usage(left) is not None
+        numeric_before = bool(re.search(r"\d+", left)) and any(
+            k in left for k in ("층", "㎡", "m", "이상", "이하")
+        )
+        if usage_before and not numeric_before:
+            den = _filters_to_predicate(usage_f)
+            num = _filters_to_predicate(usage_f + numeric_f)
+        else:
+            den = _filters_to_predicate(numeric_f)
+            num = _filters_to_predicate(numeric_f + usage_f)
+        if num is None:
+            return []
+        return [RatioSpec(numerator_predicate=num, denominator_predicate=den)]
+    num = _filters_to_predicate(usage_f + violate_f + land_f + numeric_f)
+    if num is None:
+        return []
+    return [RatioSpec(numerator_predicate=num)]
+
+
 def _usage_eq(value: str) -> PredicateSpec:
     return _field_eq("usage", value)
 
@@ -1303,6 +1465,9 @@ def _guess_kind(question: str) -> str:
         return "rank"
     if any(k in question for k in ("비율", "퍼센트", "몇%", "%씩", "몇 프로")):
         return "aggregate"
+    contract = extract_contract(question)
+    if contract.percentile_requests or contract.derived_metrics:
+        return "aggregate"
     if any(k in question for k in ("용도별", "층수별", "층별", "분포", "구성", "구간별", "년대별", "연도별")) or (
         "용도" in question
         and any(k in question for k in ("상위", "순위"))
@@ -1386,8 +1551,7 @@ def _list_select(question: str) -> list[str]:
 
 
 def _extract_limit(question: str) -> int | None:
-    match = re.search(r"(?:상위\s*)?(\d+)\s*(?:개|곳|채|동)\b", question)
-    if match:
-        n = int(match.group(1))
-        return max(1, min(n, 1000))
-    return None
+    limit = extract_contract(question).limit
+    if limit is None:
+        return None
+    return max(1, min(int(limit), 1000))

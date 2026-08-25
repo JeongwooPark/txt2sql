@@ -38,7 +38,16 @@ SpatialRelationName = Literal[
     "nearest",
     "overlap_ratio",
 ]
-AggregateFunction = Literal["count", "avg", "sum", "min", "max", "median"]
+AggregateFunction = Literal[
+    "count",
+    "avg",
+    "sum",
+    "min",
+    "max",
+    "median",
+    "stddev",
+    "percentile",
+]
 PlaceKind = Literal[
     "sido",
     "gu",
@@ -154,6 +163,15 @@ class PlanConfidence(BaseModel):
     overall: float = 0.0
 
 
+class ExpressionSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["field", "divide", "multiply", "add", "subtract"]
+    field: str | None = None
+    left: ExpressionSpec | None = None
+    right: ExpressionSpec | None = None
+
+
 class AggregationSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -163,6 +181,18 @@ class AggregationSpec(BaseModel):
     filter_field: str | None = None
     filter_operator: FilterOperator | None = None
     filter_value: Any | None = None
+    percentile: float | None = Field(default=None, ge=0.0, le=1.0)
+    expression: ExpressionSpec | None = None
+    predicate: PredicateSpec | None = None
+
+
+class RatioSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    numerator_predicate: PredicateSpec
+    denominator_predicate: PredicateSpec | None = None
+    multiplier: float = 100.0
+    alias: str = "ratio_pct"
 
 
 class OrderSpec(BaseModel):
@@ -205,6 +235,7 @@ class SemanticQueryPlan(BaseModel):
     select: list[str] = Field(default_factory=list)
     projections: list[ProjectionSpec] = Field(default_factory=list)
     aggregations: list[AggregationSpec] = Field(default_factory=list)
+    ratios: list[RatioSpec] = Field(default_factory=list)
     group_by: list[str] = Field(default_factory=list)
     having: HavingSpec | None = None
     joins: list[JoinSpec] = Field(default_factory=list)
@@ -243,6 +274,9 @@ class PlanValidationResult:
 
 
 PredicateSpec.model_rebuild()
+ExpressionSpec.model_rebuild()
+AggregationSpec.model_rebuild()
+RatioSpec.model_rebuild()
 HavingSpec.model_rebuild()
 SemanticQueryPlan.model_rebuild()
 SemanticQueryPlanV11 = SemanticQueryPlan
