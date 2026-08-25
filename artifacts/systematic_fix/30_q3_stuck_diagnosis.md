@@ -6,6 +6,15 @@
 - 본 문서는 **진단만** 한다. 코드 수정 없음.
 - 분류기 라벨(`PREDICATE_DROPPED` 등)은 참고용이며 원인으로 쓰지 않는다.
 
+## 검증 (2026-08-25, 함수 재실행)
+
+방향(Q3 패치가 남은 20건에 안 닿음)은 맞다. 아래만 문장을 고친다.
+
+- **Q223:** LLM이 모호하다고 판단한 것이 1차가 아니다. `try_heuristic_plan`이 **None**이다. 힌트에는 `place=금정구`, `ratio=True`, `special_land='산'`이 있는데, 질문 본문에 `건물`/`용도` 키워드가 없어 heuristic이 포기한다. 그다음 LLM(~13초) 실패 후 `heuristic_incomplete` clarify. gold SQL은 `A7='산' / 전체`라 heuristic이 타기만 하면 Q230과 같은 비율 규칙으로 맞는다.
+- **Q220 full28:** r3의 장소 건수 훔침은 맞다. full에서는 plan까지 가서 **건수 2,344는 맞고**(`A27>0`), 합계를 지하층(`A27`)이 아니라 **연면적 A14**로 집계해 hits=1로 남는다.
+- **Q254:** “Q4/Q5 부작용”은 추정이다. 확인된 사실만: Q3 r3는 건물 연면적 rank, full28은 heuristic `group_by=sigungu_name`(plan 1ms). 현재 `try_heuristic_plan`은 구별 집계를 만든다. Q3 ORDER BY 패치가 통과시킨 것은 아니다.
+- 본문 “8개 구멍”은 오기다. 유형은 **A–E 다섯**이다.
+
 ## 한 줄 결론
 
 Q3 3회 수정은 **이미 계획(plan)까지 들어간 단순 group-rank / 다중 집계 / “전체” 메타 훔침**만 겨냥했다.  
@@ -33,7 +42,7 @@ r1에서 붙은 3건이 Q3 패치의 **전부**이고, r2는 0건, r3는 메타 
 
 ## 원인 유형 (구멍 단위)
 
-남은 실패는 아래 8개 구멍으로 나뉜다. 한 문항이 두 구멍에 걸치면 주원인을 앞에 적는다.
+남은 실패는 아래 **A–E** 구멍으로 나뉜다. 한 문항이 두 구멍에 걸치면 주원인을 앞에 적는다.
 
 ### A. 레거시가 plan보다 먼저 실행 (Q3 패치 미도달)
 
@@ -72,7 +81,7 @@ heuristic group_by 트리거는 `"용도별"` / `"층수별"` / `"구별"` 뿐. 
 | ID | 질문 | r3 SQL / 라우트 | 원인 |
 |---|---|---|---|
 | **Q242** | 사상구 공장 **구조별** 건수·평균 연면적 **상위 6** | GROUP BY 없는 `AVG(A14), COUNT(*) WHERE 공장`. route=`None`, `engine-fail: Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT.` | 질문은 `상위`라 validator가 ORDER BY를 요구. plan은 group_by가 없어 compiler가 ORDER BY를 **넣지 않음**. 구조별 집계 자체가 없음. r0~full28 동일. |
-| **Q254** (r3) | 부산 **구별** 위반건축물 수 상위 8개 **구** | `semantic_plan_rank`: 위반 건물을 **연면적 상위 8채** 목록 | `query_kind=rank`가 건물 순위로 남음. 구 단위 COUNT/GROUP BY가 아님. **full28에서만** `semantic_plan_aggregate`로 바뀌어 통과 → Q3 r1–r3 패치가 아니라 이후 다른 패턴/생성 경로 부작용. |
+| **Q254** (r3) | 부산 **구별** 위반건축물 수 상위 8개 **구** | `semantic_plan_rank`: 위반 건물을 **연면적 상위 8채** 목록 | r3는 구 단위 COUNT가 아님. full28은 heuristic `group_by=sigungu_name`으로 통과(plan 1ms). Q3 ORDER BY 패치의 결과가 아니다. |
 
 ### D. plan은 타지만 술어·함수가 질문과 다름
 
@@ -84,11 +93,11 @@ heuristic group_by 트리거는 `"용도별"` / `"층수별"` / `"구별"` 뿐. 
 | **Q265** | 해운대구 공동주택 높이 합계 **(1~500m만)** 와 건수 | SUM/COUNT에 질문 구간(1~500) **plus** `_sane_height_sql`(A16≤600, 층수 휴리스틱) | 가드가 gold 집합을 깎음. n 2,876 vs 2,883, 합 80,009 vs 80,450. |
 | **Q286** | **대연3동** 교육연구시설 대지면적 **합계** | `SUM(A15)` + 행정동 조인, **`LIMIT 3`**, COUNT 없음 | `_extract_limit`가 `(숫자)동`을 상위 N으로 본다. **`대연3동` → LIMIT 3**. 합계 스칼라는 gold와 맞지만(hits=1) gold의 건수 102가 없어 실패. |
 
-### E. 메타 탈출 후 LLM clarify (Q223만)
+### E. 메타 탈출 후 heuristic 없음 → clarify (Q223만)
 
 | ID | r0–r2 | r3 / full28 | 원인 |
 |---|---|---|---|
-| **Q223** | `meta_catalog` (`전체`가 카탈로그 키워드) | `semantic_plan_clarify`, SQL 없음. plan 단계 ~13초. 답: 「질문을 완전히 해석하지 못해 확인이 필요합니다」 | `"전체"` 제거는 메타 훔침만 끊었다. 이어서 LLM plan이 모호하다고 보고 `requires_clarification`/`ambiguities` → validator `clarify`. heuristic은 산지(`special_land='산'`) 비율을 만들 수 있는 길이 있으나, LLM clarify가 실행을 멈춘다. Q230과 달리 괄호 식 `산 / 전체`가 생성기를 흔든다. |
+| **Q223** | `meta_catalog` (`전체`가 카탈로그 키워드) | `semantic_plan_clarify`, SQL 없음. plan 단계 ~13초. 답: 「질문을 완전히 해석하지 못해 확인이 필요합니다」 | `"전체"` 제거는 메타만 끊었다. 힌트는 `special_land='산'`+비율인데, 본문에 `건물`/`용도`가 없어 `try_heuristic_plan`이 None. LLM 실패 후 `heuristic_incomplete` clarify. gold는 `A7='산'/전체`라 heuristic이 타면 비율 규칙과 맞는다. |
 
 ## 문항별 한 줄 (24)
 
@@ -125,7 +134,7 @@ heuristic group_by 트리거는 `"용도별"` / `"층수별"` / `"구별"` 뿐. 
 2. **패치 지점이 plan 컴파일 이후다.** A유형 7문항은 compiler/validator에 도달하지 않는다. Q242는 도달해도 `group_by`가 없어 ORDER BY 주입이 건너뛴다.
 3. **비율은 “plan으로 보낸 것”과 “맞는 비율 SQL”이 다르다.** 메타를 plan으로 돌리는 것만으로는 Q231류가 통과하지 않는다. Q230만 분모 규칙과 맞다.
 4. **r2는 공회전이다.** r1 패치 이후 같은 24문항을 다시 돌려도 라우트·SQL이 실패 문항에서 변하지 않았다.
-5. **full-500의 Q254 1건은 Q3 루프 성공이 아니다.** r3까지 실패했고, 이후 Q4/Q5 등 다른 변경·생성 경로에서 aggregate로 바뀌었다.
+5. **full-500의 Q254 1건은 Q3 루프 성공이 아니다.** r3까지 실패했고, 이후 heuristic 구별 집계가 실행되어 통과했다.
 
 ## 근거 산출
 
