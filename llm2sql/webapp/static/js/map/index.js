@@ -22,6 +22,11 @@ export {
   vectorStyle,
 } from "./styles.js";
 export {
+  applyChoroplethToOlLayer,
+  choroplethVectorStyle,
+  isPolygonLayer,
+} from "./choropleth.js";
+export {
   ANALYSIS_Z_BASE,
   ANALYSIS_Z_STEP,
   BG_Z,

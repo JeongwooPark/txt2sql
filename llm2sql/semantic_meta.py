@@ -1,9 +1,12 @@
 """한국어 semantic metadata (동의어·핵심 컬럼 힌트).
 
 DB column_metadata에 synonyms 컬럼이 없어도 M-Schema에 한국어 링킹 힌트를 붙인다.
+신규 업로드 테이블은 table_metadata 표시명·설명에서 동의어를 자동 추출한다.
 """
 
 from __future__ import annotations
+
+import re
 
 # table_name -> (동의어 목록)
 TABLE_SYNONYMS: dict[str, tuple[str, ...]] = {
@@ -205,9 +208,79 @@ SAMPLE_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 
 
-def table_synonyms(table_name: str) -> tuple[str, ...]:
-    if table_name in TABLE_SYNONYMS:
-        return TABLE_SYNONYMS[table_name]
+_LABEL_SPLIT = re.compile(r"[\s_/·,|（）()\[\]\-～~]+")
+_LABEL_STOPWORDS = frozenset(
+    {
+        "면적",
+        "행정동",
+        "행정구역",
+        "건물",
+        "건축물",
+        "용도",
+        "코드",
+        "기준일",
+        "데이터",
+        "활용",
+        "미활용",
+        "기반",
+        "관련",
+        "정보",
+        "공간",
+        "테이블",
+        "레이어",
+        "전국",
+        "부산",
+        "부산광역시",
+        "광역시",
+        "특별시",
+        "자치시",
+        "자치도",
+        "시군구",
+        "센서스",
+        "표시",
+        "구분",
+        "여부",
+        "일자",
+        "날짜",
+        "명칭",
+        "이름",
+        "번호",
+        "식별",
+        "컬럼",
+        "필드",
+    }
+)
+
+
+def synonyms_from_labels(*texts: str, limit: int = 16) -> tuple[str, ...]:
+    """표시명·설명·분류에서 검색용 토큰을 뽑는다."""
+    seen: list[str] = []
+    for text in texts:
+        raw = (text or "").strip()
+        if not raw:
+            continue
+        for part in _LABEL_SPLIT.split(raw):
+            token = part.strip().strip(".,;:…·")
+            if len(token) < 2 or token.isdigit() or token in seen:
+                continue
+            seen.append(token)
+            if len(seen) >= limit:
+                return tuple(seen)
+    return tuple(seen)
+
+
+def distinctive_label_tokens(*texts: str, min_len: int = 4) -> tuple[str, ...]:
+    """다른 레이어와 겹치기 쉬운 일반어를 뺀 검색 토큰."""
+    out: list[str] = []
+    for token in synonyms_from_labels(*texts):
+        if len(token) < min_len or token in _LABEL_STOPWORDS:
+            continue
+        if token not in out:
+            out.append(token)
+    return tuple(out)
+
+
+def _d198_synonyms(table_name: str) -> tuple[str, ...]:
     from llm2sql.domain import gu_from_d198_table
 
     gu = gu_from_d198_table(table_name)
@@ -224,17 +297,70 @@ def table_synonyms(table_name: str) -> tuple[str, ...]:
     )
 
 
-def column_synonyms(table_name: str, column_name: str) -> tuple[str, ...]:
+def table_synonyms(
+    table_name: str,
+    *,
+    display_name: str = "",
+    description: str = "",
+    category: str = "",
+) -> tuple[str, ...]:
+    seen: list[str] = []
+
+    def add(items: tuple[str, ...] | list[str]) -> None:
+        for item in items:
+            token = (item or "").strip()
+            if token and token not in seen:
+                seen.append(token)
+
+    add(distinctive_label_tokens(display_name, description, category))
+    add((display_name.strip(),) if display_name.strip() else ())
+    add(TABLE_SYNONYMS.get(table_name, ()))
+    if table_name not in TABLE_SYNONYMS:
+        add(_d198_synonyms(table_name))
+    add(synonyms_from_labels(display_name, description, category))
+    add((category.strip(),) if category.strip() else ())
+    return tuple(seen)
+
+
+def column_synonyms(
+    table_name: str,
+    column_name: str,
+    *,
+    display_name: str = "",
+) -> tuple[str, ...]:
     specific = COLUMN_SYNONYMS.get(table_name, {}).get(column_name, ())
     if not specific and table_name.startswith("AL_D198_"):
         template = COLUMN_SYNONYMS.get("AL_D198_26260_20250115", {})
         specific = template.get(column_name, ())
     generic = COLUMN_SYNONYMS.get("*", {}).get(column_name, ())
     seen: list[str] = []
-    for item in (*specific, *generic):
-        if item not in seen:
-            seen.append(item)
+    for item in (*specific, *generic, *synonyms_from_labels(display_name)):
+        token = (item or "").strip()
+        if token and token not in seen:
+            seen.append(token)
     return tuple(seen)
+
+
+def tables_matching_labels(
+    question: str,
+    metadata_rows: list[dict[str, str]],
+) -> list[str]:
+    """질문에 표시명 고유 토큰이 있으면 해당 테이블을 앞에 둔다."""
+    if not question:
+        return []
+    matched: list[str] = []
+    for row in metadata_rows:
+        name = (row.get("table_name") or "").strip()
+        if not name or name in matched:
+            continue
+        tokens = distinctive_label_tokens(
+            row.get("display_name") or "",
+            row.get("description") or "",
+            row.get("category") or "",
+        )
+        if any(token in question for token in tokens):
+            matched.append(name)
+    return matched
 
 
 def format_synonyms(syns: tuple[str, ...], *, max_n: int = 6) -> str:

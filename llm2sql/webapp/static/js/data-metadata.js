@@ -145,7 +145,84 @@
     };
   }
 
-  document.getElementById("rename-table-btn")?.addEventListener("click", () => {
+  function onAction(action, handler) {
+    document.querySelectorAll(`[data-action="${action}"]`).forEach((el) => {
+      el.addEventListener("click", handler);
+    });
+  }
+
+  function setSaveBusy(busy) {
+    document.querySelectorAll('[data-action="save-metadata"]').forEach((el) => {
+      el.disabled = busy;
+    });
+  }
+
+  onAction("download-csv", async () => {
+    if (!selected) return;
+    showBanner("CSV 양식을 준비하는 중…", "info");
+    try {
+      const url = `/api/data/tables/${encodeURIComponent(selected.full_name)}/metadata/csv`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        let message = `다운로드 실패 (${res.status})`;
+        try {
+          const body = await res.json();
+          const detail = body.detail;
+          message = typeof detail === "string" ? detail : message;
+        } catch {
+          /* keep status message */
+        }
+        throw new Error(message);
+      }
+      const blob = await res.blob();
+      const match = /filename\*?=(?:UTF-8'')?["']?([^"';]+)/i.exec(
+        res.headers.get("Content-Disposition") || ""
+      );
+      const filename = match
+        ? decodeURIComponent(match[1])
+        : `${selected.table_name}_metadata.csv`;
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+      showBanner("CSV 양식을 내려받았습니다. 수정한 뒤 업로드하세요.", "ok");
+    } catch (err) {
+      showBanner(err.message, "err");
+    }
+  });
+
+  onAction("upload-csv", () => {
+    if (!selected) {
+      showBanner("왼쪽에서 테이블을 먼저 선택하세요.", "err");
+      return;
+    }
+    document.getElementById("csv-file-input")?.click();
+  });
+
+  document.getElementById("csv-file-input")?.addEventListener("change", async (event) => {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    input.value = "";
+    if (!selected || !file) return;
+    showBanner("CSV를 저장하는 중…", "info");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const data = await dataJson(
+        `/api/data/tables/${encodeURIComponent(selected.full_name)}/metadata/csv`,
+        { method: "POST", body: form }
+      );
+      showBanner(data.message || "CSV를 저장했습니다.", "ok");
+      await selectTable(selected);
+    } catch (err) {
+      showBanner(err.message, "err");
+    }
+  });
+
+  onAction("rename-table", () => {
     const name = displayEl.value.trim();
     if (!name) {
       showBanner("테이블 표시명을 먼저 입력하세요.", "err");
@@ -156,10 +233,9 @@
     showBanner("테이블명 변경이 준비되었습니다. 데이터 갱신을 누르세요.", "info");
   });
 
-  document.getElementById("save-metadata-btn")?.addEventListener("click", async () => {
+  onAction("save-metadata", async () => {
     if (!selected) return;
-    const btn = document.getElementById("save-metadata-btn");
-    btn.disabled = true;
+    setSaveBusy(true);
     showBanner("데이터를 갱신하는 중…", "info");
     try {
       const data = await dataJson("/api/data/metadata", {
@@ -177,11 +253,11 @@
     } catch (err) {
       showBanner(err.message, "err");
     } finally {
-      btn.disabled = false;
+      setSaveBusy(false);
     }
   });
 
-  document.getElementById("reset-metadata-btn")?.addEventListener("click", () => {
+  onAction("reset-metadata", () => {
     if (selected) {
       pendingRename = null;
       fillForm();
@@ -189,7 +265,7 @@
     }
   });
 
-  document.getElementById("parse-code-btn")?.addEventListener("click", async () => {
+  onAction("parse-code", async () => {
     if (!selected) return;
     showBanner("테이블 코드를 해석하는 중…", "info");
     try {

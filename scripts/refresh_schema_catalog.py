@@ -1,4 +1,8 @@
-"""llm_schema_catalog 요약을 갱신하고 mxbai-embed-large(1024d)로 재임베딩합니다."""
+"""llm_schema_catalog 요약을 갱신하고 mxbai-embed-large(1024d)로 재임베딩합니다.
+
+기본은 DB의 공간 테이블·pnu_def·D198을 발견해 전부 갱신한다.
+업로드 직후에도 coverage.sync_dataset_after_change가 해당 테이블만 임베딩한다.
+"""
 
 from __future__ import annotations
 
@@ -9,9 +13,9 @@ from llm2sql.config import load_settings
 from llm2sql.data.coverage import refresh_dataset_coverage
 from llm2sql.db import connect
 from llm2sql.domain import D198_TABLES
-from llm2sql.schema_retriever import upsert_catalog_embedding
+from llm2sql.schema_retriever import discover_searchable_tables, upsert_catalog_embedding
 
-SPATIAL_TABLES = [
+_FALLBACK_TABLES = [
     "AL_D010_26_20250704",
     "AL_D060_00_20250804",
     "AL_D198_26260_20250115",
@@ -27,8 +31,8 @@ def main() -> None:
     parser.add_argument(
         "--tables",
         nargs="*",
-        default=SPATIAL_TABLES,
-        help="갱신할 테이블명 (기본: 공간 테이블 세트)",
+        default=None,
+        help="갱신할 테이블명 (생략 시 DB에서 공간/참조 테이블을 발견)",
     )
     args = parser.parse_args()
 
@@ -37,12 +41,13 @@ def main() -> None:
         refresh_dataset_coverage(settings)
     except Exception:
         pass
-    if args.tables == parser.get_default("tables"):
-        tables = list(dict.fromkeys([*SPATIAL_TABLES, *D198_TABLES]))
-    else:
-        tables = list(args.tables)
     with connect(settings.database_url) as conn:
-        # 임베딩 차원 확인
+        if args.tables:
+            tables = list(args.tables)
+        else:
+            tables = discover_searchable_tables(conn)
+            if not tables:
+                tables = list(dict.fromkeys([*_FALLBACK_TABLES, *D198_TABLES]))
         probe = conn.execute(
             """
             SELECT atttypmod AS dims
@@ -56,6 +61,7 @@ def main() -> None:
         ).fetchone()
         print(f"catalog embedding dims: {probe['dims'] if probe else '?'}")
         print(f"embed model: {settings.ollama_embed_model}")
+        print(f"tables ({len(tables)}): {', '.join(tables)}")
 
         for table in tables:
             print(f"refreshing {table} ...", flush=True)

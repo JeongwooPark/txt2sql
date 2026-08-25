@@ -108,16 +108,21 @@ export function createTileWmsLayer(info) {
 }
 
 /** 분석 결과 WMS. SLD_BODY·소수 피처에 TileWMS보다 ImageWMS가 안정적이다. */
-export function createAnalysisWmsLayer(info) {
+export function createAnalysisWmsLayer(info, opts = {}) {
   const qualified = `${info.workspace}:${info.layer}`;
+  const params = {
+    LAYERS: qualified,
+    TRANSPARENT: true,
+    VERSION: "1.1.1",
+  };
+  if (opts.styleName) {
+    params.STYLES = opts.styleName;
+    params._v = Date.now();
+  }
   return new ol.layer.Image({
     source: new ol.source.ImageWMS({
       url: info.wms_url,
-      params: {
-        LAYERS: qualified,
-        TRANSPARENT: true,
-        VERSION: "1.1.1",
-      },
+      params,
       ratio: 1,
       serverType: "geoserver",
     }),
@@ -127,8 +132,12 @@ export function createAnalysisWmsLayer(info) {
 }
 
 export function createWfsLayer(info) {
-  const qualified = `${info.workspace}:${info.layer}`;
-  const base = info.wfs_url.replace(/\/wms$/i, "/wfs");
+  const qualified =
+    info.qualified || `${info.workspace}:${info.layer}`;
+  const base = String(info.wfs_url || info.wms_url || "").replace(
+    /\/wms$/i,
+    "/wfs"
+  );
   return new ol.layer.Vector({
     source: new ol.source.Vector({
       format: new ol.format.GeoJSON(),
@@ -147,17 +156,23 @@ export function createWfsLayer(info) {
   });
 }
 
-export function createKordbWmsLayer(item) {
+export function createKordbWmsLayer(item, opts = {}) {
+  const params = {
+    LAYERS: item.qualified,
+    TILED: true,
+    TRANSPARENT: true,
+    VERSION: "1.1.1",
+  };
+  if (opts.styleName) {
+    params.STYLES = opts.styleName;
+    params._v = Date.now();
+  }
   return new ol.layer.Tile({
     source: new ol.source.TileWMS({
       url: item.wms_url,
-      params: {
-        LAYERS: item.qualified,
-        TILED: true,
-        TRANSPARENT: true,
-        VERSION: "1.1.1",
-      },
+      params,
       serverType: "geoserver",
+      transition: 0,
     }),
     visible: false,
     opacity: 0.7,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 from typing import Any
 
 import psycopg
@@ -10,17 +11,34 @@ from llm2sql.llm import resolve_client
 from llm2sql.semantic_meta import (
     SAMPLE_COLUMNS,
     column_synonyms,
+    distinctive_label_tokens,
     format_synonyms,
     table_synonyms,
+    tables_matching_labels,
 )
 
 
-def _sample_columns(table_name: str) -> tuple[str, ...]:
+_TEXT_UDTS = frozenset({"text", "varchar", "bpchar", "name", "citext"})
+
+
+def _sample_columns(table_name: str, cols: list[dict[str, Any]] | None = None) -> tuple[str, ...]:
     if table_name in SAMPLE_COLUMNS:
         return SAMPLE_COLUMNS[table_name]
     if table_name.startswith("AL_D198_"):
         return ("A4", "A25")
-    return ()
+    if not cols:
+        return ()
+    picked: list[str] = []
+    for col in cols:
+        udt = str(col.get("udt_name") or "").lower()
+        if udt not in _TEXT_UDTS and "char" not in udt:
+            continue
+        if not col.get("display_name"):
+            continue
+        picked.append(str(col["column_name"]))
+        if len(picked) >= 2:
+            break
+    return tuple(picked)
 
 
 # 행정구역/구·동 관련 질문에 강제 포함할 테이블
@@ -89,28 +107,23 @@ def vector_literal(values: list[float]) -> str:
     return "[" + ",".join(f"{v:.8f}" for v in values) + "]"
 
 
-def _fqname_to_table(fqname: str) -> str | None:
-    # public.AL_D010_... or just table
-    parts = fqname.split(".")
-    name = parts[-1] if parts else fqname
-    if name in {
+_SKIP_SEARCH_TABLES = frozenset(
+    {
         "geometry_columns",
         "geography_columns",
         "spatial_ref_sys",
+        "raster_columns",
+        "raster_overviews",
         "col_def",
         "column_metadata",
         "table_metadata",
         "llm_schema_catalog",
         "temp_data_sessions",
-    }:
-        return None
-    if name.startswith("v_") or name.startswith("v__"):
-        return None
-    return name
+    }
+)
 
-
-# RAG 대상: mxbai로 재임베딩하는 공간/참조 테이블만 검색
-_SEARCHABLE_FQNAMES = (
+# 연결 실패·카탈로그 비어 있을 때 쓰는 시드. 실제 검색 목록은 DB에서 발견한다.
+_SEED_SEARCHABLE_FQNAMES = (
     "public.AL_D010_26_20250704",
     "public.AL_D060_00_20250804",
     "public.AL_D198_26260_20250115",
@@ -121,15 +134,169 @@ _SEARCHABLE_FQNAMES = (
 )
 
 
-def searchable_fqnames() -> list[str]:
+def is_searchable_table_name(name: str) -> bool:
+    short = (name or "").split(".")[-1]
+    if not short or short.lower() in {item.lower() for item in _SKIP_SEARCH_TABLES}:
+        return False
+    if short.startswith(("temp_", "v_", "v__", "pg_")):
+        return False
+    return True
+
+
+def _fqname_to_table(fqname: str) -> str | None:
+    parts = fqname.split(".")
+    name = parts[-1] if parts else fqname
+    if not is_searchable_table_name(name):
+        return None
+    return name
+
+
+def _seed_searchable_fqnames() -> list[str]:
     from llm2sql.domain import D198_TABLES
 
-    names = list(_SEARCHABLE_FQNAMES)
+    names = list(_SEED_SEARCHABLE_FQNAMES)
     for table in D198_TABLES:
         fq = f"public.{table}"
         if fq not in names:
             names.append(fq)
     return names
+
+
+def discover_searchable_fqnames(conn: psycopg.Connection) -> list[str]:
+    """공간 테이블 + pnu_def + 임베딩된 카탈로그 + 최신 D198 커버리지."""
+    from llm2sql.domain import D198_TABLES
+
+    names: list[str] = []
+    seen: set[str] = set()
+    latest_d198 = set(D198_TABLES)
+
+    def add(fq: str) -> None:
+        table = _fqname_to_table(fq)
+        if not table:
+            return
+        if table.startswith("AL_D198_") and latest_d198 and table not in latest_d198:
+            return
+        if "." not in fq:
+            fq = f"public.{table}"
+        if fq not in seen:
+            seen.add(fq)
+            names.append(fq)
+
+    spatial = conn.execute(
+        """
+        SELECT f_table_schema AS table_schema, f_table_name AS table_name
+        FROM geometry_columns
+        WHERE f_table_schema = 'public'
+        UNION
+        SELECT table_schema, table_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND udt_name IN ('geometry', 'geography', 'raster')
+          AND table_name NOT LIKE 'temp_%'
+        """
+    ).fetchall()
+    for row in spatial:
+        add(f"{row['table_schema']}.{row['table_name']}")
+
+    exists = conn.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'pnu_def'
+        """
+    ).fetchone()
+    if exists:
+        add("public.pnu_def")
+
+    try:
+        catalog_rows = conn.execute(
+            """
+            SELECT fqname
+            FROM llm_schema_catalog
+            WHERE kind = 'table' AND embedding IS NOT NULL
+            """
+        ).fetchall()
+        for row in catalog_rows:
+            add(str(row["fqname"]))
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+    for table in D198_TABLES:
+        add(f"public.{table}")
+
+    return names or _seed_searchable_fqnames()
+
+
+_SEARCHABLE_TTL_SEC = 20.0
+_searchable_memo: dict[int, tuple[float, tuple[str, ...]]] = {}
+
+
+def searchable_fqnames(conn: psycopg.Connection | None = None) -> list[str]:
+    if conn is None:
+        return _seed_searchable_fqnames()
+    now = time.monotonic()
+    key = id(conn)
+    hit = _searchable_memo.get(key)
+    if hit and now - hit[0] < _SEARCHABLE_TTL_SEC:
+        return list(hit[1])
+    try:
+        names = discover_searchable_fqnames(conn)
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return _seed_searchable_fqnames()
+    _searchable_memo[key] = (now, tuple(names))
+    if len(_searchable_memo) > 16:
+        oldest = min(_searchable_memo, key=lambda k: _searchable_memo[k][0])
+        _searchable_memo.pop(oldest, None)
+    return names
+
+
+def discover_searchable_tables(conn: psycopg.Connection) -> list[str]:
+    return [fq.split(".")[-1] for fq in searchable_fqnames(conn)]
+
+
+def apply_label_boost(
+    conn: psycopg.Connection,
+    question: str,
+    tables: list[str],
+) -> list[str]:
+    """메타데이터 고유 토큰이 질문에 있으면 해당 테이블을 RAG 후보 앞에 둔다."""
+    searchable = {fq.split(".")[-1] for fq in searchable_fqnames(conn)}
+    try:
+        rows = conn.execute(
+            """
+            SELECT table_name, display_name, description, category
+            FROM table_metadata
+            WHERE schema_name = 'public'
+            """
+        ).fetchall()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return tables
+    meta = [
+        {
+            "table_name": str(row["table_name"]),
+            "display_name": str(row.get("display_name") or ""),
+            "description": str(row.get("description") or ""),
+            "category": str(row.get("category") or ""),
+        }
+        for row in rows
+        if str(row["table_name"]) in searchable
+    ]
+    matched = tables_matching_labels(question, meta)
+    if not matched:
+        return tables
+    rest = [name for name in tables if name not in matched]
+    return matched + rest
 
 
 def search_catalog_tables(
@@ -154,7 +321,7 @@ def search_catalog_tables(
         ORDER BY embedding <=> %s::vector
         LIMIT %s
         """,
-        (searchable_fqnames(), lit, top_k),
+        (searchable_fqnames(conn), lit, top_k),
     ).fetchall()
 
     tables: list[str] = []
@@ -311,23 +478,36 @@ def build_compact_schema(
 
         pk_cols = set(_fetch_pk_columns(conn, table_name))
         fk_lines = _fetch_fk_lines(conn, table_name)
-        sample_cols = set(_sample_columns(table_name))
+        sample_cols = set(_sample_columns(table_name, cols))
         samples: dict[str, list[str]] = {}
         if include_sample_values:
-            for col_name in _sample_columns(table_name):
+            for col_name in _sample_columns(table_name, cols):
                 samples[col_name] = _fetch_sample_values(conn, table_name, col_name)
 
         header = f'# Table: "{table_name}"'
+        display_name = ""
+        description = ""
+        category = ""
         if meta:
+            display_name = str(meta.get("display_name") or "")
+            description = str(meta.get("description") or "")
+            category = str(meta.get("category") or "")
             header += (
-                f"\n  [display_name={meta['display_name']}; "
+                f"\n  [display_name={display_name}; "
                 "DO NOT use display_name as SQL table id]"
             )
-            if meta.get("category"):
-                header += f"\n  [category={meta['category']}]"
-            if meta.get("description"):
-                header += f"\n  [desc] {_short_desc(meta['description'], 100)}"
-        syn_t = format_synonyms(table_synonyms(table_name))
+            if category:
+                header += f"\n  [category={category}]"
+            if description:
+                header += f"\n  [desc] {_short_desc(description, 100)}"
+        syn_t = format_synonyms(
+            table_synonyms(
+                table_name,
+                display_name=display_name,
+                description=description,
+                category=category,
+            )
+        )
         if syn_t:
             header += f"\n  [synonyms] {syn_t}"
         if pk_cols:
@@ -358,7 +538,13 @@ def build_compact_schema(
                 extras.append(short)
             if col.get("unit"):
                 extras.append(f"unit={col['unit']}")
-            syn_c = format_synonyms(column_synonyms(table_name, cname))
+            syn_c = format_synonyms(
+                column_synonyms(
+                    table_name,
+                    cname,
+                    display_name=str(col.get("display_name") or ""),
+                )
+            )
             if syn_c:
                 extras.append(f"synonyms={syn_c}")
             if cname in sample_cols and samples.get(cname):
@@ -413,6 +599,7 @@ def retrieve_schema(
         client=client,
         top_k=top_k,
     )
+    tables = apply_label_boost(conn, question, tables)
     tables = apply_admin_boost(question, tables)
 
     # 건물 속성 질의: 기본은 AL_D010. D198은 등록된 구·건축년수·주요용도명.
@@ -541,11 +728,24 @@ def build_catalog_summary(
     display = (meta or {}).get("display_name") or table_name
     category = (meta or {}).get("category") or ""
     description = _short_desc((meta or {}).get("description"), 120)
+    search_tokens = distinctive_label_tokens(display, description, category)
 
     lines = [
         f"[테이블] public.{table_name}",
-        f"- 표시명:{display} | 분류:{category} | {description}",
+        f"- 표시명:{display} | 분류:{category}",
     ]
+    if search_tokens:
+        lines.append("- 검색어: " + ", ".join(search_tokens[:10]))
+    if description:
+        lines.append(f"- {description}")
+    syns = table_synonyms(
+        table_name,
+        display_name=str(display),
+        description=description,
+        category=str(category),
+    )
+    if syns:
+        lines.append("- 동의어: " + ", ".join(syns[:10]))
     if geom:
         lines.append(
             f"- geom={geom['type']}, SRID={geom['srid']}, col={geom['f_geometry_column']}"
@@ -563,7 +763,7 @@ def build_catalog_summary(
         lines.append("- 주요컬럼: " + ", ".join(labels))
 
     summary = "\n".join(lines)
-    kw_parts = [table_name, display, category, *labels[:8]]
+    kw_parts = [table_name, display, category, *search_tokens[:8], *labels[:8]]
     summary_kw = " ".join(p for p in kw_parts if p)[:200]
     return summary, summary_kw
 

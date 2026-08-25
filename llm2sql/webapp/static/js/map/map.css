@@ -417,6 +417,159 @@
   gap: 12px;
 }
 
+.choropleth-legend {
+  position: absolute;
+  right: 10px;
+  bottom: 12px;
+  z-index: 12;
+  min-width: 180px;
+  max-width: min(280px, 70%);
+  background: rgba(8, 22, 30, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--ink);
+  font-size: 0.75rem;
+  box-shadow: var(--shadow);
+}
+
+.choropleth-legend[hidden] {
+  display: none !important;
+}
+
+.choropleth-legend h4 {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+}
+
+.choropleth-legend p {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+
+.choropleth-legend ul,
+.choro-breaks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.choropleth-legend li,
+.choro-breaks li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.choropleth-legend .swatch,
+.choro-breaks .swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex: 0 0 14px;
+}
+
+.modal-sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.choropleth-card {
+  width: min(560px, 100%);
+}
+
+.choropleth-form {
+  display: grid;
+  gap: 8px;
+}
+
+.choro-strong {
+  margin: 0;
+  font-weight: 600;
+}
+
+.choro-muted,
+.choro-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.choro-section {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.choro-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin: 0;
+}
+
+.choro-stats div {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.choro-stats dt {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.choro-stats dd {
+  margin: 2px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.choro-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.choro-stepper input {
+  width: 64px;
+  text-align: center;
+}
+
+.choro-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.choro-status {
+  min-height: 1.2em;
+  margin: 4px 0 0;
+  color: #ffd7cc;
+  font-size: 0.78rem;
+}
+
+.choro-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.choro-actions .pane-btn {
+  margin-top: 0;
+}
+
+#choro-manual-breaks {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
 @media (max-width: 1100px) {
   .workspace {
     grid-template-columns: 240px minmax(0, 1fr) 6px minmax(280px, 540px);

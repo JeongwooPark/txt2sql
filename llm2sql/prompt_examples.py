@@ -100,7 +100,7 @@ __D198_LISTING__
 - 행정동(구서1동 등) → join "BND_ADM_DONG_PG" on ST_Intersects; 법정동은 구서동
 - 동 주변 N m 버퍼 → ST_Union of matching "BND_ADM_DONG_PG" + ST_DWithin geography (구서동 → 구서1동/구서2동)
 - 건물 ∩ 기초구역 → "TL_KODIS_BAS_26_202507" ST_Intersects; 동 ∩ 기초구역도 동일
-- 인접 행정동 → 부산 ADM_CD LIKE '21%' 끼리 ST_Intersects (자기 제외)
+- 인접 행정동 → 같은 센서스 ADM_CD 접두어끼리 ST_Intersects (자기 제외)
 - 기초구역 → "TL_KODIS_BAS_26_202507" ("SIG_KOR_NM", "BAS_AR", "BAS_ID")
 - 행정동 경계 → "BND_ADM_DONG_PG" ("ADM_NM", "ADM_CD")
 - 산업단지 → "AL_D060_00_20250804" ("A4"=원천시도시군구코드, "A6"=용도지역지구코드명)

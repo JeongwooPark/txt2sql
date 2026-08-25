@@ -1,4 +1,4 @@
-"""부산 시도·구군·법정동·행정동 지명 사전.
+"""시도·구군·법정동·행정동 지명 사전 (전국).
 
 정규식(~동) 대신 등록된 명칭만 최장일치로 찾아, 구서역·공동주택 같은 오탐을 줄인다.
 """
@@ -44,6 +44,57 @@ KIND_ADMIN = "admin_dong"
 
 _DATA_NAME = "gazetteer_data.json"
 
+# BND_ADM_DONG_PG 센서스 ADM_CD 앞 2자리. 법정동 PNU(26=부산)와 다르다.
+SIDO_CENSUS_PREFIX: dict[str, str] = {
+    "서울특별시": "11",
+    "부산광역시": "21",
+    "대구광역시": "22",
+    "인천광역시": "23",
+    "광주광역시": "24",
+    "대전광역시": "25",
+    "울산광역시": "26",
+    "세종특별자치시": "29",
+    "경기도": "31",
+    "강원도": "32",
+    "강원특별자치도": "32",
+    "충청북도": "33",
+    "충청남도": "34",
+    "전라북도": "35",
+    "전북특별자치도": "35",
+    "전라남도": "36",
+    "경상북도": "37",
+    "경상남도": "38",
+    "제주도": "39",
+    "제주특별자치도": "39",
+}
+SIDO_ALIAS_CANONICAL: dict[str, str] = {
+    "서울": "서울특별시",
+    "서울시": "서울특별시",
+    "부산": "부산광역시",
+    "부산시": "부산광역시",
+    "대구": "대구광역시",
+    "대구시": "대구광역시",
+    "인천": "인천광역시",
+    "인천시": "인천광역시",
+    "광주": "광주광역시",
+    "광주시": "광주광역시",
+    "대전": "대전광역시",
+    "대전시": "대전광역시",
+    "울산": "울산광역시",
+    "울산시": "울산광역시",
+    "세종": "세종특별자치시",
+    "세종시": "세종특별자치시",
+    "경기": "경기도",
+    "강원": "강원특별자치도",
+    "충북": "충청북도",
+    "충남": "충청남도",
+    "전북": "전북특별자치도",
+    "전남": "전라남도",
+    "경북": "경상북도",
+    "경남": "경상남도",
+    "제주": "제주특별자치도",
+}
+
 
 @dataclass(frozen=True)
 class PlaceHit:
@@ -75,6 +126,8 @@ class Gazetteer:
     names_by_len: tuple[str, ...]
     kinds_of: dict[str, frozenset[str]]
     name_trie: _TrieNode
+    sigungu_sido: dict[str, tuple[str, ...]]
+    admin_dong_prefixes: dict[str, tuple[str, ...]]
 
 
 def _kinds_map(
@@ -96,6 +149,11 @@ def _kinds_map(
     return {k: frozenset(v) for k, v in acc.items()}
 
 
+def invalidate_gazetteer() -> None:
+    """파일 재생성 후 프로세스 캐시를 비운다."""
+    load_gazetteer.cache_clear()
+
+
 @lru_cache(maxsize=1)
 def load_gazetteer() -> Gazetteer:
     raw = json.loads(
@@ -106,13 +164,21 @@ def load_gazetteer() -> Gazetteer:
     legal = tuple(raw.get("legal_dong") or ())
     admin = tuple(raw.get("admin_dong") or ())
     kinds = _kinds_map(sido, sigungu, legal, admin)
-    # 시도 별칭(부산)은 건물명(부산대학교) 오탐이 커서 지명 스캔에서 뺀다.
+    # 시도 별칭(부산·서울)은 건물명(부산대학교) 오탐이 커서 지명 스캔에서 뺀다.
     scan = {
         n
         for n, ks in kinds.items()
         if KIND_SIDO not in ks or n in set(raw.get("sido") or ())
     }
     names = tuple(sorted(scan, key=len, reverse=True))
+    sigungu_sido = {
+        str(k): tuple(str(x) for x in (v or ()) if x)
+        for k, v in (raw.get("sigungu_sido") or {}).items()
+    }
+    admin_dong_prefixes = {
+        str(k): tuple(str(x) for x in (v or ()) if x)
+        for k, v in (raw.get("admin_dong_prefixes") or {}).items()
+    }
     return Gazetteer(
         sido=frozenset(sido),
         sigungu=frozenset(sigungu),
@@ -121,6 +187,8 @@ def load_gazetteer() -> Gazetteer:
         names_by_len=names,
         kinds_of=kinds,
         name_trie=_build_name_trie(names),
+        sigungu_sido=sigungu_sido,
+        admin_dong_prefixes=admin_dong_prefixes,
     )
 
 
@@ -251,3 +319,59 @@ def extract_gazetteer_places(text: str) -> list[str]:
             seen.add(hit.name)
             gus.append(hit.name)
     return dongs or gus
+
+
+def canonical_sido(name: str | None) -> str | None:
+    raw = (name or "").strip()
+    if not raw:
+        return None
+    mapped = SIDO_ALIAS_CANONICAL.get(raw, raw)
+    gaz = load_gazetteer()
+    if mapped in gaz.sido or mapped in SIDO_CENSUS_PREFIX:
+        return mapped
+    return None
+
+
+def census_adm_prefix(sido: str | None) -> str | None:
+    canon = canonical_sido(sido) or (sido or "").strip()
+    return SIDO_CENSUS_PREFIX.get(canon)
+
+
+def unique_adm_cd_prefix(name: str | None) -> str | None:
+    """행정동명이 전국에서 한 시도에만 있으면 그 센서스 접두어."""
+    if not name:
+        return None
+    prefixes = load_gazetteer().admin_dong_prefixes.get(name.strip()) or ()
+    if len(prefixes) == 1 and len(prefixes[0]) == 2 and prefixes[0].isdigit():
+        return prefixes[0]
+    return None
+
+
+def unique_sigungu_adm_prefix(gu: str | None) -> str | None:
+    if not gu:
+        return None
+    sidos = load_gazetteer().sigungu_sido.get(gu.strip()) or ()
+    prefixes = []
+    for sido in sidos:
+        prefix = census_adm_prefix(sido)
+        if prefix and prefix not in prefixes:
+            prefixes.append(prefix)
+    if len(prefixes) == 1:
+        return prefixes[0]
+    return None
+
+
+def adm_cd_prefix_for_place(
+    name: str | None,
+    *,
+    sido: str | None = None,
+    gu: str | None = None,
+) -> str | None:
+    """질문의 시도·구 또는 (동명이 유일하면) 행정동으로 센서스 ADM_CD 접두어를 고른다."""
+    prefix = census_adm_prefix(sido)
+    if prefix:
+        return prefix
+    prefix = unique_sigungu_adm_prefix(gu)
+    if prefix:
+        return prefix
+    return unique_adm_cd_prefix(name)

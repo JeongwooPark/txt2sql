@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import math
+import re
 import urllib.error
 import urllib.request
 from typing import Any
@@ -229,6 +230,142 @@ class GeoServerClient:
         self._request("DELETE", ft_url)
         return status in {200, 204, 404}
 
+    STYLE_PREFIX = "choropleth__"
+
+    def style_exists(self, style_name: str) -> bool:
+        if not self._managed_style(style_name):
+            return False
+        status, _ = self._request("GET", self._style_url(style_name))
+        return status == 200
+
+    def create_style(self, style_name: str, sld: str) -> bool:
+        if not self._managed_style(style_name):
+            return False
+        if self.style_exists(style_name):
+            return self.update_style(style_name, sld)
+        status, _ = self._request(
+            "POST",
+            f"{self.base_url}/rest/workspaces/{self.workspace}/styles",
+            {"style": {"name": style_name, "filename": f"{style_name}.sld"}},
+        )
+        if status not in {200, 201}:
+            status, _ = self._request_raw(
+                "POST",
+                f"{self.base_url}/rest/workspaces/{self.workspace}/styles"
+                f"?name={style_name}",
+                (sld or "").encode("utf-8"),
+                "application/vnd.ogc.sld+xml",
+            )
+            return status in {200, 201}
+        return self.update_style(style_name, sld)
+
+    def update_style(self, style_name: str, sld: str) -> bool:
+        if not self._managed_style(style_name):
+            return False
+        body = (sld or "").encode("utf-8")
+        for url in (
+            f"{self._style_url(style_name)}.sld",
+            self._style_url(style_name),
+        ):
+            status, _ = self._request_raw(
+                "PUT",
+                url,
+                body,
+                "application/vnd.ogc.sld+xml",
+            )
+            if status in {200, 201}:
+                return True
+        return False
+
+    def ensure_style(self, style_name: str, sld: str) -> bool:
+        if self.style_exists(style_name):
+            return self.update_style(style_name, sld)
+        return self.create_style(style_name, sld)
+
+    def assign_style_to_layer(self, layer_name: str, style_name: str) -> bool:
+        short = (layer_name or "").split(":")[-1]
+        if not short or not style_name:
+            return False
+        qualified = self.qualified_layer(short)
+        status, body = self._request(
+            "GET", f"{self.base_url}/rest/layers/{qualified}"
+        )
+        if status != 200:
+            status, body = self._request(
+                "GET", f"{self.base_url}/rest/layers/{short}"
+            )
+        payload: dict[str, Any]
+        if status == 200:
+            try:
+                payload = json.loads(body.decode("utf-8") or "{}")
+            except json.JSONDecodeError:
+                payload = {}
+        else:
+            payload = {}
+        layer_obj = payload.get("layer") if isinstance(payload, dict) else None
+        if not isinstance(layer_obj, dict):
+            layer_obj = {"name": short}
+        layer_obj["defaultStyle"] = {"name": style_name}
+        put_body = {"layer": layer_obj}
+        for url in (
+            f"{self.base_url}/rest/layers/{qualified}",
+            f"{self.base_url}/rest/layers/{short}",
+        ):
+            st, _ = self._request("PUT", url, put_body)
+            if st in {200, 201}:
+                return True
+            # workspace-qualified style name
+            layer_obj["defaultStyle"] = {
+                "name": f"{self.workspace}:{style_name}"
+            }
+            st, _ = self._request("PUT", url, {"layer": layer_obj})
+            if st in {200, 201}:
+                return True
+            layer_obj["defaultStyle"] = {"name": style_name}
+        return False
+
+    def get_layer_default_style(self, layer_name: str) -> str | None:
+        short = (layer_name or "").split(":")[-1]
+        if not short:
+            return None
+        qualified = self.qualified_layer(short)
+        for url in (
+            f"{self.base_url}/rest/layers/{qualified}",
+            f"{self.base_url}/rest/layers/{short}",
+        ):
+            status, body = self._request("GET", url)
+            if status != 200:
+                continue
+            try:
+                data = json.loads(body.decode("utf-8") or "{}")
+            except json.JSONDecodeError:
+                continue
+            style = ((data.get("layer") or {}).get("defaultStyle") or {})
+            name = str(style.get("name") or "").split(":")[-1]
+            if name:
+                return name
+        return None
+
+    def delete_style(self, style_name: str) -> bool:
+        if not self._managed_style(style_name):
+            return False
+        status, _ = self._request(
+            "DELETE",
+            f"{self._style_url(style_name)}?purge=true&recurse=true",
+        )
+        return status in {200, 204, 404}
+
+    def _managed_style(self, style_name: str) -> bool:
+        name = (style_name or "").strip()
+        return bool(name.startswith(self.STYLE_PREFIX) and re.fullmatch(
+            r"[A-Za-z0-9_-]+", name
+        ))
+
+    def _style_url(self, style_name: str) -> str:
+        return (
+            f"{self.base_url}/rest/workspaces/{self.workspace}/styles/{style_name}"
+        )
+
     def _request(
         self,
         method: str,
@@ -241,6 +378,28 @@ class GeoServerClient:
         if json_body is not None:
             data = json.dumps(json_body).encode("utf-8")
             headers["Content-Type"] = "application/json"
+        return self._send(method, url, data, headers, timeout)
+
+    def _request_raw(
+        self,
+        method: str,
+        url: str,
+        body: bytes,
+        content_type: str,
+        accept: str = "application/json",
+        timeout: float | None = None,
+    ) -> tuple[int, bytes]:
+        headers = {"Accept": accept, "Content-Type": content_type}
+        return self._send(method, url, body, headers, timeout)
+
+    def _send(
+        self,
+        method: str,
+        url: str,
+        data: bytes | None,
+        headers: dict[str, str],
+        timeout: float | None,
+    ) -> tuple[int, bytes]:
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         if self.user:
             token = base64.b64encode(

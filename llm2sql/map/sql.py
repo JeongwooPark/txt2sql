@@ -37,6 +37,15 @@ _SPATIAL_TABLES = (
     _BAS,
     _D060,
 )
+_NON_SPATIAL_TABLES = frozenset(
+    {
+        "pnu_def",
+        "col_def",
+        "table_metadata",
+        "column_metadata",
+        "llm_schema_catalog",
+    }
+)
 
 _GEOM_SELECT_RE = re.compile(
     r"\b(?:st_asgeojson\s*\(|st_union\s*\(|\bgeometry\b|\bgeom\b)",
@@ -169,10 +178,9 @@ def has_geometry_select(sql: str) -> bool:
     if not match:
         return False
     table = match.group(1)
-    preferred = {name.lower() for name in _SPATIAL_TABLES}
-    if table.lower() in preferred or table in _SPATIAL_TABLES:
-        return True
-    return bool(_BUILDING_TABLE_RE.match(table) or table.upper().startswith("BND_"))
+    if table.lower() in {name.lower() for name in _NON_SPATIAL_TABLES}:
+        return False
+    return True
 
 
 def spatial_aliases(sql: str) -> list[tuple[str, str]]:
@@ -185,8 +193,15 @@ def spatial_aliases(sql: str) -> list[tuple[str, str]]:
             alias = None
         found.append((table, alias or table))
     preferred = {name.lower() for name in _SPATIAL_TABLES}
-    spatial = [item for item in found if item[0].lower() in preferred or item[0] in _SPATIAL_TABLES]
-    return spatial or found
+    skip = {name.lower() for name in _NON_SPATIAL_TABLES}
+    spatial = [
+        item
+        for item in found
+        if item[0].lower() in preferred or item[0] in _SPATIAL_TABLES
+    ]
+    if spatial:
+        return spatial
+    return [item for item in found if item[0].lower() not in skip] or found
 
 
 def _geometry_alias(sql: str) -> str | None:

@@ -53,7 +53,7 @@ def create_app() -> FastAPI:
             if engine is not None:
                 engine.close()
 
-    app = FastAPI(title="llm2sql Chat", version="0.2.3", lifespan=lifespan)
+    app = FastAPI(title="llm2sql Chat", version="0.3.0", lifespan=lifespan)
 
     def get_engine() -> Llm2SqlEngine:
         engine = engine_holder.get("engine")

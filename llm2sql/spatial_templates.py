@@ -31,12 +31,24 @@ def admin_dong_name_predicate(place: str, alias: str = "d") -> str:
     return f"({col} = '{safe}' OR {col} ~ '^{stem}[0-9]+동$')"
 
 
-def admin_dong_where(place: str, alias: str = "d") -> str:
-    """부산(ADM_CD 21*) 행정동만. 전국 동명 중복(온천1동 등) 방지."""
-    return (
-        f"{admin_dong_name_predicate(place, alias)} "
-        f"AND {alias}.\"ADM_CD\" LIKE '21%'"
-    )
+def admin_dong_where(place: str, alias: str = "d", *, adm_cd_prefix: str | None = None) -> str:
+    """행정동명 조건. 동명이 전국에서 유일하면 센서스 ADM_CD 접두어를 붙인다."""
+    pred = admin_dong_name_predicate(place, alias)
+    extra = _adm_cd_like_sql(alias, place, adm_cd_prefix)
+    if extra:
+        return f"{pred} AND {extra}"
+    return pred
+
+
+def _adm_cd_like_sql(
+    alias: str, place: str | None, prefix: str | None = None
+) -> str:
+    from llm2sql.gazetteer import unique_adm_cd_prefix
+
+    code = (prefix or unique_adm_cd_prefix(place) or "").strip()
+    if re.fullmatch(r"\d{2}", code):
+        return f"{alias}.\"ADM_CD\" LIKE '{code}%'"
+    return ""
 
 
 def _prefix_a_cols(frag: str, alias: str) -> str:
@@ -326,23 +338,32 @@ def dong_neighbor_sql(place: str, *, limit: int = 50) -> str:
         " AND ST_Intersects(a.geometry, d.geometry)\n"
         " AND a.\"ADM_CD\" <> d.\"ADM_CD\"\n"
         f"WHERE {admin_dong_where(place, 'a')}\n"
-        "  AND d.\"ADM_CD\" LIKE '21%'\n"
+        f"  {_neighbor_prefix_sql(place)}"
         'ORDER BY d."ADM_NM"\n'
         f"LIMIT {limit};"
     )
 
 
+def _neighbor_prefix_sql(place: str) -> str:
+    extra = _adm_cd_like_sql("d", place)
+    return f"AND {extra}\n" if extra else ""
+
+
 def bas_gu_bnd_intersect_count_sql(gu: str) -> str:
-    """구 기초구역 ∩ 부산 센서스 행정동."""
+    """구 기초구역 ∩ 해당 시도 센서스 행정동."""
+    from llm2sql.gazetteer import unique_sigungu_adm_prefix
+
     safe = gu.replace("'", "''")
+    extra = _adm_cd_like_sql("d", None, unique_sigungu_adm_prefix(gu))
+    prefix_sql = f"\n  AND {extra}" if extra else ""
     return (
         'SELECT COUNT(DISTINCT t."BAS_ID") AS cnt\n'
         f'FROM "{_BAS}" t\n'
         f'JOIN "{_BND}" d\n'
         "  ON t.geometry && d.geometry\n"
         " AND ST_Intersects(t.geometry, d.geometry)\n"
-        f"WHERE t.\"SIG_KOR_NM\" = '{safe}'\n"
-        "  AND d.\"ADM_CD\" LIKE '21%';"
+        f"WHERE t.\"SIG_KOR_NM\" = '{safe}'"
+        f"{prefix_sql};"
     )
 
 
@@ -381,7 +402,7 @@ def legal_dong_admin_share_sql(
         "    ON b.geometry && d.geometry\n"
         "   AND ST_Intersects(b.geometry, d.geometry)\n"
         f"  WHERE {admin_pred}\n"
-        "    AND d.\"ADM_CD\" LIKE '21%'\n"
+        f"    {_share_prefix_sql(legal_dong, admin_dongs)}"
         '  ORDER BY b."A0",\n'
         "    ST_Area(ST_Intersection(b.geometry, d.geometry)) DESC NULLS LAST\n"
         ")\n"
@@ -400,8 +421,14 @@ def legal_dong_admin_share_sql(
     )
 
 
+def _share_prefix_sql(legal_dong: str, admin_dongs: list[str]) -> str:
+    probe = (admin_dongs[0] if admin_dongs else legal_dong) or ""
+    extra = _adm_cd_like_sql("d", probe)
+    return f"AND {extra}\n" if extra else ""
+
+
 def legal_dong_admin_members_sql(place: str) -> str:
-    """법정동(연산동)에 대응하는 부산 행정동(연산1동…) 목록."""
+    """법정동에 대응하는 행정동(연산1동…) 목록."""
     where = admin_dong_where(place, "d")
     return (
         'SELECT d."ADM_CD" AS adm_cd, d."ADM_NM" AS admin_dong\n'

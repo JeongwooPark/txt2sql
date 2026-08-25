@@ -1,4 +1,4 @@
-"""부산 GIS 질의용 공통 도메인 토큰 (장소·용도)."""
+"""GIS 질의용 공통 도메인 토큰 (장소·용도)."""
 
 from __future__ import annotations
 
@@ -331,7 +331,7 @@ def extract_place(question: str) -> str | None:
 def extract_places(question: str) -> list[str]:
     """질문에 등장하는 동·구를 순서대로 (중복 제거).
 
-    부산 지명 사전이 있으면 등록된 법정동·행정동·구군만 최장일치한다.
+    전국 지명 사전이 있으면 등록된 법정동·행정동·구군만 최장일치한다.
     """
     from llm2sql.gazetteer import extract_gazetteer_places, load_gazetteer
 

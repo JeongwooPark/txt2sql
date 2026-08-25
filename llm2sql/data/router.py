@@ -6,10 +6,12 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from llm2sql.config import Settings
-from llm2sql.data import catalog, upload as shp_upload
+from llm2sql.data import catalog, csv_meta, upload as shp_upload
+from llm2sql.data.names import split_schema_table
 
 
 class TableMetaIn(BaseModel):
@@ -61,6 +63,81 @@ def create_data_router(get_settings: Callable[[], Settings]) -> APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         return {"ok": True, "metadata": metadata, "database_comments": comments}
+
+    @router.get("/tables/{table_name}/metadata/csv")
+    def download_metadata_csv(table_name: str) -> Response:
+        settings = get_settings()
+        try:
+            structure = catalog.get_table_structure(settings, table_name)
+            metadata = catalog.get_table_metadata(settings, table_name)
+            comments = catalog.get_database_comments(settings, table_name)
+            schema, table = split_schema_table(
+                table_name, settings.map_schema or "public"
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        content = csv_meta.build_metadata_csv(
+            f"{schema}.{table}",
+            structure=structure,
+            table_metadata=metadata.get("table_metadata") or {},
+            column_metadata=metadata.get("column_metadata") or {},
+            comments=comments,
+        )
+        filename = csv_meta.csv_download_name(table)
+        return Response(
+            content=content,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+        )
+
+    @router.post("/tables/{table_name}/metadata/csv")
+    async def upload_metadata_csv(
+        table_name: str,
+        file: UploadFile = File(...),
+    ) -> dict[str, Any]:
+        settings = get_settings()
+        filename = file.filename or "metadata.csv"
+        if not filename.lower().endswith(".csv"):
+            raise HTTPException(
+                status_code=400, detail="CSV 파일만 업로드할 수 있습니다."
+            )
+        raw = await file.read()
+        if len(raw) > 2_000_000:
+            raise HTTPException(status_code=400, detail="CSV 파일이 너무 큽니다.")
+        try:
+            structure = catalog.get_table_structure(settings, table_name)
+            parsed = csv_meta.parse_metadata_csv(
+                raw,
+                expected_table=table_name,
+                structure=structure,
+                default_schema=settings.map_schema or "public",
+            )
+            existing = catalog.get_table_metadata(settings, table_name)
+            table_meta, columns = csv_meta.merge_parsed_with_existing(parsed, existing)
+            catalog.update_table_metadata(
+                settings, parsed["table_name"], table_meta, columns
+            )
+            try:
+                from llm2sql.data.coverage import sync_dataset_after_change
+
+                sync_dataset_after_change(
+                    settings, parsed["table_name"], auto_metadata=False
+                )
+            except Exception:
+                pass
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        skipped = parsed.get("skipped_columns") or []
+        message = "CSV 메타데이터를 저장했습니다."
+        if skipped:
+            message += f" 편집할 수 없는 컬럼 {len(skipped)}개는 건너뛰었습니다."
+        return {"ok": True, "message": message, "skipped_columns": skipped}
 
     @router.get("/tables/{table_name}/display-name")
     def table_display_name(table_name: str) -> dict[str, Any]:

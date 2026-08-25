@@ -112,6 +112,33 @@ def main() -> int:
     ok("table fallback when llm down", tabled.get("used_llm") is False)
     ok("table still explains", "196건" in (tabled.get("explanation") or ""))
 
+    wide_cols = [f"col_{i:02d}" for i in range(66)]
+    from llm2sql.map.router import ExplainRequest
+
+    wide_req = ExplainRequest.model_validate(
+        {
+            "kind": "table",
+            "title": "활동인구 1인당 시가화용지 활용/미활용 면적_행정동",
+            "layer": "adm_urban_area_per_capita",
+            "columns": wide_cols,
+            "rows": [{c: i for i, c in enumerate(wide_cols)}],
+            "total": 205,
+            "fields": {c: c for c in wide_cols},
+        }
+    )
+    ok("wide table request accepted", wide_req.columns is not None and len(wide_req.columns) == 66)
+
+    wide = explain_attributes(
+        settings,
+        kind="table",
+        title="활동인구 1인당 시가화용지 활용/미활용 면적_행정동",
+        columns=wide_cols,
+        rows=[{c: i for i, c in enumerate(wide_cols)}],
+        total=205,
+        client=_BoomClient(),
+    )
+    ok("wide table still explains", "205건" in (wide.get("explanation") or ""))
+
     narrated = explain_attributes(
         settings,
         kind="identify",

@@ -6,7 +6,13 @@ import re
 from dataclasses import dataclass, field
 
 from llm2sql.domain import STRUCTURE_ALIASES, BUSAN_GU_CODES, d198_table_for_gu
-from llm2sql.gazetteer import uses_admin_boundary
+from llm2sql.gazetteer import (
+    adm_cd_prefix_for_place,
+    canonical_sido,
+    census_adm_prefix,
+    unique_sigungu_adm_prefix,
+    uses_admin_boundary,
+)
 from llm2sql.semantic_plan.catalog import (
     ADMIN_TABLE,
     ALLOWED_COLUMNS,
@@ -112,12 +118,21 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
 
     if place and place.name.strip() and place.name.strip() not in spatial_places:
         name = place.name.strip()
-        if place.kind == "sido" or name in {"부산광역시", "부산시", "부산"}:
+        sido_name = canonical_sido(name)
+        if place.kind == "sido" or sido_name:
+            prefix = census_adm_prefix(sido_name or name)
+            if plan.entity == "admin_area" and prefix:
+                where.append(
+                    f'{alias}."ADM_CD" LIKE {_literal(prefix + "%", "text")}'
+                )
             name = ""
         if not name:
             pass
         elif plan.entity != "building":
             where.append(_entity_place_sql(alias, plan.entity, name))
+            extra = _adm_cd_sql(alias, name, plan)
+            if extra and plan.entity == "admin_area":
+                where.append(extra)
         else:
             want_boundary = spatial_mode == "boundary" or (
                 spatial_mode == "auto" and uses_admin_boundary(name)
@@ -131,7 +146,9 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
                     f"ON ST_Intersects({alias}.geometry, adm.geometry)"
                 )
                 where.append(_admin_name_sql("adm", name))
-                where.append('adm."ADM_CD" LIKE \'21%\'')
+                extra = _adm_cd_sql("adm", name, plan)
+                if extra:
+                    where.append(extra)
             else:
                 where.append(_a4_place_sql(alias, name))
 
@@ -672,7 +689,7 @@ def _apply_spatial_relations(
                 d_alias = "a" if not admin_alias_used else f"a{index}"
                 admin_alias_used = True
             table, name_clause = _spatial_target_sql(
-                target_entity, d_alias, place_name or ""
+                target_entity, d_alias, place_name or "", plan
             )
             if table not in tables:
                 tables.append(table)
@@ -704,7 +721,7 @@ def _apply_spatial_relations(
                 used_places.add(place_name)
                 if ADMIN_TABLE not in tables:
                     tables.append(ADMIN_TABLE)
-                pred = f"{_admin_name_sql('d', place_name)} AND d.\"ADM_CD\" LIKE '21%'"
+                pred = _admin_place_pred("d", place_name, plan)
                 joins.append(
                     "CROSS JOIN (\n"
                     "  SELECT ST_Union(d.geometry) AS geom\n"
@@ -745,7 +762,7 @@ def _apply_spatial_relations(
             z_alias = "z" if index == 0 else f"z{index}"
             if ADMIN_TABLE not in tables:
                 tables.append(ADMIN_TABLE)
-            pred = f"{_admin_name_sql('d', place_name)} AND d.\"ADM_CD\" LIKE '21%'"
+            pred = _admin_place_pred("d", place_name, plan)
             joins.append(
                 "CROSS JOIN (\n"
                 "  SELECT ST_Union(d.geometry) AS geom\n"
@@ -771,7 +788,9 @@ def _apply_spatial_relations(
                 f"ON ST_Intersects({alias}.geometry, {d_alias}.geometry)"
             )
             where.append(_admin_name_sql(d_alias, place_name))
-            where.append(f"{d_alias}.\"ADM_CD\" LIKE '21%'")
+            extra = _adm_cd_sql(d_alias, place_name, plan)
+            if extra:
+                where.append(extra)
             where.append(
                 "ST_Area(ST_Intersection("
                 f"{alias}.geometry, {d_alias}.geometry)) "
@@ -843,12 +862,36 @@ def _distance_origin_sql(z_alias: str, plan: SemanticQueryPlan) -> str:
     return f"{z_alias}.geom"
 
 
+def _adm_cd_sql(alias: str, place_name: str | None, plan=None) -> str | None:
+    sido = None
+    gu = None
+    if plan is not None and plan.scope and plan.scope.place:
+        spec = plan.scope.place
+        if spec.kind == "sido":
+            sido = spec.name
+        elif spec.kind in {"gu", "sigungu"}:
+            gu = spec.name
+    prefix = adm_cd_prefix_for_place(place_name, sido=sido, gu=gu)
+    if not prefix:
+        return None
+    return f'{alias}."ADM_CD" LIKE {_literal(prefix + "%", "text")}'
+
+
+def _admin_place_pred(alias: str, place_name: str, plan=None) -> str:
+    pred = _admin_name_sql(alias, place_name)
+    extra = _adm_cd_sql(alias, place_name, plan)
+    if extra:
+        return f"{pred} AND {extra}"
+    return pred
+
+
 def _a4_place_sql(alias: str, place: str) -> str:
     col = f'{alias}."A4"'
     if place.endswith(("동", "가", "리", "로")):
         return f"({col} LIKE {_literal('% ' + place, 'text')} OR {col} = {_literal(place, 'text')})"
     code = BUSAN_GU_CODES.get(place)
-    if code:
+    uniq = unique_sigungu_adm_prefix(place)
+    if code and uniq in {None, "21"}:
         return f'{alias}."A3" LIKE {_literal(code + "%", "text")}'
     return f"{col} LIKE {_literal('%' + place + '%', 'text')}"
 
@@ -888,7 +931,9 @@ def _entity_place_sql(alias: str, entity: str, place: str) -> str:
     return _a4_place_sql(alias, place)
 
 
-def _spatial_target_sql(entity: str, alias: str, place: str) -> tuple[str, str]:
+def _spatial_target_sql(
+    entity: str, alias: str, place: str, plan=None
+) -> tuple[str, str]:
     if entity == "basic_zone":
         return BASIC_ZONE_TABLE, _entity_place_sql(alias, entity, place)
     if entity == "industrial_complex":
@@ -896,8 +941,9 @@ def _spatial_target_sql(entity: str, alias: str, place: str) -> tuple[str, str]:
     if entity == "building":
         return BUILDING_TABLE, _a4_place_sql(alias, place)
     clause = _admin_name_sql(alias, place)
-    if entity == "admin_area":
-        clause = f"{clause} AND {alias}.\"ADM_CD\" LIKE '21%'"
+    extra = _adm_cd_sql(alias, place, plan)
+    if extra:
+        clause = f"{clause} AND {extra}"
     return ADMIN_TABLE, clause
 
 

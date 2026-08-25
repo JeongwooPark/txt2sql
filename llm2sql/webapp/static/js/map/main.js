@@ -6,21 +6,28 @@ import {
   createMap,
   createWfsLayer,
   fitLonLatExtent,
-} from "./core.js?v=24";
+} from "./core.js?v=25";
 import {
   bindReorder,
   fillList,
   hideLayerContextMenu,
   renderLayerItem,
-} from "./layers.js?v=24";
-import { attachExplain, bindIdentify, renderProperties } from "./identify.js?v=24";
-import { applyThemeToLayer, themeColors } from "./styles.js?v=24";
+} from "./layers.js?v=25";
+import { attachExplain, bindIdentify, renderProperties } from "./identify.js?v=26";
+import { applyThemeToLayer, themeColors } from "./styles.js?v=25";
 import {
   ANALYSIS_Z_BASE,
   ANALYSIS_Z_STEP,
   BG_Z,
   LayerStack,
-} from "./stack.js?v=24";
+} from "./stack.js?v=25";
+import {
+  applyChoroplethToOlLayer,
+  bindChoroplethUi,
+  isPolygonLayer,
+  renderChoroplethLegend,
+  topmostVisibleChoropleth,
+} from "./choropleth.js?v=26";
 
 const MAX_ANALYSIS_LAYERS = 8;
 
@@ -34,10 +41,17 @@ const state = {
   outputStack: new LayerStack(),
   theme: "default",
   customStyle: null,
+  choroplethByLayer: {},
   tableLayer: null,
   tableOffset: 0,
   tableExplainKey: "",
 };
+
+let choroplethUi = null;
+
+function openChoropleth(id) {
+  choroplethUi?.openFor(id);
+}
 
 function renderingMode() {
   const sel = document.getElementById("rendering-mode-select");
@@ -127,6 +141,12 @@ function styleOpts(item) {
 
 function applyItemStyle(item) {
   if (!item?.olLayer) return;
+  const choro = state.choroplethByLayer[item.id];
+  if (choro?.classification) {
+    applyChoroplethToOlLayer(item, choro);
+    refreshLegend();
+    return;
+  }
   const kind = item.source === "kordb" ? "kordb" : "analysis";
   applyThemeToLayer(item.olLayer, state.theme, state.customStyle, kind, styleOpts(item));
 }
@@ -134,6 +154,26 @@ function applyItemStyle(item) {
 function applyAllStyles() {
   for (const item of Object.values(state.byId)) applyItemStyle(item);
   for (const item of Object.values(state.kordbById)) applyItemStyle(item);
+  refreshLegend();
+}
+
+function refreshLegend() {
+  const show = (entry) => entry?.showLegend !== false;
+  const ordered = orderedOutput().filter((item) => {
+    const entry = state.choroplethByLayer[item.id];
+    return item.visible && entry?.classification && show(entry);
+  });
+  const cls = topmostVisibleChoropleth(ordered, state.choroplethByLayer);
+  const entry = ordered[0] ? state.choroplethByLayer[ordered[0].id] : null;
+  if (cls && entry?.showNullLegend === false) {
+    const copy = {
+      ...cls,
+      null_color: "",
+    };
+    renderChoroplethLegend(copy, { visible: true });
+    return;
+  }
+  renderChoroplethLegend(cls, { visible: Boolean(cls) });
 }
 
 function fillStyleForm() {
@@ -151,27 +191,69 @@ function fillStyleForm() {
   if (opacity) opacity.value = String(t.opacity ?? 0.8);
 }
 
+function wfsInfoFor(item) {
+  if (item.source === "kordb") {
+    const qualified = item.info?.qualified || "";
+    const [workspace, layer] = qualified.includes(":")
+      ? qualified.split(":")
+      : ["korDB", item.layer || item.id];
+    return {
+      workspace,
+      layer: layer || item.layer || item.id,
+      qualified,
+      wms_url: item.info?.wms_url,
+      wfs_url: item.info?.wfs_url || item.info?.wms_url,
+    };
+  }
+  return item.info;
+}
+
+function recreateOlLayer(item) {
+  if (!state.map || !item) return;
+  const visible = item.visible;
+  const z = item.olLayer?.getZIndex() ?? 100;
+  if (item.olLayer) state.map.removeLayer(item.olLayer);
+  const mode = renderingMode();
+  const choro = state.choroplethByLayer[item.id];
+  const styleName = choro?.styleName;
+  const useWfs =
+    mode === "wfs" &&
+    (item.source === "kordb" || item.info?.wfs_allowed !== false);
+  let olLayer;
+  if (useWfs) {
+    olLayer = createWfsLayer(wfsInfoFor(item));
+  } else if (item.source === "kordb") {
+    olLayer = createKordbWmsLayer(item.info, { styleName });
+  } else {
+    olLayer = createAnalysisWmsLayer(item.info, { styleName });
+  }
+  olLayer.setVisible(visible);
+  olLayer.setZIndex(z);
+  state.map.addLayer(olLayer);
+  item.olLayer = olLayer;
+  applyItemStyle(item);
+}
+
 function rebuildAnalysisLayers() {
   if (!state.map) return;
   const mode = renderingMode();
   let skipped = 0;
   for (const item of Object.values(state.byId)) {
     if (!item.info) continue;
-    const visible = item.visible;
-    const z = item.olLayer?.getZIndex() ?? 100;
-    if (item.olLayer) state.map.removeLayer(item.olLayer);
-    const useWfs = mode === "wfs" && item.info.wfs_allowed !== false;
-    if (mode === "wfs" && !useWfs) skipped += 1;
-    const olLayer = useWfs
-      ? createWfsLayer(item.info)
-      : createAnalysisWmsLayer(item.info);
-    olLayer.setVisible(visible);
-    olLayer.setZIndex(z);
-    state.map.addLayer(olLayer);
-    item.olLayer = olLayer;
-    applyItemStyle(item);
+    if (mode === "wfs" && item.info.wfs_allowed === false) skipped += 1;
+    recreateOlLayer(item);
+  }
+  for (const item of Object.values(state.kordbById)) {
+    const inOutput = state.outputStack.has(item.id);
+    const hasChoro = Boolean(state.choroplethByLayer[item.id]);
+    if (mode === "wfs" && (inOutput || hasChoro)) {
+      recreateOlLayer(item);
+    } else if (item.olLayer) {
+      applyItemStyle(item);
+    }
   }
   applyZOrder();
+  refreshLegend();
   if (skipped) {
     showBanner(
       "일부 분석 레이어는 건수가 많아 WMS로 유지했습니다."
@@ -202,6 +284,7 @@ function removeFromOutput(id) {
   state.outputStack.remove(id);
   applyZOrder();
   refreshLists();
+  refreshLegend();
   return true;
 }
 
@@ -237,6 +320,14 @@ function refreshLists() {
             label: "속성 테이블 보기",
             action: () => openAttributeTable(info.id),
           },
+          ...(isPolygonLayer(info)
+            ? [
+                {
+                  label: "구간별 색상...",
+                  action: () => openChoropleth(info.id),
+                },
+              ]
+            : []),
         ],
       })
     );
@@ -258,6 +349,7 @@ function toggleOutputVisibility(id, visible) {
   if (!item) return;
   item.visible = visible;
   item.olLayer.setVisible(visible);
+  refreshLegend();
 }
 
 function toggleAnalysis(id, visible) {
@@ -291,6 +383,7 @@ function removeAnalysis(id, { dropServer = true } = {}) {
   state.stack.remove(id);
   state.outputStack.remove(id);
   delete state.byId[id];
+  delete state.choroplethByLayer[id];
   if (dropServer && item.layer) {
     fetch(`/api/map/layer/${encodeURIComponent(item.layer)}`, {
       method: "DELETE",
@@ -605,6 +698,10 @@ function bindUi() {
   });
   document.getElementById("style-editor-btn")?.addEventListener("click", () => {
     fillStyleForm();
+    const note = document.getElementById("style-choropleth-note");
+    if (note) {
+      note.hidden = !Object.keys(state.choroplethByLayer).length;
+    }
     openModal("style-modal");
   });
   document.getElementById("style-apply-btn")?.addEventListener("click", () => {
@@ -615,6 +712,9 @@ function bindUi() {
       opacity: Number(document.getElementById("style-opacity")?.value || 0.8),
     };
     applyAllStyles();
+    if (Object.keys(state.choroplethByLayer).length) {
+      showBanner("단계구분도 레이어는 단일 색상 스타일에서 제외했습니다.");
+    }
     closeModals();
   });
   document.querySelectorAll("[data-close-modal]").forEach((btn) => {
@@ -642,6 +742,29 @@ function bindUi() {
 
   bindReorder(document.getElementById("output-layers-list"), {
     onDrop: moveOutputTo,
+  });
+
+  choroplethUi = bindChoroplethUi({
+    getLayer,
+    getChoropleth: (id) => state.choroplethByLayer[id],
+    setChoropleth: (id, value) => {
+      if (!value) delete state.choroplethByLayer[id];
+      else state.choroplethByLayer[id] = value;
+    },
+    applyToMap: (id) => {
+      const item = getLayer(id);
+      if (!item) return;
+      recreateOlLayer(item);
+      applyZOrder();
+      refreshLegend();
+    },
+    resetOnMap: (id) => {
+      const item = getLayer(id);
+      if (!item) return;
+      recreateOlLayer(item);
+      applyZOrder();
+      refreshLegend();
+    },
   });
 
   const handle = document.getElementById("chat-resize");
@@ -712,6 +835,7 @@ window.Llm2SqlMap = {
     }));
   },
   showBanner,
+  openChoropleth,
 };
 
 if (document.readyState === "loading") {

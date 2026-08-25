@@ -53,6 +53,7 @@ def main() -> int:
     ok("parse short", parse_al_table_name("BND_ADM_DONG_PG") is None)
 
     from llm2sql.data.coverage import register_uploaded_dataset
+    from llm2sql.gazetteer_build import rebuild_gazetteer
     from llm2sql.domain import (
         d198_coverage_label,
         d198_gu_mentioned,
@@ -67,6 +68,7 @@ def main() -> int:
     ok("pnu dongrae", gu_from_d198_table("AL_D198_26260_20250115") == "동래구")
     ok("pnu citywide none", gu_from_d198_table("AL_D198_26_20250704") is None)
     ok("register hook", callable(register_uploaded_dataset))
+    ok("gazetteer rebuild hook", callable(rebuild_gazetteer))
 
     namgu_table = "AL_D198_26290_20250115"
     try:
@@ -167,6 +169,22 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     ok("metadata save api", "/api/data/metadata" in meta_js)
     ok("parse api", "/parse" in meta_js)
+    ok("metadata csv download", "/metadata/csv" in meta_js)
+    ok("metadata csv upload", "csv-file-input" in meta_js)
+    meta_html = (
+        Path(__file__).resolve().parents[1]
+        / "llm2sql"
+        / "webapp"
+        / "static"
+        / "data_metadata.html"
+    ).read_text(encoding="utf-8")
+    ok("csv download button", 'data-action="download-csv"' in meta_html)
+    ok("csv upload button", 'data-action="upload-csv"' in meta_html)
+    ok(
+        "toolbar top and bottom",
+        meta_html.count('data-action="download-csv"') == 2
+        and meta_html.count('data-action="save-metadata"') == 2,
+    )
 
     print(f"\npassed={passed} failed={len(failed)}")
     for item in failed:

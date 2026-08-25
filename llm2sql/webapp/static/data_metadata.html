@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/app.css?v=18" />
+    <link rel="stylesheet" href="/static/app.css?v=19" />
   </head>
   <body class="site" data-ui="data-meta">
     <header class="site-head">
@@ -36,7 +36,7 @@
       <div class="data-split">
         <aside class="data-side">
           <h2>공간 테이블</h2>
-          <p class="data-lead">한글 표시명·설명·단위를 고치면 챗봇과 지도에 반영됩니다.</p>
+          <p class="data-lead">한글 표시명·설명·단위를 고치면 챗봇과 지도에 반영됩니다. CSV 양식을 내려받아 엑셀에서 채운 뒤 업로드할 수도 있습니다.</p>
           <div id="dataset-list">
             <p class="layer-empty">불러오는 중…</p>
           </div>
@@ -48,6 +48,15 @@
             <p class="data-lead">왼쪽에서 테이블을 선택하세요.</p>
           </div>
           <div id="metadata-form" class="meta-form" hidden>
+            <p class="csv-hint">현재 값으로 채워진 CSV 양식을 내려받아 수정한 뒤 업로드하면 저장됩니다. 화면에서 직접 고친 다음 데이터 갱신을 눌러도 됩니다.</p>
+            <div class="form-toolbar">
+              <button type="button" class="pane-btn" data-action="download-csv">CSV 양식 다운로드</button>
+              <button type="button" class="pane-btn" data-action="upload-csv">CSV 업로드</button>
+              <button type="button" class="pane-btn" data-action="parse-code">DB 코드 해석</button>
+              <button type="button" class="pane-btn ghost" data-action="rename-table">테이블명 변경 준비</button>
+              <button type="button" class="pane-btn" data-action="save-metadata">데이터 갱신</button>
+              <button type="button" class="pane-btn ghost" data-action="reset-metadata">초기화</button>
+            </div>
             <div class="form-grid">
               <label>
                 테이블 표시명
@@ -73,22 +82,26 @@
             <div id="database-comments" class="coming-note" hidden></div>
             <h2>컬럼 정보</h2>
             <div id="column-list"></div>
+            <p class="csv-hint">현재 값으로 채워진 CSV 양식을 내려받아 수정한 뒤 업로드하면 저장됩니다. 화면에서 직접 고친 다음 데이터 갱신을 눌러도 됩니다.</p>
             <div class="form-toolbar">
-              <button type="button" class="pane-btn" id="parse-code-btn">DB 코드 해석</button>
-              <button type="button" class="pane-btn ghost" id="rename-table-btn">테이블명 변경 준비</button>
-              <button type="button" class="pane-btn" id="save-metadata-btn">데이터 갱신</button>
-              <button type="button" class="pane-btn ghost" id="reset-metadata-btn">초기화</button>
+              <button type="button" class="pane-btn" data-action="download-csv">CSV 양식 다운로드</button>
+              <button type="button" class="pane-btn" data-action="upload-csv">CSV 업로드</button>
+              <button type="button" class="pane-btn" data-action="parse-code">DB 코드 해석</button>
+              <button type="button" class="pane-btn ghost" data-action="rename-table">테이블명 변경 준비</button>
+              <button type="button" class="pane-btn" data-action="save-metadata">데이터 갱신</button>
+              <button type="button" class="pane-btn ghost" data-action="reset-metadata">초기화</button>
             </div>
+            <input type="file" id="csv-file-input" accept=".csv,text/csv" hidden />
           </div>
         </main>
       </div>
     </div>
     <footer class="site-foot">
-      <span>llm2sql 0.2.3</span>
+      <span>llm2sql 0.3.0</span>
       <span>PostgreSQL/PostGIS · GeoServer · OpenLayers · Ollama</span>
     </footer>
     <script src="/static/js/site.js?v=1"></script>
     <script src="/static/js/data.js?v=2"></script>
-    <script src="/static/js/data-metadata.js?v=1"></script>
+    <script src="/static/js/data-metadata.js?v=3"></script>
   </body>
 </html>

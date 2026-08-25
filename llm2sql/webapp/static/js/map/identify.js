@@ -146,6 +146,46 @@ export function renderProperties(target, props, fields = {}) {
 }
 
 const explainSeq = new WeakMap();
+const MAX_EXPLAIN_COLUMNS = 40;
+const MAX_EXPLAIN_ROWS = 8;
+
+function slimExplainPayload(payload) {
+  const src = payload || {};
+  const rawCols = Array.isArray(src.columns) ? src.columns : null;
+  const columns = rawCols
+    ? rawCols.map((c) => String(c)).filter(Boolean).slice(0, MAX_EXPLAIN_COLUMNS)
+    : src.columns;
+  let rows = src.rows;
+  if (Array.isArray(rows)) {
+    const keep = Array.isArray(columns) ? columns : null;
+    rows = rows.slice(0, MAX_EXPLAIN_ROWS).map((row) => {
+      if (!row || typeof row !== "object" || Array.isArray(row) || !keep) return row;
+      const slim = {};
+      for (const col of keep) {
+        if (Object.prototype.hasOwnProperty.call(row, col)) slim[col] = row[col];
+      }
+      return slim;
+    });
+  }
+  let properties = src.properties;
+  if (properties && typeof properties === "object" && !Array.isArray(properties)) {
+    const keys = Object.keys(properties);
+    if (keys.length > MAX_EXPLAIN_COLUMNS) {
+      properties = Object.fromEntries(
+        keys.slice(0, MAX_EXPLAIN_COLUMNS).map((k) => [k, properties[k]])
+      );
+    }
+  }
+  let fields = src.fields;
+  if (fields && typeof fields === "object" && Array.isArray(columns)) {
+    const slimFields = {};
+    for (const col of columns) {
+      if (fields[col] != null) slimFields[col] = String(fields[col]);
+    }
+    if (Object.keys(slimFields).length) fields = slimFields;
+  }
+  return { ...src, columns, rows, properties, fields };
+}
 
 export function attachExplain(el, payload) {
   if (!el) return;
@@ -157,16 +197,23 @@ export function attachExplain(el, payload) {
   fetch("/api/map/explain", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload || {}),
+    body: JSON.stringify(slimExplainPayload(payload)),
   })
-    .then((res) => res.json())
+    .then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error("explain failed");
+      }
+      return data;
+    })
     .then((data) => {
       if (explainSeq.get(el) !== token) return;
       const text = (data && data.explanation) || "";
       el.className = "attr-explain";
       if (!text) {
-        el.hidden = true;
-        el.textContent = "";
+        el.className = "attr-explain error";
+        el.textContent =
+          "설명을 불러오지 못했습니다. 아래 표에서 값을 확인할 수 있습니다.";
         return;
       }
       el.textContent = text;

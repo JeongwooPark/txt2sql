@@ -1,4 +1,4 @@
-"""부산 지명 사전이 법정동·행정동·구군을 구분하는지."""
+"""법정동·행정동·구군 지명 사전이 구분되는지 (전국)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from llm2sql.domain import extract_gu, extract_place, extract_places
 from llm2sql.gazetteer import (
     KIND_ADMIN,
     KIND_LEGAL,
+    KIND_SIDO,
     KIND_SIGUNGU,
     classify_place,
     uses_admin_boundary,
@@ -46,8 +47,18 @@ def main() -> int:
 
     if extract_gu("금정구 구서동 건물") != "금정구":
         failed.append(f"구 추출 실패: {extract_gu('금정구 구서동 건물')}")
-    if extract_place("금정구 구서동 건물") != "구서동":
-        failed.append(f"동 우선 실패: {extract_place('금정구 구서동 건물')}")
+    if extract_gu("서울특별시 강남구 건물") != "강남구":
+        failed.append(
+            f"전국 구 미추출: {extract_gu('서울특별시 강남구 건물')}"
+        )
+    if extract_place("서울특별시 강남구 건물") != "강남구":
+        failed.append(
+            f"전국 구 동우선 실패: {extract_place('서울특별시 강남구 건물')}"
+        )
+    if KIND_SIGUNGU not in classify_place("수원시"):
+        failed.append("수원시가 구군이 아님")
+    if KIND_SIDO not in classify_place("서울특별시"):
+        failed.append("서울특별시가 시도가 아님")
 
     if "1가" not in (extract_place("중구 광복동1가") or ""):
         failed.append(f"광복동1가 최장일치 실패: {extract_place('중구 광복동1가')}")

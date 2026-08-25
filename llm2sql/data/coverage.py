@@ -1,4 +1,4 @@
-"""업로드된 공간 테이블을 질의 엔진(메타·임베딩·D198 구 맵)에 연결한다."""
+"""업로드·메타데이터 변경 후 질의 엔진(메타·임베딩·D198·지명 사전)에 연결한다."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def refresh_dataset_coverage(settings: Settings) -> dict[str, str]:
 
 
 def register_uploaded_dataset(settings: Settings, table_name: str) -> dict[str, Any]:
-    """Shapefile 업로드 직후: 메타 채우기 → 스키마 임베딩 → D198 커버리지."""
+    """Shapefile 업로드 직후: 메타 채우기 → 스키마 임베딩 → D198 → 지명 사전."""
     return sync_dataset_after_change(settings, table_name, auto_metadata=True)
 
 
@@ -72,6 +72,7 @@ def sync_dataset_after_change(
     result: dict[str, Any] = {
         "metadata": False,
         "embedding": False,
+        "gazetteer": False,
         "d198_coverage": {},
         "message": "",
     }
@@ -86,6 +87,13 @@ def sync_dataset_after_change(
         except Exception:
             result["embedding"] = False
     result["d198_coverage"] = refresh_dataset_coverage(settings)
+    try:
+        gaz = _refresh_gazetteer(settings)
+        result["gazetteer"] = bool(gaz.get("ok"))
+        result["gazetteer_unchanged"] = bool(gaz.get("unchanged"))
+    except Exception:
+        result["gazetteer"] = False
+        result["gazetteer_unchanged"] = False
     if table_name:
         short = table_name.split(".")[-1]
         from llm2sql.domain import gu_from_d198_table
@@ -95,8 +103,17 @@ def sync_dataset_after_change(
             result["message"] = (
                 f"{gu} 용도별건물({short})이 질의 엔진에 연결되었습니다."
             )
+        elif result["embedding"]:
+            result["message"] = f"{short} 스키마가 질의 엔진에 연결되었습니다."
         elif result["metadata"]:
             result["message"] = f"{short} 메타데이터가 자동 등록되었습니다."
+        if result["gazetteer"] and not result.get("gazetteer_unchanged"):
+            extra = "지명 사전을 갱신했습니다."
+            result["message"] = (
+                f"{result['message']} {extra}".strip()
+                if result["message"]
+                else extra
+            )
     return result
 
 
@@ -133,3 +150,9 @@ def _upsert_embedding(settings: Settings, table_name: str) -> bool:
         )
         conn.commit()
     return True
+
+
+def _refresh_gazetteer(settings: Settings) -> dict[str, Any]:
+    from llm2sql.gazetteer_build import rebuild_gazetteer
+
+    return rebuild_gazetteer(settings)

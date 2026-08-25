@@ -347,6 +347,13 @@ body[data-ui^="data"] .site-body {
   margin: 12px 0 16px;
 }
 
+.csv-hint {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .status-banner {
   display: none;
   margin-bottom: 12px;

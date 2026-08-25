@@ -116,15 +116,21 @@ class MetaIndex:
         self,
         tables: dict[str, str] | None = None,
         columns: dict[str, dict[str, str]] | None = None,
+        units: dict[str, dict[str, str]] | None = None,
+        display_names: dict[str, dict[str, str]] | None = None,
     ) -> None:
         self.tables = {k: v for k, v in (tables or {}).items() if v}
         self.columns = columns or {}
+        self.units = units or {}
+        self.display_names = display_names or {}
         self._by_lower = {k.lower(): k for k in self.tables}
 
     @classmethod
     def load(cls, settings: Settings) -> MetaIndex:
         tables: dict[str, str] = {}
         columns: dict[str, dict[str, str]] = {}
+        units: dict[str, dict[str, str]] = {}
+        display_names: dict[str, dict[str, str]] = {}
         try:
             with connect(settings.database_url) as conn:
                 with conn.cursor() as cur:
@@ -154,12 +160,15 @@ class MetaIndex:
                         unit = str(row["unit"] or "").strip()
                         if not tname or not cname or not label:
                             continue
+                        display_names.setdefault(tname, {})[cname] = label
+                        if unit:
+                            units.setdefault(tname, {})[cname] = unit
                         if unit and unit not in label:
                             label = f"{label}({unit})"
                         columns.setdefault(tname, {})[cname] = label
         except Exception:
             return cls()
-        return cls(tables, columns)
+        return cls(tables, columns, units, display_names)
 
     def resolve_table(self, layer: str) -> str | None:
         short = (layer or "").split(":")[-1]
@@ -212,6 +221,45 @@ class MetaIndex:
             or _FALLBACK_FIELDS.get(column.upper())
             or column
         )
+
+    def _lookup_map(
+        self,
+        store: dict[str, dict[str, str]],
+        column: str,
+        *,
+        table: str | None = None,
+    ) -> str:
+        if table and table in store:
+            hit = store[table].get(column)
+            if hit:
+                return hit
+            lower = {k.lower(): v for k, v in store[table].items()}
+            if column.lower() in lower:
+                return lower[column.lower()]
+        ranked: list[tuple[int, str]] = []
+        for tname, fields in store.items():
+            if column in fields:
+                ranked.append((_priority(tname), fields[column]))
+            else:
+                for key, value in fields.items():
+                    if key.lower() == column.lower():
+                        ranked.append((_priority(tname), value))
+                        break
+        if ranked:
+            ranked.sort()
+            return ranked[0][1]
+        return ""
+
+    def field_display_name(self, column: str, *, table: str | None = None) -> str:
+        """단위를 붙이지 않은 메타데이터 표시명."""
+        hit = self._lookup_map(self.display_names, column, table=table)
+        if hit:
+            return hit
+        label = self.field_label(column, table=table)
+        return label or column
+
+    def field_unit(self, column: str, *, table: str | None = None) -> str:
+        return self._lookup_map(self.units, column, table=table)
 
     def fields_for(self, layer: str, columns: list[str] | None = None) -> dict[str, str]:
         table = self.resolve_table(layer)
