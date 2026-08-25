@@ -216,12 +216,16 @@ def build_messages(
     question: str,
     *,
     hints: dict[str, Any] | None = None,
+    extra_examples: list[str] | None = None,
 ) -> list[dict[str, str]]:
     import json
 
     shots = []
     for q, plan in _FEW_SHOTS:
         shots.append(f"User: {q}\nPlan:\n{json.dumps(plan, ensure_ascii=False, indent=2)}")
+    if extra_examples:
+        for blob in extra_examples:
+            shots.append(f"Signature example Plan:\n{blob}")
     user = [
         catalog_prompt_text(entity="building"),
         "",

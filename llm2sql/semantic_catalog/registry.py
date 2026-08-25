@@ -28,6 +28,12 @@ JOIN_EDGES: dict[str, JoinEdge] = {
     "building_in_industrial": JoinEdge(
         "building_in_industrial", "building", "industrial_complex", "n:1", spatial=True, cost=1.3
     ),
+    "admin_intersects_basic_zone": JoinEdge(
+        "admin_intersects_basic_zone", "admin_area", "basic_zone", "n:n", spatial=True, cost=1.1
+    ),
+    "point_dwithin_building": JoinEdge(
+        "point_dwithin_building", "building", "building", "n:1", spatial=True, cost=1.4
+    ),
 }
 
 VALUE_PROFILES: tuple[ValueProfile, ...] = (

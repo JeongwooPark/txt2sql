@@ -1,4 +1,4 @@
-"""레거시 라우트가 Query Contract를 100% 지원할 때만 실행한다."""
+"""레거시 라우트가 Query Contract를 필드 단위로 100% 지원할 때만 실행한다."""
 
 from __future__ import annotations
 
@@ -47,34 +47,70 @@ _THRESHOLD_FIELDS = frozenset(
         "floor_area_ratio",
     }
 )
+_PLACE_FIELDS = frozenset({"legal_dong", "sigungu_name", "name"})
 _COUNT_ONLY = frozenset({"count"})
 _BASIC_AGGS = frozenset({"count", "avg", "sum", "min", "max", "median"})
 _ALL_AGGS = _BASIC_AGGS | frozenset({"stddev", "percentile"})
 _ALL_GROUPS = frozenset(
     {"usage", "structure", "legal_dong", "sigungu_name", "ground_floors"}
 )
+_BUILDING_ONLY = _THRESHOLD_FIELDS | {
+    "usage",
+    "structure",
+    "violation_status",
+    "special_land",
+}
 
 SIMPLE_COUNT = RouteCapability(
     route="legacy_simple_count",
     supports_multiple_predicates=False,
     supported_aggregations=_COUNT_ONLY,
+    supported_fields=_PLACE_FIELDS,
+)
+USAGE_COUNT = RouteCapability(
+    route="building_usage_count",
+    supported_aggregations=_COUNT_ONLY,
+    supported_fields=_PLACE_FIELDS | {"usage"},
+)
+STRUCTURE_COUNT = RouteCapability(
+    route="building_structure_count",
+    supported_aggregations=_COUNT_ONLY,
+    supported_fields=_PLACE_FIELDS | {"structure"},
+)
+SPECIAL_LAND_COUNT = RouteCapability(
+    route="building_special_land_count",
+    supported_aggregations=_COUNT_ONLY,
+    supported_fields=_PLACE_FIELDS | {"special_land"},
 )
 THRESHOLD_COUNT = RouteCapability(
     route="building_threshold_count",
     supports_between=True,
+    supports_multiple_predicates=True,
     supported_aggregations=_COUNT_ONLY,
+    supported_fields=_THRESHOLD_FIELDS | {"usage"} | _PLACE_FIELDS,
 )
 THRESHOLD_LIST = RouteCapability(
     route="building_threshold_list",
     supports_between=True,
+    supports_multiple_predicates=True,
     supports_output_projection=True,
     supports_rank=True,
     supports_top_n=True,
     supported_aggregations=_COUNT_ONLY,
+    supported_fields=_THRESHOLD_FIELDS | {"usage"} | _PLACE_FIELDS,
+)
+STRUCTURE_LIST = RouteCapability(
+    route="building_structure_list",
+    supports_output_projection=True,
+    supports_rank=True,
+    supports_top_n=True,
+    supported_aggregations=_COUNT_ONLY,
+    supported_fields=_PLACE_FIELDS | {"structure"},
 )
 PROFILE = RouteCapability(
     route="building_profile",
     supported_aggregations=frozenset(),
+    supported_fields=_PLACE_FIELDS | {"usage"},
 )
 RANK = RouteCapability(
     route="building_rank",
@@ -98,12 +134,33 @@ RANK = RouteCapability(
 NAME_LOOKUP = RouteCapability(
     route="building_name_lookup",
     supports_output_projection=True,
+    supported_fields=_PLACE_FIELDS | {"lot_address", "usage", "height_m", "ground_floors"},
 )
 INDUSTRIAL = RouteCapability(
     route="industrial",
     entities=frozenset({"industrial_complex", "building"}),
     supports_spatial=True,
     supported_aggregations=_COUNT_ONLY,
+    supported_fields=_PLACE_FIELDS | {"usage"},
+)
+D010 = RouteCapability(
+    route="d010",
+    supports_between=True,
+    supports_multiple_predicates=True,
+    supports_rank=True,
+    supports_top_n=True,
+    supports_output_projection=True,
+    supported_aggregations=_COUNT_ONLY,
+    supports_temporal=True,
+    supported_fields=_THRESHOLD_FIELDS
+    | {
+        "violation_status",
+        "special_land",
+        "building_dong_name",
+        "lot_address",
+        "approval_date",
+    }
+    | _PLACE_FIELDS,
 )
 D198 = RouteCapability(
     route="d198",
@@ -112,8 +169,19 @@ D198 = RouteCapability(
     supports_rank=True,
     supports_top_n=True,
     supports_fixed_bins=True,
+    supports_output_projection=True,
     supported_aggregations=_COUNT_ONLY,
     supports_temporal=True,
+    supported_fields=_THRESHOLD_FIELDS
+    | {
+        "usage",
+        "detail_usage",
+        "usage_class",
+        "approval_date",
+        "permit_date",
+        "ledger_kind",
+    }
+    | _PLACE_FIELDS,
 )
 BAS = RouteCapability(
     route="bas",
@@ -121,12 +189,14 @@ BAS = RouteCapability(
     supports_rank=True,
     supports_top_n=True,
     supported_aggregations=_COUNT_ONLY,
+    supported_fields=frozenset({"area_m2", "legal_dong", "sigungu_name"}),
 )
 SPATIAL = RouteCapability(
     route="spatial",
     supports_spatial=True,
     supported_aggregations=_COUNT_ONLY,
     supports_output_projection=True,
+    supported_fields=_PLACE_FIELDS | {"usage"},
 )
 PLAN_ROUTE = RouteCapability(
     route="semantic_plan",
@@ -171,6 +241,8 @@ def capability_for(route: str) -> RouteCapability:
         return INDUSTRIAL
     if intent.startswith("d198_") or intent.startswith("building_age"):
         return D198
+    if intent.startswith("d010_attr") or intent.startswith("d010_"):
+        return D010
     if intent.startswith("bas_") or intent.startswith("bas_area"):
         return BAS
     if (
@@ -185,12 +257,14 @@ def capability_for(route: str) -> RouteCapability:
         return SPATIAL
     if intent == "building_rank_compare":
         return RANK
+    if intent == "building_usage_count" or intent == "building_admin_dong_usage_count":
+        return USAGE_COUNT
+    if intent == "building_structure_count":
+        return STRUCTURE_COUNT
+    if intent == "building_special_land_count":
+        return SPECIAL_LAND_COUNT
     if intent in {
         "building_place_count",
-        "building_usage_count",
-        "building_structure_count",
-        "building_special_land_count",
-        "building_admin_dong_usage_count",
     }:
         return SIMPLE_COUNT
     if intent in {
@@ -205,13 +279,51 @@ def capability_for(route: str) -> RouteCapability:
         "building_height_threshold_list",
         "building_floor_threshold_list",
         "building_attr_list",
-        "building_structure_list",
-        "building_special_land_list",
         "building_area_topn",
         "building_area_top1_value",
     }:
         return THRESHOLD_LIST
+    if intent in {
+        "building_structure_list",
+        "building_special_land_list",
+    }:
+        return STRUCTURE_LIST
     return SIMPLE_COUNT
+
+
+def route_cost(intent: str) -> int:
+    name = (intent or "").strip()
+    rules: list[tuple[str, int]] = [
+        ("building_place_count", 10),
+        ("building_usage_count", 12),
+        ("building_structure_count", 12),
+        ("building_special_land_count", 12),
+        ("building_admin_dong_usage_count", 14),
+        ("building_height_count", 20),
+        ("building_floor_count", 20),
+        ("building_attr_count", 20),
+        ("building_area_threshold_count", 20),
+        ("building_area_threshold_list", 25),
+        ("building_height_threshold_list", 25),
+        ("building_floor_threshold_list", 25),
+        ("building_name_lookup", 28),
+        ("building_rank_", 30),
+        ("industrial_", 45),
+        ("buildings_in_industrial", 45),
+        ("building_profile", 40),
+        ("d010_attr", 50),
+        ("d198_", 55),
+        ("building_age", 55),
+        ("bas_", 60),
+        ("spatial_", 70),
+        ("place_buffer", 70),
+        ("buffer_", 70),
+        ("semantic_plan", 1000),
+    ]
+    for prefix, cost in rules:
+        if name == prefix or name.startswith(prefix):
+            return cost
+    return 80
 
 
 def _constraint_fields(contract: QueryContract) -> set[str]:
@@ -219,6 +331,9 @@ def _constraint_fields(contract: QueryContract) -> set[str]:
     for span in contract.metrics:
         if span.value:
             fields.add(str(span.value))
+        field = span.meta.get("field")
+        if field:
+            fields.add(str(field))
     for span in contract.numbers + contract.ranges:
         field = span.meta.get("field")
         if field:
@@ -291,18 +406,26 @@ def missing_requirements(capability: RouteCapability, contract: QueryContract) -
         missing.append("basement")
     if contract.wants_temporal and not capability.supports_temporal:
         missing.append("temporal")
-    threshold_fields = pred_fields & _THRESHOLD_FIELDS
+    threshold_used = pred_fields & _THRESHOLD_FIELDS
     if (
-        threshold_fields
+        capability.route in {"building_threshold_count", "building_threshold_list"}
+        and len(threshold_used) >= 2
+    ):
+        missing.append("multiple_threshold_fields")
+    if (
+        threshold_used
         and capability.route in {"legacy_simple_count", "building_threshold_count"}
         and not contract.wants_count
     ):
         missing.append("explicit_count")
+    if capability.entities == frozenset({"basic_zone"}) and pred_fields & _BUILDING_ONLY:
+        missing.append("unsupported_field")
     if capability.supported_fields:
         extra = (pred_fields | set(contract.output_fields)) - set(capability.supported_fields)
-        extra -= {"usage", "structure", "special_land", "legal_dong", "name"}
+        extra -= {"legal_dong", "sigungu_name", "name"}
         if extra:
             missing.append("unsupported_field")
+            missing.extend(f"field:{item}" for item in sorted(extra))
     return list(dict.fromkeys(missing))
 
 
@@ -326,6 +449,24 @@ def legacy_route_eligible(route: str, contract: QueryContract) -> bool:
 
 def route_allowed(intent: str, contract: QueryContract) -> bool:
     return legacy_route_eligible(intent, contract)
+
+
+def pick_eligible_routed(routed_options: list, contract: QueryContract):
+    """완전 커버 후보 중 최저비용 RoutedQuery."""
+    eligible = []
+    seen: set[str] = set()
+    for routed in routed_options:
+        if routed is None:
+            continue
+        intent = getattr(routed, "intent", None)
+        if not intent or intent in seen:
+            continue
+        seen.add(intent)
+        if legacy_route_eligible(intent, contract):
+            eligible.append(routed)
+    if not eligible:
+        return None
+    return min(eligible, key=lambda item: route_cost(item.intent))
 
 
 def detect_route_candidates(
@@ -358,11 +499,23 @@ def select_execution_path(
     conn=None,
     contract: QueryContract | None = None,
 ) -> str:
-    """Contract → candidate routes → 전부 지원하는 첫 경로, 아니면 semantic_plan."""
+    """Contract → 완전 커버 최저비용 경로, 없으면 semantic_plan."""
+    from llm2sql.intent_router import try_route
+    from llm2sql.route_dispatch import match_route
+
     contract = contract or extract_contract(question)
     if not contract_is_complete(contract):
         return "semantic_plan"
-    for intent in detect_route_candidates(question, contract, conn=conn):
-        if legacy_route_eligible(intent, contract):
-            return intent
+    match = match_route(question, conn=conn, contract=contract)
+    options = []
+    if match.early is not None:
+        options.append(match.early)
+    deferred = match.deferred
+    if deferred is None and match.early is None:
+        deferred = try_route(question, conn=conn)
+    if deferred is not None:
+        options.append(deferred)
+    picked = pick_eligible_routed(options, contract)
+    if picked is not None:
+        return picked.intent
     return "semantic_plan"

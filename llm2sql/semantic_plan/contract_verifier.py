@@ -78,6 +78,9 @@ def verify_contract(
     pred_fields |= {item.field for item in plan.aggregations if item.field}
     pred_fields |= set(plan.select)
     pred_fields |= set(plan.group_by)
+    for ratio in plan.ratios:
+        pred_fields |= predicate_fields(ratio.numerator_predicate)
+        pred_fields |= predicate_fields(ratio.denominator_predicate)
     metric_fields = {span.value for span in contract.metrics if span.value}
     field_hits = len(metric_fields & pred_fields)
     fields_score = 1.0 if not metric_fields else field_hits / len(metric_fields)

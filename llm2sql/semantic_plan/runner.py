@@ -17,8 +17,10 @@ from llm2sql.semantic_plan.models import (
     SemanticPlanGenerationError,
     SemanticQueryPlan,
 )
-from llm2sql.semantic_plan.plan_sql_verifier import verify_plan_to_sql
 from llm2sql.semantic_plan.normalizer import normalize_semantic_plan
+from llm2sql.semantic_plan.plan_sql_verifier import verify_plan_to_sql
+from llm2sql.semantic_plan.result_shape import diagnose_result_shape, verify_result
+from llm2sql.semantic_plan.sql_equivalence import verify_plan_sql_equivalence
 from llm2sql.semantic_plan.validator import validate_semantic_plan
 from llm2sql.session import SessionContext
 from llm2sql.sql_validator import validate_sql_preexec
@@ -36,7 +38,9 @@ def run_semantic_plan(
     allow_llm: bool = True,
     plan: SemanticQueryPlan | None = None,
     contract=None,
+    force_llm: bool = False,
 ) -> dict[str, Any]:
+    """Plan 생성 → 검증 → SQL → 실행. force_llm은 shape 실패 후 1회 재계획."""
     def emit(stage: str, message: str, **extra: Any) -> None:
         if progress is not None:
             progress.emit(stage, message, **extra)
@@ -50,6 +54,7 @@ def run_semantic_plan(
             session=session,
             allow_llm=allow_llm,
             contract=contract,
+            force_llm=force_llm,
         )
     except SemanticPlanGenerationError as exc:
         emit("plan_fallback", f"Plan 생성 실패: {exc}")
@@ -115,27 +120,18 @@ def run_semantic_plan(
         return _fallback("compile_failed", str(exc), semantic_plan=checked.plan)
 
     emit("plan_compile", "Semantic Plan → SQL 컴파일 완료", sql=compiled.sql)
-    from llm2sql.semantic_plan.sql_equivalence import verify_plan_sql_equivalence
-    from llm2sql.semantic_plan.plan_sql_verifier import verify_plan_to_sql
-
-    drop_errors = verify_plan_to_sql(checked.plan, compiled)
-    if drop_errors:
-        emit("plan_fallback", f"Plan-SQL 노드 누락: {drop_errors}")
-        return _fallback(
-            "sql_semantic_mismatch",
-            ",".join(drop_errors),
-            semantic_plan=checked.plan,
-            sql=compiled.sql,
-        )
-    eq_errors = verify_plan_sql_equivalence(checked.plan, compiled.sql)
-    if eq_errors:
-        emit("plan_fallback", f"Plan-SQL 의미 불일치: {eq_errors}")
-        return _fallback(
-            "sql_semantic_mismatch",
-            ",".join(eq_errors),
-            semantic_plan=checked.plan,
-            sql=compiled.sql,
-        )
+    for label, errors in (
+        ("Plan-SQL 노드 누락", verify_plan_to_sql(checked.plan, compiled)),
+        ("Plan-SQL 의미 불일치", verify_plan_sql_equivalence(checked.plan, compiled.sql)),
+    ):
+        if errors:
+            emit("plan_fallback", f"{label}: {errors}")
+            return _fallback(
+                "sql_semantic_mismatch",
+                ",".join(errors),
+                semantic_plan=checked.plan,
+                sql=compiled.sql,
+            )
     try:
         assert_readonly_sql(compiled.sql)
     except ValueError as exc:
@@ -158,19 +154,14 @@ def run_semantic_plan(
         )
 
     if not execute:
-        return {
-            "ok": True,
-            "fallback": False,
-            "route": compiled.route,
-            "sql": compiled.sql,
-            "tables": compiled.tables,
-            "rows": [],
-            "row_count": 0,
-            "semantic_plan": compiled.semantic_plan,
-            "plan_quality": checked.score,
-            "fallback_reason": None,
-            "shadow": True,
-        }
+        return _sqp_ok(
+            route=compiled.route,
+            sql=compiled.sql,
+            tables=compiled.tables,
+            semantic_plan=compiled.semantic_plan,
+            plan_quality=checked.score,
+            shadow=True,
+        )
 
     try:
         rows = execute_query(
@@ -188,11 +179,34 @@ def run_semantic_plan(
             sql=compiled.sql,
         )
 
-    from llm2sql.semantic_plan.result_shape import diagnose_result_shape
-
-    shape_errors = diagnose_result_shape(checked.plan, list(rows or []))
+    # 계약 kind가 count로 남아도 Plan shape이 맞으면 결과를 유지한다(other 적재 방지).
+    # Plan shape도 틀린 진짜 불일치만 LLM 재계획으로 넘긴다.
+    rows = list(rows or [])
+    shape_errors = diagnose_result_shape(checked.plan, rows)
     if shape_errors and rows:
         emit("plan_validate", f"result shape warnings {shape_errors}")
+    verified = verify_result(contract, rows, plan=checked.plan)
+    if not verified.ok and shape_errors:
+        emit("plan_validate", f"result shape fail {verified.reasons}")
+        return _sqp_ok(
+            ok=False,
+            route=compiled.route,
+            sql=compiled.sql,
+            tables=compiled.tables,
+            rows=rows,
+            semantic_plan=compiled.semantic_plan,
+            plan_quality=checked.score,
+            shape_failed=True,
+            fallback=True,
+            fallback_reason="shape_mismatch",
+            error=",".join(verified.reasons),
+        )
+    if not verified.ok:
+        emit(
+            "plan_validate",
+            "contract kind mismatch but executed plan shape ok — keep result "
+            f"{verified.reasons}",
+        )
 
     warnings = checked.warnings
     blocking = [
@@ -208,22 +222,45 @@ def run_semantic_plan(
             sql=compiled.sql,
         )
 
-    answer = format_semantic_answer(
-        question, plan=checked.plan, rows=rows, row_count=len(rows)
+    return _sqp_ok(
+        route=compiled.route,
+        sql=compiled.sql,
+        tables=compiled.tables,
+        rows=rows,
+        semantic_plan=compiled.semantic_plan,
+        plan_quality=checked.score,
+        answer=format_semantic_answer(
+            question, plan=checked.plan, rows=rows, row_count=len(rows)
+        ),
     )
-    return {
-        "ok": True,
+
+
+def _sqp_ok(
+    *,
+    route: str,
+    sql: str | None = None,
+    tables: list[str] | None = None,
+    rows: list | None = None,
+    semantic_plan: Any = None,
+    plan_quality: float | None = None,
+    ok: bool = True,
+    **extra: Any,
+) -> dict[str, Any]:
+    rows = list(rows or [])
+    out: dict[str, Any] = {
+        "ok": ok,
         "fallback": False,
-        "route": compiled.route,
-        "sql": compiled.sql,
-        "tables": compiled.tables,
+        "fallback_reason": None,
+        "route": route,
+        "sql": sql,
+        "tables": list(tables or []),
         "rows": rows,
         "row_count": len(rows),
-        "answer": answer,
-        "semantic_plan": compiled.semantic_plan,
-        "plan_quality": checked.score,
-        "fallback_reason": None,
+        "semantic_plan": semantic_plan,
+        "plan_quality": plan_quality,
     }
+    out.update(extra)
+    return out
 
 
 def _fallback(

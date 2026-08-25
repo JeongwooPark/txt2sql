@@ -1,0 +1,917 @@
+{
+  "when_36": "2026-08-25 13:00:18",
+  "full500": {
+    "32": {
+      "passed": 393,
+      "failed": 107,
+      "acc": 78.6,
+      "elapsed_s": 820.9,
+      "latency": {
+        "avg_ms": 1640,
+        "p50_ms": 139,
+        "p95_ms": 12344
+      }
+    },
+    "35": {
+      "passed": 379,
+      "failed": 121,
+      "acc": 75.8,
+      "elapsed_s": 426.6,
+      "latency": {
+        "avg_ms": 851,
+        "p50_ms": 139,
+        "p95_ms": 2332
+      }
+    },
+    "36": {
+      "passed": 383,
+      "failed": 117,
+      "acc": 76.6,
+      "elapsed_s": 321.5,
+      "latency": {
+        "avg_ms": 641,
+        "p50_ms": 141,
+        "p95_ms": 1428
+      }
+    }
+  },
+  "route_hits": {
+    "32": {
+      "legacy": 94,
+      "semantic_plan": 346,
+      "clarify": 32,
+      "other": 28
+    },
+    "35": {
+      "legacy": 117,
+      "semantic_plan": 306,
+      "clarify": 6,
+      "other": 71
+    },
+    "36": {
+      "legacy": 120,
+      "semantic_plan": 352,
+      "clarify": 6,
+      "other": 22
+    }
+  },
+  "route_acc": {
+    "32": {
+      "legacy": {
+        "n": 94,
+        "ok": 82,
+        "acc": 87.2
+      },
+      "semantic_plan": {
+        "n": 346,
+        "ok": 289,
+        "acc": 83.5
+      },
+      "clarify": {
+        "n": 32,
+        "ok": 1,
+        "acc": 3.1
+      },
+      "other": {
+        "n": 28,
+        "ok": 21,
+        "acc": 75.0
+      }
+    },
+    "35": {
+      "legacy": {
+        "n": 117,
+        "ok": 98,
+        "acc": 83.8
+      },
+      "semantic_plan": {
+        "n": 306,
+        "ok": 254,
+        "acc": 83.0
+      },
+      "clarify": {
+        "n": 6,
+        "ok": 0,
+        "acc": 0.0
+      },
+      "other": {
+        "n": 71,
+        "ok": 27,
+        "acc": 38.0
+      }
+    },
+    "36": {
+      "legacy": {
+        "n": 120,
+        "ok": 101,
+        "acc": 84.2
+      },
+      "semantic_plan": {
+        "n": 352,
+        "ok": 264,
+        "acc": 75.0
+      },
+      "clarify": {
+        "n": 6,
+        "ok": 0,
+        "acc": 0.0
+      },
+      "other": {
+        "n": 22,
+        "ok": 18,
+        "acc": 81.8
+      }
+    }
+  },
+  "by_kind": {
+    "32": {
+      "count": {
+        "n": 226,
+        "ok": 194,
+        "acc_pct": 85.8
+      },
+      "scalar": {
+        "n": 101,
+        "ok": 57,
+        "acc_pct": 56.4
+      },
+      "list": {
+        "n": 66,
+        "ok": 52,
+        "acc_pct": 78.8
+      },
+      "compare": {
+        "n": 54,
+        "ok": 44,
+        "acc_pct": 81.5
+      },
+      "group": {
+        "n": 39,
+        "ok": 32,
+        "acc_pct": 82.1
+      },
+      "meta": {
+        "n": 14,
+        "ok": 14,
+        "acc_pct": 100.0
+      }
+    },
+    "35": {
+      "count": {
+        "n": 226,
+        "ok": 187,
+        "acc_pct": 82.7
+      },
+      "scalar": {
+        "n": 101,
+        "ok": 57,
+        "acc_pct": 56.4
+      },
+      "list": {
+        "n": 66,
+        "ok": 51,
+        "acc_pct": 77.3
+      },
+      "compare": {
+        "n": 54,
+        "ok": 45,
+        "acc_pct": 83.3
+      },
+      "group": {
+        "n": 39,
+        "ok": 25,
+        "acc_pct": 64.1
+      },
+      "meta": {
+        "n": 14,
+        "ok": 14,
+        "acc_pct": 100.0
+      }
+    },
+    "36": {
+      "count": {
+        "n": 226,
+        "ok": 188,
+        "acc_pct": 83.2
+      },
+      "scalar": {
+        "n": 101,
+        "ok": 55,
+        "acc_pct": 54.5
+      },
+      "list": {
+        "n": 66,
+        "ok": 52,
+        "acc_pct": 78.8
+      },
+      "compare": {
+        "n": 54,
+        "ok": 45,
+        "acc_pct": 83.3
+      },
+      "group": {
+        "n": 39,
+        "ok": 29,
+        "acc_pct": 74.4
+      },
+      "meta": {
+        "n": 14,
+        "ok": 14,
+        "acc_pct": 100.0
+      }
+    }
+  },
+  "by_cat_focus": {
+    "32": {
+      "후속": {
+        "n": 93,
+        "ok": 52,
+        "acc_pct": 55.9
+      },
+      "복합AND": {
+        "n": 50,
+        "ok": 47,
+        "acc_pct": 94.0
+      },
+      "미사용속성": {
+        "n": 40,
+        "ok": 32,
+        "acc_pct": 80.0
+      },
+      "집계비율": {
+        "n": 40,
+        "ok": 27,
+        "acc_pct": 67.5
+      },
+      "D198전용": {
+        "n": 40,
+        "ok": 20,
+        "acc_pct": 50.0
+      },
+      "공간복합": {
+        "n": 35,
+        "ok": 31,
+        "acc_pct": 88.6
+      },
+      "공간": {
+        "n": 7,
+        "ok": 7,
+        "acc_pct": 100.0
+      },
+      "건수": {
+        "n": 9,
+        "ok": 9,
+        "acc_pct": 100.0
+      },
+      "후속앵커": {
+        "n": 30,
+        "ok": 24,
+        "acc_pct": 80.0
+      }
+    },
+    "35": {
+      "후속": {
+        "n": 93,
+        "ok": 48,
+        "acc_pct": 51.6
+      },
+      "복합AND": {
+        "n": 50,
+        "ok": 48,
+        "acc_pct": 96.0
+      },
+      "미사용속성": {
+        "n": 40,
+        "ok": 32,
+        "acc_pct": 80.0
+      },
+      "집계비율": {
+        "n": 40,
+        "ok": 29,
+        "acc_pct": 72.5
+      },
+      "D198전용": {
+        "n": 40,
+        "ok": 23,
+        "acc_pct": 57.5
+      },
+      "공간복합": {
+        "n": 35,
+        "ok": 29,
+        "acc_pct": 82.9
+      },
+      "공간": {
+        "n": 7,
+        "ok": 5,
+        "acc_pct": 71.4
+      },
+      "건수": {
+        "n": 9,
+        "ok": 9,
+        "acc_pct": 100.0
+      },
+      "후속앵커": {
+        "n": 30,
+        "ok": 22,
+        "acc_pct": 73.3
+      }
+    },
+    "36": {
+      "후속": {
+        "n": 93,
+        "ok": 47,
+        "acc_pct": 50.5
+      },
+      "복합AND": {
+        "n": 50,
+        "ok": 48,
+        "acc_pct": 96.0
+      },
+      "미사용속성": {
+        "n": 40,
+        "ok": 31,
+        "acc_pct": 77.5
+      },
+      "집계비율": {
+        "n": 40,
+        "ok": 31,
+        "acc_pct": 77.5
+      },
+      "D198전용": {
+        "n": 40,
+        "ok": 23,
+        "acc_pct": 57.5
+      },
+      "공간복합": {
+        "n": 35,
+        "ok": 28,
+        "acc_pct": 80.0
+      },
+      "공간": {
+        "n": 7,
+        "ok": 5,
+        "acc_pct": 71.4
+      },
+      "건수": {
+        "n": 9,
+        "ok": 9,
+        "acc_pct": 100.0
+      },
+      "후속앵커": {
+        "n": 30,
+        "ok": 23,
+        "acc_pct": 76.7
+      }
+    }
+  },
+  "causes": {
+    "32": {},
+    "35": {},
+    "36": {}
+  },
+  "fail_reasons_top": {
+    "32": {
+      "scalar-mismatch": 32,
+      "count-mismatch": 27,
+      "list-top-missing": 14,
+      "name-missing": 12,
+      "compare-num-missing": 9,
+      "group-mismatch": 7,
+      "engine-fail:unsupported_coverage:": 2,
+      "compare-name-missing": 1
+    },
+    "35": {
+      "count-mismatch": 27,
+      "scalar-mismatch": 23,
+      "name-missing": 11,
+      "engine-fail:plan": 10,
+      "compare-num-missing": 7,
+      "list-top-missing": 7,
+      "engine-fail:count_row_count": 7,
+      "group-mismatch": 6
+    },
+    "36": {
+      "count-mismatch": 29,
+      "scalar-mismatch": 23,
+      "name-missing": 14,
+      "engine-fail:plan": 9,
+      "list-top-missing": 9,
+      "compare-num-missing": 7,
+      "group-mismatch": 6,
+      "engine-fail:missing_output": 5
+    }
+  },
+  "none_route": {
+    "32": {
+      "n": 7,
+      "ok": 2
+    },
+    "35": {
+      "n": 49,
+      "ok": 9
+    },
+    "36": {
+      "n": 0,
+      "ok": 0
+    }
+  },
+  "engine_fail": {
+    "32": 5,
+    "35": 40,
+    "36": 29
+  },
+  "delta_vs_32": -10,
+  "delta_vs_35": 4,
+  "vs32_gain_n": 17,
+  "vs32_regress_n": 27,
+  "vs35_gain_n": 10,
+  "vs35_regress_n": 6,
+  "vs32_reg_samples": [
+    {
+      "id": "N056",
+      "q": "광안동에서 높이가 20미터를 넘는 건물은?",
+      "from_route": "semantic_plan_list",
+      "to_route": "semantic_plan_list",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "list-top1 extra=3",
+      "reason_to": "list-top-missing 광안동에스케이뷰",
+      "cat": "임계",
+      "kind": "list"
+    },
+    {
+      "id": "N063",
+      "q": "광안동에서 연면적이 가장 큰 숙박시설은?",
+      "from_route": "building_rank_연면적",
+      "to_route": "semantic_plan_fallback",
+      "from_fam": "legacy",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-nums 4/9",
+      "reason_to": "engine-fail:P06",
+      "cat": "순위",
+      "kind": "scalar"
+    },
+    {
+      "id": "N064",
+      "q": "그 건물 높이는?",
+      "from_route": "semantic_plan_list",
+      "to_route": "semantic_plan_fallback",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-nums 3/5",
+      "reason_to": "engine-fail:plan generation failed",
+      "cat": "후속",
+      "kind": "scalar"
+    },
+    {
+      "id": "N065",
+      "q": "남구에서 건물면적이 가장 큰 공동주택은?",
+      "from_route": "building_rank_건물면적",
+      "to_route": "semantic_plan_fallback",
+      "from_fam": "legacy",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-nums 3/8",
+      "reason_to": "engine-fail:P06",
+      "cat": "순위",
+      "kind": "scalar"
+    },
+    {
+      "id": "N070",
+      "q": "부산대학교와 부경대학교 건물 수를 비교해줘",
+      "from_route": "building_name_set_compare",
+      "to_route": "semantic_plan_count",
+      "from_fam": "legacy",
+      "to_fam": "semantic_plan",
+      "reason_from": "compare-ok",
+      "reason_to": "compare-num-missing",
+      "cat": "비교",
+      "kind": "compare"
+    },
+    {
+      "id": "N079",
+      "q": "대연3동과 교차하는 기초구역은 몇 개야?",
+      "from_route": "spatial_bas_dong_count",
+      "to_route": "semantic_plan_fallback",
+      "from_fam": "legacy",
+      "to_fam": "semantic_plan",
+      "reason_from": "count-match",
+      "reason_to": "engine-fail:- 기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다.",
+      "cat": "공간",
+      "kind": "count"
+    },
+    {
+      "id": "N082",
+      "q": "좌표(129.12, 35.15)에서 200미터 이내 건물 건수",
+      "from_route": "buffer_count",
+      "to_route": "semantic_plan_fallback",
+      "from_fam": "legacy",
+      "to_fam": "semantic_plan",
+      "reason_from": "count-match",
+      "reason_to": "engine-fail:plan generation failed",
+      "cat": "공간",
+      "kind": "count"
+    },
+    {
+      "id": "N093",
+      "q": "금정구 각년도별 단독주택 건립 수는?",
+      "from_route": "d198_year_stats",
+      "to_route": "semantic_plan_fallback",
+      "from_fam": "legacy",
+      "to_fam": "semantic_plan",
+      "reason_from": "group-nums",
+      "reason_to": "engine-fail:missing_aggregation",
+      "cat": "연도",
+      "kind": "group"
+    },
+    {
+      "id": "Q177",
+      "q": "금정구 단독주택 중 사용승인 1970~1989년이고 건축면적 60~150㎡인 채수",
+      "from_route": "semantic_plan_count",
+      "to_route": "d198_attr_count",
+      "from_fam": "semantic_plan",
+      "to_fam": "legacy",
+      "reason_from": "count-match",
+      "reason_to": "count-mismatch gold=5872 pred=[1989.0, 13218.0, 13218.0]",
+      "cat": "구간BETWEEN",
+      "kind": "count"
+    },
+    {
+      "id": "Q181",
+      "q": "기장군 공동주택을 제외하고 높이 25m 이상인 건물 용도 상위 8개",
+      "from_route": "semantic_plan_rank",
+      "to_route": "semantic_plan_fallback",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "group-nums",
+      "reason_to": "engine-fail:missing_output",
+      "cat": "논리NOT",
+      "kind": "group"
+    },
+    {
+      "id": "Q209",
+      "q": "사하구 지하층이 있는 공장 중 연면적 3000㎡ 이상인 이름·지하층·연면적",
+      "from_route": "semantic_plan_list",
+      "to_route": "semantic_plan_list",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "list-top1 extra=3",
+      "reason_to": "list-top-missing 대한제강(주)신평공장",
+      "cat": "미사용속성",
+      "kind": "list"
+    },
+    {
+      "id": "Q216",
+      "q": "서구 위반건축물 중 높이 20m 이상인 채수",
+      "from_route": "semantic_plan_count",
+      "to_route": "d010_attr_count",
+      "from_fam": "semantic_plan",
+      "to_fam": "legacy",
+      "reason_from": "count-match",
+      "reason_to": "count-mismatch gold=10 pred=[20.0, 22.0, 22.0]",
+      "cat": "미사용속성",
+      "kind": "count"
+    }
+  ],
+  "vs32_gain_samples": [
+    {
+      "id": "Q133",
+      "q": "다대동 공동주택 중 철근콘크리트이고 높이 40m 이상인 이름과 높이",
+      "from_route": "semantic_plan_list",
+      "to_route": "semantic_plan_list",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "list-top-missing 다대영동비치타워",
+      "reason_to": "list-top1 extra=3",
+      "cat": "복합AND",
+      "kind": "list"
+    },
+    {
+      "id": "Q161",
+      "q": "부산진구 높이 50m 이상 100m 이하 건물의 이름과 높이",
+      "from_route": "semantic_plan_list",
+      "to_route": "building_height_threshold_list",
+      "from_fam": "semantic_plan",
+      "to_fam": "legacy",
+      "reason_from": "list-top-missing 다인 로얄팰리스",
+      "reason_to": "list-top1 extra=3",
+      "cat": "구간BETWEEN",
+      "kind": "list"
+    },
+    {
+      "id": "Q222",
+      "q": "사하구 위반건축물 비율(위반/(위반+N))",
+      "from_route": "semantic_plan_clarify",
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "clarify",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-mismatch hits=0 gold=[1.5357]",
+      "reason_to": "scalar-nums 1/1",
+      "cat": "미사용속성",
+      "kind": "scalar"
+    },
+    {
+      "id": "Q223",
+      "q": "금정구 산지 비율(산 / 전체) %",
+      "from_route": "semantic_plan_clarify",
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "clarify",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-mismatch hits=0 gold=[3.7068]",
+      "reason_to": "scalar-nums 1/1",
+      "cat": "미사용속성",
+      "kind": "scalar"
+    },
+    {
+      "id": "Q238",
+      "q": "장림동 공장 중 연면적 1000㎡ 이상 비율 %",
+      "from_route": "semantic_plan_clarify",
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "clarify",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-mismatch hits=0 gold=[24.7444]",
+      "reason_to": "scalar-nums 1/1",
+      "cat": "집계비율",
+      "kind": "scalar"
+    },
+    {
+      "id": "Q239",
+      "q": "대연동 공동주택 층수 구간별 건수(1-5, 6-10, 11-20, 21+)",
+      "from_route": "semantic_plan_clarify",
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "clarify",
+      "to_fam": "semantic_plan",
+      "reason_from": "group-mismatch",
+      "reason_to": "group-nums",
+      "cat": "집계비율",
+      "kind": "group"
+    },
+    {
+      "id": "Q244",
+      "q": "서구 공동주택 연면적 합계가 단독주택 연면적 합계보다 얼마나 큰가",
+      "from_route": "semantic_plan_clarify",
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "clarify",
+      "to_fam": "semantic_plan",
+      "reason_from": "compare-num-missing",
+      "reason_to": "compare-ok",
+      "cat": "집계비율",
+      "kind": "compare"
+    },
+    {
+      "id": "Q246",
+      "q": "우동 건물 중 높이 50m 이상 비율과 20층 이상 비율",
+      "from_route": "semantic_plan_clarify",
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "clarify",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-mismatch hits=0 gold=[50.0, 2.3586, 20.0, 1.7153]",
+      "reason_to": "scalar-nums 2/4",
+      "cat": "집계비율",
+      "kind": "scalar"
+    },
+    {
+      "id": "Q255",
+      "q": "금정구 2000년 이후 사용승인 공동주택 평균 층수가 1990년대보다 얼마나 높은가",
+      "from_route": "semantic_plan_clarify",
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "clarify",
+      "to_fam": "semantic_plan",
+      "reason_from": "compare-num-missing",
+      "reason_to": "compare-ok",
+      "cat": "집계비율",
+      "kind": "compare"
+    },
+    {
+      "id": "Q301",
+      "q": "동래구 집합건축물 중 주건축물이면서 건물높이 30m 이상인 채수",
+      "from_route": "semantic_plan_count",
+      "to_route": "d198_attr_count",
+      "from_fam": "semantic_plan",
+      "to_fam": "legacy",
+      "reason_from": "count-mismatch gold=471 pred=[562.0, 562.0]",
+      "reason_to": "count-match",
+      "cat": "D198전용",
+      "kind": "count"
+    },
+    {
+      "id": "Q302",
+      "q": "금정구 집합건축물 중 세부용도가 아파트이고 지상 15층 이상인 채수",
+      "from_route": "semantic_plan_clarify",
+      "to_route": "d198_attr_count",
+      "from_fam": "clarify",
+      "to_fam": "legacy",
+      "reason_from": "count-mismatch gold=337 pred=[]",
+      "reason_to": "count-match",
+      "cat": "D198전용",
+      "kind": "count"
+    },
+    {
+      "id": "Q303",
+      "q": "동래구 다세대주택(세부용도) 중 건물연면적 500㎡ 이상인 채수",
+      "from_route": "semantic_plan_clarify",
+      "to_route": "d198_attr_count",
+      "from_fam": "clarify",
+      "to_fam": "legacy",
+      "reason_from": "count-mismatch gold=818 pred=[]",
+      "reason_to": "count-match",
+      "cat": "D198전용",
+      "kind": "count"
+    }
+  ],
+  "vs35_reg_samples": [
+    {
+      "id": "N056",
+      "q": "광안동에서 높이가 20미터를 넘는 건물은?",
+      "from_route": "semantic_plan_list",
+      "to_route": "semantic_plan_list",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "list-top1 extra=1",
+      "reason_to": "list-top-missing 광안동에스케이뷰",
+      "cat": "임계",
+      "kind": "list"
+    },
+    {
+      "id": "Q209",
+      "q": "사하구 지하층이 있는 공장 중 연면적 3000㎡ 이상인 이름·지하층·연면적",
+      "from_route": "semantic_plan_list",
+      "to_route": "semantic_plan_list",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "list-top1 extra=3",
+      "reason_to": "list-top-missing 대한제강(주)신평공장",
+      "cat": "미사용속성",
+      "kind": "list"
+    },
+    {
+      "id": "Q278",
+      "q": "감천1동 안 공장 중 산업단지와 교차하는 비율 %",
+      "from_route": null,
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "other",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-nums 1/1",
+      "reason_to": "scalar-mismatch hits=0 gold=[0.0]",
+      "cat": "공간복합",
+      "kind": "scalar"
+    },
+    {
+      "id": "Q404",
+      "q": "가장 높은 것의 이름과 층수",
+      "from_route": "semantic_plan_rank",
+      "to_route": "semantic_plan_rank",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-nums 2/6",
+      "reason_to": "name-missing 오륙도 에스케이뷰 아파트",
+      "cat": "후속",
+      "kind": "scalar"
+    },
+    {
+      "id": "Q487",
+      "q": "평균 층수와 평균 높이",
+      "from_route": "semantic_plan_aggregate",
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-nums 3/3",
+      "reason_to": "scalar-mismatch hits=0 gold=[23.2599, 65.344, 177.0]",
+      "cat": "후속",
+      "kind": "scalar"
+    },
+    {
+      "id": "Q488",
+      "q": "가장 높은 건물 이름",
+      "from_route": "semantic_plan_rank",
+      "to_route": "semantic_plan_rank",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-nums 2/6",
+      "reason_to": "name-missing 대림\u001a쌍용강변타운",
+      "cat": "후속",
+      "kind": "scalar"
+    }
+  ],
+  "vs35_gain_samples": [
+    {
+      "id": "N028",
+      "q": "광안동의 철근콘크리트 구조물은?",
+      "from_route": null,
+      "to_route": "building_structure_list",
+      "from_fam": "other",
+      "to_fam": "legacy",
+      "reason_from": "engine-fail:plan generation failed",
+      "reason_to": "list-top1 extra=3",
+      "cat": "구조",
+      "kind": "list"
+    },
+    {
+      "id": "N095",
+      "q": "동래구 상업용 건물 연도별 수는?",
+      "from_route": null,
+      "to_route": "d198_year_stats",
+      "from_fam": "other",
+      "to_fam": "legacy",
+      "reason_from": "engine-fail:low_quality",
+      "reason_to": "group-nums",
+      "cat": "연도",
+      "kind": "group"
+    },
+    {
+      "id": "N096",
+      "q": "금정구 주거용 연면적 크기별 수는?",
+      "from_route": null,
+      "to_route": "d198_value_bins",
+      "from_fam": "other",
+      "to_fam": "legacy",
+      "reason_from": "engine-fail:missing_aggregation",
+      "reason_to": "group-nums",
+      "cat": "구간",
+      "kind": "group"
+    },
+    {
+      "id": "N098",
+      "q": "사직동 아파트 중 2000년 이후 사용승인된 것은?",
+      "from_route": null,
+      "to_route": "semantic_plan_list",
+      "from_fam": "other",
+      "to_fam": "semantic_plan",
+      "reason_from": "engine-fail:count_row_count",
+      "reason_to": "list-top1 extra=3",
+      "cat": "연도",
+      "kind": "list"
+    },
+    {
+      "id": "Q226",
+      "q": "해운대구 공동주택 평균 높이와 중앙값 높이, 건수",
+      "from_route": null,
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "other",
+      "to_fam": "semantic_plan",
+      "reason_from": "engine-fail:count_multi_numeric",
+      "reason_to": "scalar-nums 3/3",
+      "cat": "집계비율",
+      "kind": "scalar"
+    },
+    {
+      "id": "Q250",
+      "q": "기장군 연도(사용승인 앞 4자리)별 공동주택 수, 2000년 이후만",
+      "from_route": null,
+      "to_route": "semantic_plan_list",
+      "from_fam": "other",
+      "to_fam": "semantic_plan",
+      "reason_from": "engine-fail:count_row_count",
+      "reason_to": "group-nums",
+      "cat": "집계비율",
+      "kind": "group"
+    },
+    {
+      "id": "Q372",
+      "q": "금정구 사용승인 연도 구간별 공동주택 수(1970s~2010s)",
+      "from_route": null,
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "other",
+      "to_fam": "semantic_plan",
+      "reason_from": "engine-fail:count_row_count",
+      "reason_to": "group-nums",
+      "cat": "비교연도",
+      "kind": "group"
+    },
+    {
+      "id": "Q445",
+      "q": "북구 교육연구시설 중 대지면적 1500㎡ 이상",
+      "from_route": null,
+      "to_route": "semantic_plan_list",
+      "from_fam": "other",
+      "to_fam": "semantic_plan",
+      "reason_from": "engine-fail:count_row_count",
+      "reason_to": "list-top1 extra=3",
+      "cat": "후속앵커",
+      "kind": "list"
+    },
+    {
+      "id": "Q446",
+      "q": "그중 높이 15m 이상만",
+      "from_route": "semantic_plan_list",
+      "to_route": "semantic_plan_count",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "count-mismatch gold=50 pred=[100.0, 1.0, 1041.0, -1.0, 17.0, 2.0]",
+      "reason_to": "count-match",
+      "cat": "후속",
+      "kind": "count"
+    },
+    {
+      "id": "Q447",
+      "q": "대지면적 합계",
+      "from_route": "semantic_plan_aggregate",
+      "to_route": "semantic_plan_aggregate",
+      "from_fam": "semantic_plan",
+      "to_fam": "semantic_plan",
+      "reason_from": "scalar-mismatch hits=0 gold=[1018256.6, 50.0]",
+      "reason_to": "scalar-nums 2/2",
+      "cat": "후속",
+      "kind": "scalar"
+    }
+  ]
+}

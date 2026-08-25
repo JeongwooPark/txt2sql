@@ -37,6 +37,7 @@ class SessionContext:
     last_semantic_plan_route: str | None = None
     last_plan_base: dict[str, Any] | None = None
     last_plan_events: list[dict[str, Any]] = field(default_factory=list)
+    last_contract: dict[str, Any] | None = None
     result_anchors: list[ResultAnchor] = field(default_factory=list)
 
     def update_from_result(

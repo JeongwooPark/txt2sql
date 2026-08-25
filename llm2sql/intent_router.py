@@ -1767,9 +1767,17 @@ def _route_building_name_lookup(q: str) -> RoutedQuery | None:
     where_d010 = _a4_place_filters(place, gu)
     where_d198 = list(where_d010)
     for token in name_tokens:
-        safe = token.replace("'", "''")
-        where_d010.append(f'"A24" ILIKE \'%{safe}%\'')
-        where_d198.append(f'"A13" ILIKE \'%{safe}%\'')
+        from llm2sql.domain import expand_building_name_aliases
+
+        variants = expand_building_name_aliases(token)
+        like_d010 = " OR ".join(
+            f"\"A24\" ILIKE '%{v.replace(chr(39), chr(39)+chr(39))}%'" for v in variants
+        )
+        like_d198 = " OR ".join(
+            f"\"A13\" ILIKE '%{v.replace(chr(39), chr(39)+chr(39))}%'" for v in variants
+        )
+        where_d010.append(f"({like_d010})")
+        where_d198.append(f"({like_d198})")
 
     d010_sql = " AND ".join(where_d010) if where_d010 else "TRUE"
     d198_sql = " AND ".join(where_d198) if where_d198 else "TRUE"

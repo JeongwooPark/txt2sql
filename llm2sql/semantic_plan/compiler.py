@@ -251,6 +251,10 @@ def _select_sql(
             _field, col = _field_col(alias, plan.entity, key, col_map)
             if key == "approval_date" and "approval_decade" in (plan.assumptions or []):
                 pieces.append(f"{_approval_decade_expr(col)} AS {_ident('decade')}")
+            elif _bin_expr_for(plan, key, col) is not None:
+                pieces.append(
+                    f"{_bin_expr_for(plan, key, col)} AS {_ident(key)}"
+                )
             elif key == "sigungu_name" and plan.entity == "building":
                 pieces.append(f"{_sigungu_name_sql(alias)} AS {_ident(key)}")
             else:
@@ -406,6 +410,8 @@ def _group_sql(
         _field, col = _field_col(alias, plan.entity, key, col_map)
         if key == "approval_date" and "approval_decade" in (plan.assumptions or []):
             cols.append(_approval_decade_expr(col))
+        elif _bin_expr_for(plan, key, col) is not None:
+            cols.append(_bin_expr_for(plan, key, col))
         elif key == "sigungu_name" and plan.entity == "building":
             cols.append(_sigungu_name_sql(alias))
         else:
@@ -430,6 +436,8 @@ def _order_sql(
                 expr = _approval_decade_expr(
                     _field_col(alias, plan.entity, "approval_date", col_map)[1]
                 )
+            elif _bin_expr_for(plan, item.field, expr) is not None:
+                expr = _bin_expr_for(plan, item.field, expr)
             elif field.data_type == "number":
                 expr = f"{expr}::float8"
         direction = "DESC" if item.direction == "desc" else "ASC"
@@ -991,6 +999,24 @@ def _approval_year_expr(col: str) -> str:
 
 def _approval_decade_expr(col: str) -> str:
     return f"(({_approval_year_expr(col)})::int / 10 * 10)"
+
+
+def _bin_expr_for(plan: SemanticQueryPlan, key: str, col: str) -> str | None:
+    for item in plan.assumptions or []:
+        if not item.startswith("width_bucket:"):
+            continue
+        parts = item.split(":")
+        if len(parts) < 3 or parts[1] != key:
+            continue
+        try:
+            width = float(parts[2])
+        except ValueError:
+            continue
+        if width <= 0:
+            continue
+        w = sql_number(width)
+        return f"(FLOOR(({col})::float8 / {w}) * {w})"
+    return None
 
 
 def _approval_date_sql(col: str, spec: FilterSpec) -> str:

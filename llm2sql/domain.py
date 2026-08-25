@@ -152,6 +152,39 @@ STRUCTURE_ALIASES: dict[str, str] = {
     "철골": "%철골%",
 }
 
+# 통칭 → 대장 표기. 문항 QID가 아니라 도메인 별칭이다.
+BUILDING_NAME_ALIASES: dict[str, tuple[str, ...]] = {
+    "엘시티": (
+        "엘시티",
+        "엘시티피이에프",
+        "주식회사엘시티피이에프브이",
+        "랜드마크타워",
+    ),
+    "엘크루": ("엘크루", "엘크루 블루오션", "엘크루블루오션"),
+    "블루오션": ("엘크루 블루오션", "엘크루블루오션", "블루오션"),
+}
+
+
+def expand_building_name_aliases(name: str) -> list[str]:
+    """조회 토큰과 동의어를 중복 없이 반환한다."""
+    text = (name or "").strip()
+    if not text:
+        return []
+    found: list[str] = [text]
+    for alias, synonyms in BUILDING_NAME_ALIASES.items():
+        if alias in text or text in alias:
+            for item in synonyms:
+                if item not in found:
+                    found.append(item)
+            continue
+        for item in synonyms:
+            if item in text or text in item:
+                for extra in (alias, *synonyms):
+                    if extra not in found:
+                        found.append(extra)
+                break
+    return found
+
 
 def extract_structure(question: str) -> tuple[str, str] | None:
     """질문의 구조 표현 → (표시명, A11 ILIKE 패턴)."""

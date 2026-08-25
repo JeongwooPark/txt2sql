@@ -36,4 +36,5 @@ packages = ["llm2sql"]
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "playwright>=1.49.0",
 ]

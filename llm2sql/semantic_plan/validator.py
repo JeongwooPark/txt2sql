@@ -317,9 +317,12 @@ def validate_semantic_plan(
         for item in ("plan_followup_delta", "plan_followup_event")
     )
     if status == "ready" and verified.hard_fail and not followup_plan:
-        status = "clarify"
-        errors.extend(verified.reasons)
-        score = min(score, verified.confidence.overall)
+        if plan.ratios or plan.aggregations or plan.group_by:
+            warnings.extend(verified.reasons)
+        else:
+            status = "fallback"
+            errors.extend(verified.reasons)
+            score = min(score, verified.confidence.overall)
     return PlanValidationResult(
         status=status,
         score=max(0.0, min(1.0, score)),

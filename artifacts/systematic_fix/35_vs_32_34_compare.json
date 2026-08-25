@@ -1,0 +1,787 @@
+{
+  "pytest": {
+    "32": 246,
+    "34": 254,
+    "35": 258
+  },
+  "q3_24": {
+    "32": 10,
+    "34": 10,
+    "35": 15
+  },
+  "full500": {
+    "32": {
+      "passed": 393,
+      "acc": 78.6,
+      "elapsed_s": 820.9,
+      "latency": {
+        "avg_ms": 1640,
+        "p50_ms": 139,
+        "p95_ms": 12344
+      }
+    },
+    "34": {
+      "passed": 367,
+      "acc": 73.4,
+      "elapsed_s": 1071.8,
+      "latency": {
+        "avg_ms": 2141,
+        "p50_ms": 169,
+        "p95_ms": 13969
+      }
+    },
+    "35": {
+      "passed": 379,
+      "acc": 75.8,
+      "elapsed_s": 426.6,
+      "latency": {
+        "avg_ms": 851,
+        "p50_ms": 139,
+        "p95_ms": 2332
+      }
+    }
+  },
+  "delta_vs_32": -14,
+  "delta_vs_34": 12,
+  "route_hits": {
+    "32": {
+      "other": 28,
+      "legacy": 94,
+      "clarify": 32,
+      "semantic_plan": 346
+    },
+    "34": {
+      "other": 25,
+      "clarify": 41,
+      "legacy": 142,
+      "semantic_plan": 292
+    },
+    "35": {
+      "other": 71,
+      "legacy": 117,
+      "semantic_plan": 306,
+      "clarify": 6
+    }
+  },
+  "route_acc": {
+    "32": {
+      "other": {
+        "n": 28,
+        "ok": 21,
+        "acc": 75.0
+      },
+      "legacy": {
+        "n": 94,
+        "ok": 82,
+        "acc": 87.2
+      },
+      "clarify": {
+        "n": 32,
+        "ok": 1,
+        "acc": 3.1
+      },
+      "semantic_plan": {
+        "n": 346,
+        "ok": 289,
+        "acc": 83.5
+      }
+    },
+    "34": {
+      "other": {
+        "n": 25,
+        "ok": 19,
+        "acc": 76.0
+      },
+      "clarify": {
+        "n": 41,
+        "ok": 1,
+        "acc": 2.4
+      },
+      "legacy": {
+        "n": 142,
+        "ok": 107,
+        "acc": 75.4
+      },
+      "semantic_plan": {
+        "n": 292,
+        "ok": 240,
+        "acc": 82.2
+      }
+    },
+    "35": {
+      "other": {
+        "n": 71,
+        "ok": 27,
+        "acc": 38.0
+      },
+      "legacy": {
+        "n": 117,
+        "ok": 98,
+        "acc": 83.8
+      },
+      "semantic_plan": {
+        "n": 306,
+        "ok": 254,
+        "acc": 83.0
+      },
+      "clarify": {
+        "n": 6,
+        "ok": 0,
+        "acc": 0.0
+      }
+    }
+  },
+  "by_kind": {
+    "32": {
+      "count": {
+        "n": 226,
+        "ok": 194,
+        "acc_pct": 85.8
+      },
+      "scalar": {
+        "n": 101,
+        "ok": 57,
+        "acc_pct": 56.4
+      },
+      "list": {
+        "n": 66,
+        "ok": 52,
+        "acc_pct": 78.8
+      },
+      "compare": {
+        "n": 54,
+        "ok": 44,
+        "acc_pct": 81.5
+      },
+      "group": {
+        "n": 39,
+        "ok": 32,
+        "acc_pct": 82.1
+      },
+      "meta": {
+        "n": 14,
+        "ok": 14,
+        "acc_pct": 100.0
+      }
+    },
+    "34": {
+      "count": {
+        "n": 226,
+        "ok": 173,
+        "acc_pct": 76.5
+      },
+      "scalar": {
+        "n": 101,
+        "ok": 53,
+        "acc_pct": 52.5
+      },
+      "list": {
+        "n": 66,
+        "ok": 55,
+        "acc_pct": 83.3
+      },
+      "compare": {
+        "n": 54,
+        "ok": 44,
+        "acc_pct": 81.5
+      },
+      "group": {
+        "n": 39,
+        "ok": 28,
+        "acc_pct": 71.8
+      },
+      "meta": {
+        "n": 14,
+        "ok": 14,
+        "acc_pct": 100.0
+      }
+    },
+    "35": {
+      "count": {
+        "n": 226,
+        "ok": 187,
+        "acc_pct": 82.7
+      },
+      "scalar": {
+        "n": 101,
+        "ok": 57,
+        "acc_pct": 56.4
+      },
+      "list": {
+        "n": 66,
+        "ok": 51,
+        "acc_pct": 77.3
+      },
+      "compare": {
+        "n": 54,
+        "ok": 45,
+        "acc_pct": 83.3
+      },
+      "group": {
+        "n": 39,
+        "ok": 25,
+        "acc_pct": 64.1
+      },
+      "meta": {
+        "n": 14,
+        "ok": 14,
+        "acc_pct": 100.0
+      }
+    }
+  },
+  "by_cat": {
+    "32": {
+      "후속": {
+        "n": 93,
+        "ok": 52,
+        "acc_pct": 55.9
+      },
+      "복합AND": {
+        "n": 50,
+        "ok": 47,
+        "acc_pct": 94.0
+      },
+      "미사용속성": {
+        "n": 40,
+        "ok": 32,
+        "acc_pct": 80.0
+      },
+      "집계비율": {
+        "n": 40,
+        "ok": 27,
+        "acc_pct": 67.5
+      },
+      "D198전용": {
+        "n": 40,
+        "ok": 20,
+        "acc_pct": 50.0
+      },
+      "비교연도": {
+        "n": 40,
+        "ok": 36,
+        "acc_pct": 90.0
+      },
+      "공간복합": {
+        "n": 35,
+        "ok": 31,
+        "acc_pct": 88.6
+      },
+      "후속앵커": {
+        "n": 30,
+        "ok": 24,
+        "acc_pct": 80.0
+      },
+      "구간BETWEEN": {
+        "n": 13,
+        "ok": 12,
+        "acc_pct": 92.3
+      },
+      "논리OR": {
+        "n": 12,
+        "ok": 12,
+        "acc_pct": 100.0
+      },
+      "논리NOT": {
+        "n": 10,
+        "ok": 8,
+        "acc_pct": 80.0
+      },
+      "메타": {
+        "n": 9,
+        "ok": 8,
+        "acc_pct": 88.9
+      },
+      "건수": {
+        "n": 9,
+        "ok": 9,
+        "acc_pct": 100.0
+      },
+      "용도": {
+        "n": 8,
+        "ok": 8,
+        "acc_pct": 100.0
+      },
+      "행정동": {
+        "n": 8,
+        "ok": 8,
+        "acc_pct": 100.0
+      },
+      "임계": {
+        "n": 8,
+        "ok": 8,
+        "acc_pct": 100.0
+      },
+      "공간": {
+        "n": 7,
+        "ok": 7,
+        "acc_pct": 100.0
+      },
+      "산업단지": {
+        "n": 7,
+        "ok": 6,
+        "acc_pct": 85.7
+      },
+      "연도": {
+        "n": 6,
+        "ok": 5,
+        "acc_pct": 83.3
+      },
+      "구군": {
+        "n": 5,
+        "ok": 5,
+        "acc_pct": 100.0
+      },
+      "범위외": {
+        "n": 4,
+        "ok": 4,
+        "acc_pct": 100.0
+      },
+      "순위": {
+        "n": 4,
+        "ok": 4,
+        "acc_pct": 100.0
+      },
+      "비교": {
+        "n": 4,
+        "ok": 3,
+        "acc_pct": 75.0
+      },
+      "안내": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "전역": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "프로필": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "주관": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "모호": {
+        "n": 2,
+        "ok": 2,
+        "acc_pct": 100.0
+      },
+      "구조": {
+        "n": 1,
+        "ok": 1,
+        "acc_pct": 100.0
+      },
+      "건물명": {
+        "n": 1,
+        "ok": 0,
+        "acc_pct": 0.0
+      },
+      "오탐방지": {
+        "n": 1,
+        "ok": 1,
+        "acc_pct": 100.0
+      },
+      "구간": {
+        "n": 1,
+        "ok": 1,
+        "acc_pct": 100.0
+      }
+    },
+    "34": {
+      "후속": {
+        "n": 93,
+        "ok": 48,
+        "acc_pct": 51.6
+      },
+      "복합AND": {
+        "n": 50,
+        "ok": 45,
+        "acc_pct": 90.0
+      },
+      "미사용속성": {
+        "n": 40,
+        "ok": 26,
+        "acc_pct": 65.0
+      },
+      "집계비율": {
+        "n": 40,
+        "ok": 26,
+        "acc_pct": 65.0
+      },
+      "D198전용": {
+        "n": 40,
+        "ok": 21,
+        "acc_pct": 52.5
+      },
+      "비교연도": {
+        "n": 40,
+        "ok": 36,
+        "acc_pct": 90.0
+      },
+      "공간복합": {
+        "n": 35,
+        "ok": 23,
+        "acc_pct": 65.7
+      },
+      "후속앵커": {
+        "n": 30,
+        "ok": 23,
+        "acc_pct": 76.7
+      },
+      "구간BETWEEN": {
+        "n": 13,
+        "ok": 11,
+        "acc_pct": 84.6
+      },
+      "논리OR": {
+        "n": 12,
+        "ok": 12,
+        "acc_pct": 100.0
+      },
+      "논리NOT": {
+        "n": 10,
+        "ok": 7,
+        "acc_pct": 70.0
+      },
+      "메타": {
+        "n": 9,
+        "ok": 8,
+        "acc_pct": 88.9
+      },
+      "건수": {
+        "n": 9,
+        "ok": 9,
+        "acc_pct": 100.0
+      },
+      "용도": {
+        "n": 8,
+        "ok": 8,
+        "acc_pct": 100.0
+      },
+      "행정동": {
+        "n": 8,
+        "ok": 8,
+        "acc_pct": 100.0
+      },
+      "임계": {
+        "n": 8,
+        "ok": 8,
+        "acc_pct": 100.0
+      },
+      "공간": {
+        "n": 7,
+        "ok": 4,
+        "acc_pct": 57.1
+      },
+      "산업단지": {
+        "n": 7,
+        "ok": 6,
+        "acc_pct": 85.7
+      },
+      "연도": {
+        "n": 6,
+        "ok": 5,
+        "acc_pct": 83.3
+      },
+      "구군": {
+        "n": 5,
+        "ok": 5,
+        "acc_pct": 100.0
+      },
+      "범위외": {
+        "n": 4,
+        "ok": 4,
+        "acc_pct": 100.0
+      },
+      "순위": {
+        "n": 4,
+        "ok": 4,
+        "acc_pct": 100.0
+      },
+      "비교": {
+        "n": 4,
+        "ok": 3,
+        "acc_pct": 75.0
+      },
+      "안내": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "전역": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "프로필": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "주관": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "모호": {
+        "n": 2,
+        "ok": 2,
+        "acc_pct": 100.0
+      },
+      "구조": {
+        "n": 1,
+        "ok": 1,
+        "acc_pct": 100.0
+      },
+      "건물명": {
+        "n": 1,
+        "ok": 0,
+        "acc_pct": 0.0
+      },
+      "오탐방지": {
+        "n": 1,
+        "ok": 1,
+        "acc_pct": 100.0
+      },
+      "구간": {
+        "n": 1,
+        "ok": 1,
+        "acc_pct": 100.0
+      }
+    },
+    "35": {
+      "후속": {
+        "n": 93,
+        "ok": 48,
+        "acc_pct": 51.6
+      },
+      "복합AND": {
+        "n": 50,
+        "ok": 48,
+        "acc_pct": 96.0
+      },
+      "미사용속성": {
+        "n": 40,
+        "ok": 32,
+        "acc_pct": 80.0
+      },
+      "집계비율": {
+        "n": 40,
+        "ok": 29,
+        "acc_pct": 72.5
+      },
+      "D198전용": {
+        "n": 40,
+        "ok": 23,
+        "acc_pct": 57.5
+      },
+      "비교연도": {
+        "n": 40,
+        "ok": 35,
+        "acc_pct": 87.5
+      },
+      "공간복합": {
+        "n": 35,
+        "ok": 29,
+        "acc_pct": 82.9
+      },
+      "후속앵커": {
+        "n": 30,
+        "ok": 22,
+        "acc_pct": 73.3
+      },
+      "구간BETWEEN": {
+        "n": 13,
+        "ok": 12,
+        "acc_pct": 92.3
+      },
+      "논리OR": {
+        "n": 12,
+        "ok": 12,
+        "acc_pct": 100.0
+      },
+      "논리NOT": {
+        "n": 10,
+        "ok": 7,
+        "acc_pct": 70.0
+      },
+      "메타": {
+        "n": 9,
+        "ok": 8,
+        "acc_pct": 88.9
+      },
+      "건수": {
+        "n": 9,
+        "ok": 9,
+        "acc_pct": 100.0
+      },
+      "용도": {
+        "n": 8,
+        "ok": 8,
+        "acc_pct": 100.0
+      },
+      "행정동": {
+        "n": 8,
+        "ok": 8,
+        "acc_pct": 100.0
+      },
+      "임계": {
+        "n": 8,
+        "ok": 8,
+        "acc_pct": 100.0
+      },
+      "공간": {
+        "n": 7,
+        "ok": 5,
+        "acc_pct": 71.4
+      },
+      "산업단지": {
+        "n": 7,
+        "ok": 6,
+        "acc_pct": 85.7
+      },
+      "연도": {
+        "n": 6,
+        "ok": 2,
+        "acc_pct": 33.3
+      },
+      "구군": {
+        "n": 5,
+        "ok": 5,
+        "acc_pct": 100.0
+      },
+      "범위외": {
+        "n": 4,
+        "ok": 4,
+        "acc_pct": 100.0
+      },
+      "순위": {
+        "n": 4,
+        "ok": 2,
+        "acc_pct": 50.0
+      },
+      "비교": {
+        "n": 4,
+        "ok": 2,
+        "acc_pct": 50.0
+      },
+      "안내": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "전역": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "프로필": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "주관": {
+        "n": 3,
+        "ok": 3,
+        "acc_pct": 100.0
+      },
+      "모호": {
+        "n": 2,
+        "ok": 2,
+        "acc_pct": 100.0
+      },
+      "구조": {
+        "n": 1,
+        "ok": 0,
+        "acc_pct": 0.0
+      },
+      "건물명": {
+        "n": 1,
+        "ok": 0,
+        "acc_pct": 0.0
+      },
+      "오탐방지": {
+        "n": 1,
+        "ok": 1,
+        "acc_pct": 100.0
+      },
+      "구간": {
+        "n": 1,
+        "ok": 0,
+        "acc_pct": 0.0
+      }
+    }
+  },
+  "causes": {
+    "32": {
+      "PREDICATE_DROPPED": 52,
+      "ENTITY_SELECTION_ERROR": 40,
+      "RANGE_BOUND_DROPPED": 9,
+      "FOLLOWUP_CONTEXT_LOST": 9,
+      "SPATIAL_TARGET_DROPPED": 1,
+      "BOOLEAN_OR_DROPPED": 1,
+      "EXECUTION_TIMEOUT": 1
+    },
+    "34": {
+      "PREDICATE_DROPPED": 58,
+      "ENTITY_SELECTION_ERROR": 48,
+      "RANGE_BOUND_DROPPED": 17,
+      "FOLLOWUP_CONTEXT_LOST": 13,
+      "BOOLEAN_NOT_DROPPED": 1,
+      "SPATIAL_TARGET_DROPPED": 1,
+      "BOOLEAN_OR_DROPPED": 1
+    },
+    "35": {
+      "PREDICATE_DROPPED": 54,
+      "ENTITY_SELECTION_ERROR": 52,
+      "FOLLOWUP_CONTEXT_LOST": 14,
+      "RANGE_BOUND_DROPPED": 11,
+      "BOOLEAN_NOT_DROPPED": 1,
+      "SPATIAL_TARGET_DROPPED": 1,
+      "BOOLEAN_OR_DROPPED": 1
+    }
+  },
+  "vs32_regress_n": 32,
+  "vs32_gain_n": 18,
+  "vs34_regress_n": 18,
+  "vs34_gain_n": 30,
+  "vs32_reg_pairs": [
+    [
+      "semantic_plan:semantic_plan_list->None",
+      6
+    ],
+    [
+      "semantic_plan:semantic_plan_count->d198_attr_count",
+      3
+    ],
+    [
+      "legacy:d198_year_stats->None",
+      2
+    ],
+    [
+      "semantic_plan:semantic_plan_rank->None",
+      2
+    ],
+    [
+      "semantic_plan:semantic_plan_aggregate->None",
+      2
+    ],
+    [
+      "semantic_plan:semantic_plan_count->None",
+      2
+    ],
+    [
+      "legacy:building_structure_list->None",
+      1
+    ],
+    [
+      "legacy:building_rank_연면적->None",
+      1
+    ]
+  ]
+}

@@ -72,13 +72,15 @@ from llm2sql.profile_qa import (
     is_usage_overview_question,
 )
 from llm2sql.progress import ProgressCallback, ProgressTracker, TokenCallback
-from llm2sql.query_understanding.contract import extract_contract
+from llm2sql.query_understanding.bind import bind_catalog
+from llm2sql.query_understanding.contract import extract_contract, merge_contract
 from llm2sql.rag_sql import run_rag_sql
 from llm2sql.rank_compare_qa import answer_rank_compare, is_rank_compare_question
 from llm2sql.route_capability import (
     capability_for,
     detect_route_candidates,
     missing_requirements,
+    pick_eligible_routed,
     route_allowed,
 )
 from llm2sql.route_dispatch import (
@@ -414,6 +416,8 @@ def _try_list_attr_followup(
 ) -> dict[str, Any] | None:
     """직전 목록을 유지한 채 사용승인일 등만 덧붙인다. 건수를 다시 자르지 않는다."""
     _ = ollama_client
+    if session is not None and session.last_contract is not None:
+        return None
     if session is None or not is_list_attr_followup(question, session):
         return None
     rows = list(session.last_rows)
@@ -452,6 +456,8 @@ def _try_year_grain_followup(
 ) -> dict[str, Any] | None:
     """직전 연도별 건립 건수를 N년 단위로 다시 묶는다."""
     _ = settings
+    if session is not None and session.last_contract is not None:
+        return None
     if session is None or not is_year_grain_followup(question, session):
         return None
     grain = year_stats_grain(question) or 10
@@ -764,7 +770,20 @@ def run_ask(
         if early is not None:
             return finish(early)
 
-    contract = extract_contract(question)
+    binding = bind_catalog(question)
+    contract = extract_contract(question, binding=binding)
+    if (
+        session is not None
+        and session.last_contract is not None
+        and is_followup_question(question, session)
+    ):
+        from llm2sql.query_understanding.contract import QueryContract
+
+        try:
+            prev = QueryContract.model_validate(session.last_contract)
+            contract = merge_contract(prev, contract, binding)
+        except Exception:
+            pass
     progress.emit(
         "understand",
         "Query Contract 생성",
@@ -826,7 +845,7 @@ def run_ask(
     effective = _expand_followup_question(question, session)
     if effective != question.strip():
         progress.emit("route", f"후속 기준 병합: {effective}")
-        contract = extract_contract(effective)
+        contract = extract_contract(effective, binding=bind_catalog(effective))
     try:
         if conn is None:
             with connect(settings.database_url) as owned:
@@ -879,6 +898,10 @@ def run_ask(
         ).startswith(("followup_", "d198_year_stats", "d198_value_bins")):
             session.clear_focus()
         session.update_from_result(effective, result)
+        try:
+            session.last_contract = contract.model_dump()
+        except Exception:
+            session.last_contract = None
     return finish(result, effective)
 
 
@@ -916,6 +939,35 @@ def _capability_missing_for_candidates(candidates: list[str], contract) -> list[
         else:
             return []
     return last
+
+
+def _maybe_finish_routed(
+    question: str,
+    settings: Settings,
+    progress: ProgressTracker,
+    *,
+    conn: psycopg.Connection,
+    ollama_client: Any | None,
+    on_token: TokenCallback | None,
+    routed: Any,
+    route_label: str,
+    contract,
+) -> dict[str, Any] | None:
+    result = _finish_routed_query(
+        question,
+        settings,
+        progress,
+        conn=conn,
+        ollama_client=ollama_client,
+        on_token=on_token,
+        routed=routed,
+        route_label=route_label,
+        contract=contract,
+    )
+    if result.get("shape_failed"):
+        # Router SQL이 계약 kind와 안 맞으면 SQP로 넘긴다.
+        return None
+    return result
 
 
 _PREFERRED_ROUTE = {
@@ -1027,6 +1079,7 @@ def _finish_routed_query(
     on_token: TokenCallback | None,
     routed: Any,
     route_label: str,
+    contract=None,
 ) -> dict[str, Any]:
     """규칙 라우터 SQL을 실행하고 한국어 답변까지 만든다."""
     tables = tables_from_sql(routed.sql) or tables_for_intent(routed.intent)
@@ -1051,6 +1104,25 @@ def _finish_routed_query(
             tables=tables,
             route=routed.intent,
             error=f"{type(exc).__name__}: {exc}",
+        )
+    from llm2sql.semantic_plan.result_shape import verify_result
+
+    # Router는 Plan이 없다. 건수 계약에 목록 행이 오면 SQP로 넘긴다.
+    shape = verify_result(contract, list(rows or []))
+    if not shape.ok:
+        progress.emit(
+            "route",
+            f"결과 shape 불일치: {','.join(shape.reasons)} → Semantic Plan",
+        )
+        return _payload(
+            ok=False,
+            shape_failed=True,
+            answer="",
+            sql=routed.sql,
+            tables=tables,
+            rows=rows,
+            route=routed.intent,
+            error="shape_mismatch:" + ",".join(shape.reasons),
         )
     progress.emit("result", f"조회 완료 ({len(rows)}행)", row_count=len(rows))
     progress.emit("answer", "한국어 답변 생성")
@@ -1113,6 +1185,115 @@ def _finish_semantic_query(
         rows=rows,
         route=route,
         **extra,
+    )
+
+
+def _run_semantic(
+    question: str,
+    settings: Settings,
+    *,
+    conn: psycopg.Connection,
+    ollama_client: Any | None,
+    session: SessionContext | None,
+    progress: ProgressTracker,
+    contract,
+    plan=None,
+    force_llm: bool = False,
+) -> dict[str, Any]:
+    """SQP 한 번 실행. hybrid만 DB에 돌리고, force_llm은 shape 실패 재계획용."""
+    return run_semantic_plan(
+        question,
+        settings,
+        conn=conn,
+        ollama_client=ollama_client,
+        session=session,
+        progress=progress,
+        execute=settings.semantic_plan_mode == "hybrid",
+        contract=contract,
+        plan=plan,
+        force_llm=force_llm,
+    )
+
+
+def _keep_executed_semantic(
+    question: str,
+    semantic: dict[str, Any],
+    contract,
+) -> dict[str, Any] | None:
+    """shape 실패여도 실행된 list/group/scalar 행이 있으면 그 결과를 유지한다."""
+    rows = list(semantic.get("rows") or [])
+    if not rows:
+        return None
+    reasons = str(semantic.get("error") or "")
+    if not (
+        semantic.get("shape_failed")
+        or any(
+            token in reasons
+            for token in (
+                "count_row_count",
+                "count_multi_numeric",
+                "count_not_numeric",
+                "shape_mismatch",
+            )
+        )
+    ):
+        return None
+    from llm2sql.semantic_plan.models import SemanticQueryPlan
+    from llm2sql.semantic_plan.result_shape import verify_result
+
+    plan = None
+    dumped = semantic.get("semantic_plan")
+    if dumped:
+        try:
+            plan = SemanticQueryPlan.model_validate(dumped)
+        except Exception:
+            plan = None
+    # 계약 kind가 틀려도 실행 Plan과 맞으면 통과
+    checked = verify_result(contract, rows, plan=plan)
+    if not checked.ok and plan is not None:
+        checked = verify_result(None, rows, plan=plan)
+    if not checked.ok:
+        return None
+    answer = str(semantic.get("answer") or "")
+    if not answer and plan is not None:
+        from llm2sql.semantic_plan.answer import format_semantic_answer
+
+        answer = format_semantic_answer(
+            question, plan=plan, rows=rows, row_count=len(rows)
+        )
+    if not answer:
+        answer = format_success_template(
+            question, sql=semantic.get("sql") or "", rows=rows, row_count=len(rows)
+        )
+    out = dict(semantic)
+    out.update(
+        {
+            "ok": True,
+            "fallback": False,
+            "shape_failed": False,
+            "answer": answer,
+            "error": None,
+            "fallback_reason": None,
+            "rows": rows,
+            "row_count": len(rows),
+        }
+    )
+    return out
+
+
+def _after_shape_fail(
+    question: str,
+    first: dict[str, Any],
+    retried: dict[str, Any],
+    contract,
+) -> dict[str, Any]:
+    """재계획 성공을 우선하고, 아니면 이미 나온 행을 유지한다."""
+    if retried.get("ok") and not retried.get("fallback"):
+        return retried
+    return (
+        _keep_executed_semantic(question, first, contract)
+        or _keep_executed_semantic(question, retried, contract)
+        or retried
     )
 
 
@@ -1224,16 +1405,15 @@ def _ask_inner(
                 if history is not None:
                     session.last_plan_events = [item.model_dump() for item in history[1]]
                 progress.emit("route", "Semantic Plan 후속 delta")
-                semantic = run_semantic_plan(
+                semantic = _run_semantic(
                     question,
                     settings,
                     conn=conn,
                     ollama_client=ollama_client,
                     session=session,
                     progress=progress,
-                    execute=settings.semantic_plan_mode == "hybrid",
-                    plan=merged,
                     contract=contract,
+                    plan=merged,
                 )
                 finished = _try_semantic_result(
                     question,
@@ -1247,18 +1427,22 @@ def _ask_inner(
                     return finished
 
     if session is not None:
-        subset = try_subset_followup(question, session)
-        if subset is not None and route_allowed(subset.intent, contract):
-            return _finish_routed_query(
-                question,
-                settings,
-                progress,
-                conn=conn,
-                ollama_client=ollama_client,
-                on_token=on_token,
-                routed=subset,
-                route_label="직전 조건 유지 후속",
-            )
+        if session.last_contract is None:
+            subset = try_subset_followup(question, session)
+            if subset is not None and route_allowed(subset.intent, contract):
+                finished = _maybe_finish_routed(
+                    question,
+                    settings,
+                    progress,
+                    conn=conn,
+                    ollama_client=ollama_client,
+                    on_token=on_token,
+                    routed=subset,
+                    route_label="직전 조건 유지 후속",
+                    contract=contract,
+                )
+                if finished is not None:
+                    return finished
         grain = year_stats_grain(question)
         if (
             grain is not None
@@ -1273,7 +1457,7 @@ def _ask_inner(
             if routed_year is not None and routed_year.intent == "d198_year_stats" and route_allowed(
                 routed_year.intent, contract
             ):
-                return _finish_routed_query(
+                finished = _maybe_finish_routed(
                     merged,
                     settings,
                     progress,
@@ -1282,7 +1466,10 @@ def _ask_inner(
                     on_token=on_token,
                     routed=routed_year,
                     route_label=f"직전 연도 통계 {grain}년 단위",
+                    contract=contract,
                 )
+                if finished is not None:
+                    return finished
         if is_value_bin_followup(question, session):
             base = session.last_full_question or session.last_question or ""
             merged = question
@@ -1292,7 +1479,7 @@ def _ask_inner(
             if routed_bin is not None and routed_bin.intent == "d198_value_bins" and route_allowed(
                 routed_bin.intent, contract
             ):
-                return _finish_routed_query(
+                finished = _maybe_finish_routed(
                     merged,
                     settings,
                     progress,
@@ -1301,7 +1488,10 @@ def _ask_inner(
                     on_token=on_token,
                     routed=routed_bin,
                     route_label="직전 조건 유지 수치 구간",
+                    contract=contract,
                 )
+                if finished is not None:
+                    return finished
 
     if is_followup_question(question, session) and session is not None:
         progress.emit("route", "후속 질문(직전 결과 참조)으로 판단")
@@ -1333,36 +1523,49 @@ def _ask_inner(
     )
     route_match = match_route(question, mode=mode, conn=conn, contract=contract)
     deferred_route = route_match.deferred
+    if deferred_route is None and route_match.early is None:
+        deferred_route = try_route(question, conn=conn)
     candidates = detect_route_candidates(question, contract, conn=conn)
     _emit_contract_routing(progress, contract, candidates)
-    if route_match.early is not None:
+    picked = pick_eligible_routed([route_match.early, deferred_route], contract)
+    if (
+        picked is not None
+        and route_match.early is not None
+        and picked.intent == route_match.early.intent
+    ):
         early = route_match.early
-        if route_allowed(early.intent, contract):
-            if early.intent == "building_name_lookup":
-                label = "건물명 조회 라우트"
-            elif early.intent.startswith("building_rank_"):
-                label = f"건물 순위 라우트 ({early.intent})"
-            elif early.intent == "legal_dong_admin_members":
-                label = "법정동 구성 행정동 목록"
-            else:
-                label = f"산업단지 라우트 ({early.intent})"
-            _emit_contract_routing(
-                progress, contract, candidates, missing=[], decision="ROUTER"
-            )
-            return _finish_routed_query(
-                question,
-                settings,
-                progress,
-                conn=conn,
-                ollama_client=ollama_client,
-                on_token=on_token,
-                routed=early,
-                route_label=label,
-            )
-        miss = missing_requirements(capability_for(early.intent), contract)
+        if early.intent == "building_name_lookup":
+            label = "건물명 조회 라우트"
+        elif early.intent.startswith("building_rank_"):
+            label = f"건물 순위 라우트 ({early.intent})"
+        elif early.intent == "legal_dong_admin_members":
+            label = "법정동 구성 행정동 목록"
+        else:
+            label = f"산업단지 라우트 ({early.intent})"
+        _emit_contract_routing(
+            progress, contract, candidates, missing=[], decision="ROUTER"
+        )
+        finished = _maybe_finish_routed(
+            question,
+            settings,
+            progress,
+            conn=conn,
+            ollama_client=ollama_client,
+            on_token=on_token,
+            routed=early,
+            route_label=label,
+            contract=contract,
+        )
+        if finished is not None:
+            return finished
+        picked = None
+    elif route_match.early is not None and (
+        picked is None or picked.intent != route_match.early.intent
+    ):
+        miss = missing_requirements(capability_for(route_match.early.intent), contract)
         progress.emit(
             "route",
-            f"early route capability 부족: {early.intent}",
+            f"early route capability 부족 또는 비용 순위 아님: {route_match.early.intent}",
             missing=miss,
             candidates=candidates,
         )
@@ -1473,7 +1676,10 @@ def _ask_inner(
         return _qa_ok(clarify, ambiguous_terms=clarify.ambiguous_terms)
 
     progress.emit("route", "규칙 라우터 매칭 시도")
-    routed = deferred_route if deferred_route is not None else try_route(question, conn=conn)
+    routed = picked
+    if routed is None:
+        routed = deferred_route if deferred_route is not None else try_route(question, conn=conn)
+        routed = pick_eligible_routed([routed], contract)
     if routed is not None and not route_allowed(routed.intent, contract):
         miss = missing_requirements(capability_for(routed.intent), contract)
         progress.emit(
@@ -1497,7 +1703,7 @@ def _ask_inner(
         _emit_contract_routing(
             progress, contract, candidates, missing=[], decision="ROUTER"
         )
-        return _finish_routed_query(
+        finished = _maybe_finish_routed(
             question,
             settings,
             progress,
@@ -1506,7 +1712,10 @@ def _ask_inner(
             on_token=on_token,
             routed=routed,
             route_label=f"라우트 적중: {routed.intent}",
+            contract=contract,
         )
+        if finished is not None:
+            return finished
 
     if settings.semantic_plan_mode in {"shadow", "hybrid"}:
         _emit_contract_routing(
@@ -1517,16 +1726,32 @@ def _ask_inner(
             decision="SEMANTIC_PLAN",
         )
         progress.emit("route", "라우트 미매칭 → Semantic Query Plan")
-        semantic = run_semantic_plan(
+        semantic = _run_semantic(
             question,
             settings,
             conn=conn,
             ollama_client=ollama_client,
             session=session,
             progress=progress,
-            execute=settings.semantic_plan_mode == "hybrid",
             contract=contract,
         )
+        if semantic.get("shape_failed"):
+            progress.emit("route", "SQP 결과 shape 불일치 → LLM Plan 1회")
+            semantic = _after_shape_fail(
+                question,
+                semantic,
+                _run_semantic(
+                    question,
+                    settings,
+                    conn=conn,
+                    ollama_client=ollama_client,
+                    session=session,
+                    progress=progress,
+                    contract=contract,
+                    force_llm=True,
+                ),
+                contract,
+            )
         finished = _try_semantic_result(
             question,
             settings,
@@ -1547,6 +1772,7 @@ def _ask_inner(
                 sql=semantic.get("sql"),
                 tables=semantic.get("tables") or [],
                 error=error,
+                route=semantic.get("route"),
                 semantic_plan=semantic.get("semantic_plan"),
             )
 

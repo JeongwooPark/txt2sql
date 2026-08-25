@@ -1,0 +1,6 @@
+{
+  "when": "2026-08-25",
+  "branch": "contract-capability-sqp-20260825",
+  "pytest": {"passed": 258, "failed": 0},
+  "note": "tests --ignore=tests/map_ui_gold500"
+}

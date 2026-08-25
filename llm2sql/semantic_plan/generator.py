@@ -815,6 +815,22 @@ def try_heuristic_plan(
         query_kind = "aggregate"
         order_by = [OrderSpec(field="approval_date", direction="asc", nulls="last")]
         limit = None
+    if bound.fixed_bins and not decade_group:
+        bin_field = None
+        bin_width = None
+        for span in bound.numbers:
+            field = span.meta.get("field")
+            if field and span.value:
+                bin_field = str(field)
+                bin_width = float(span.value)
+                break
+        if bin_field and bin_width and bin_width > 0:
+            group_by = [bin_field]
+            assumptions.append(f"width_bucket:{bin_field}:{bin_width:g}")
+            aggregations = [AggregationSpec(function="count", field=None, alias="n")]
+            query_kind = "aggregate"
+            order_by = [OrderSpec(field=bin_field, direction="asc", nulls="last")]
+            limit = None
     if hints.get("basic_zone"):
         entity = "basic_zone"
         filters = [
@@ -1069,6 +1085,7 @@ def generate_semantic_plan(
     session: SessionContext | None = None,
     allow_llm: bool = True,
     contract=None,
+    force_llm: bool = False,
 ) -> SemanticQueryPlan:
     hints = extract_plan_hints(question)
     contract = contract if contract is not None else extract_contract(question)
@@ -1078,8 +1095,15 @@ def generate_semantic_plan(
         reference_date=settings.reference_date,
         contract=contract,
     )
+    if heuristic is not None:
+        heuristic = _ensure_contract_operators(heuristic, contract)
     if heuristic is not None and heuristic.requires_clarification:
-        return heuristic
+        if contract.ratios or contract.percentile_requests or contract.derived_metrics:
+            heuristic = heuristic.model_copy(
+                update={"requires_clarification": False, "ambiguities": []}
+            )
+        elif not force_llm:
+            return heuristic
     if heuristic is not None and accept_heuristic_plan(contract, heuristic):
         return heuristic
     if heuristic is not None and _boolean_complete(contract, heuristic):
@@ -1095,17 +1119,21 @@ def generate_semantic_plan(
         heuristic is not None
         and not heuristic.requires_clarification
         and heuristic.unsupported_reason is None
-        and (heuristic.aggregations or heuristic.spatial_relations)
+        and (heuristic.aggregations or heuristic.spatial_relations or heuristic.ratios)
     ):
         return heuristic
     last_error: Exception | None = None
-    if allow_llm:
+    need_llm = force_llm or bool(getattr(contract, "unresolved_spans", None))
+    if allow_llm and need_llm:
         try:
+            from llm2sql.semantic_plan.examples import examples_for_contract
+
             return _generate_with_llm(
                 question,
                 settings,
                 hints=hints,
                 ollama_client=ollama_client,
+                extra_examples=examples_for_contract(contract),
             )
         except SemanticPlanGenerationError as exc:
             last_error = exc
@@ -1138,14 +1166,83 @@ def generate_semantic_plan(
     raise SemanticPlanGenerationError("plan generation failed")
 
 
+def _ensure_contract_operators(plan: SemanticQueryPlan, contract) -> SemanticQueryPlan:
+    if plan is None or contract is None:
+        return plan
+    aggregations = list(plan.aggregations)
+    assumptions = list(plan.assumptions or [])
+    group_by = list(plan.group_by)
+    query_kind = plan.query_kind
+    for req in contract.percentile_requests:
+        if not any(
+            item.function == "percentile"
+            and abs(float(item.percentile or 0) - float(req.percentile)) < 1e-9
+            for item in aggregations
+        ):
+            aggregations.append(
+                AggregationSpec(
+                    function="percentile",
+                    field=req.field or "height_m",
+                    percentile=req.percentile,
+                    alias="pctl",
+                )
+            )
+            query_kind = "aggregate"
+    for req in contract.derived_metrics:
+        if not any(
+            item.expression is not None and item.expression.kind == "divide"
+            for item in aggregations
+        ):
+            aggregations.append(
+                AggregationSpec(
+                    function="avg",
+                    expression=ExpressionSpec(
+                        kind="divide",
+                        left=ExpressionSpec(kind="field", field=req.left),
+                        right=ExpressionSpec(kind="field", field=req.right),
+                    ),
+                    alias="avg_ratio",
+                )
+            )
+            query_kind = "aggregate"
+    if contract.fixed_bins and not any(
+        item.startswith("width_bucket:") or item == "approval_decade"
+        for item in assumptions
+    ):
+        bin_field = None
+        bin_width = None
+        for span in contract.numbers:
+            field = span.meta.get("field")
+            if field and span.value:
+                bin_field = str(field)
+                bin_width = float(span.value)
+                break
+        if bin_field and bin_width and bin_width > 0:
+            if bin_field not in group_by:
+                group_by.append(bin_field)
+            assumptions.append(f"width_bucket:{bin_field}:{bin_width:g}")
+            if not aggregations:
+                aggregations.append(AggregationSpec(function="count", alias="n"))
+            query_kind = "aggregate"
+    return plan.model_copy(
+        update={
+            "aggregations": aggregations,
+            "assumptions": assumptions,
+            "group_by": group_by,
+            "query_kind": query_kind,
+        }
+    )
+
+
 def _generate_with_llm(
     question: str,
     settings: Settings,
     *,
     hints: dict[str, Any],
     ollama_client: Any | None,
+    extra_examples: list[str] | None = None,
 ) -> SemanticQueryPlan:
-    messages = build_messages(question, hints=hints)
+    messages = build_messages(question, hints=hints, extra_examples=extra_examples)
     retries = max(0, int(settings.semantic_plan_max_retries))
     schema = SemanticQueryPlan.model_json_schema()
     raw = chat(
@@ -1310,6 +1407,7 @@ def _build_ratio_specs(question: str, filters: list[FilterSpec]) -> list[RatioSp
                         left=OperandSpec(kind="field", field=str(field)),
                         right=OperandSpec(kind="literal", value=span.value),
                     ),
+                    denominator_predicate=None,
                     alias=f"ratio_{index + 1}",
                 )
             )

@@ -106,6 +106,10 @@ class QueryContract(BaseModel):
     wants_basement: bool = False
     wants_count: bool = False
     wants_temporal: bool = False
+    # 결과 형태. count는 단일 스칼라. 구간별·연도별은 group.
+    query_kind: str = "count"
+    datasets: list[str] = Field(default_factory=list)
+    spatial_path: str | None = None
 
     def consumed(self) -> list[Span]:
         return (
@@ -140,6 +144,10 @@ class QueryContract(BaseModel):
         return self.coverage().all_ok()
 
 
+# BIN_HINTS(구간별)에 없는 그룹 표현. extract의 fixed_bins와 별도로 kind만 맞춘다.
+_GROUP_KIND_RE = re.compile(r"(연도별|단위로\s*묶)")
+
+
 _COUNTISH = (
     "몇 채",
     "몇채",
@@ -162,8 +170,12 @@ def _explicit_count(question: str) -> bool:
     return bool(re.search(r"몇\s*(채|동|개)(?!%)", question))
 
 
-def extract_contract(question: str) -> QueryContract:
+def extract_contract(question: str, binding: Any | None = None) -> QueryContract:
     q = question
+    if binding is None:
+        from llm2sql.query_understanding.bind import bind_catalog
+
+        binding = bind_catalog(q)
     places = _with_value(find_all(q, ops.PLACE_PATTERN, "place"), "place")
     places = _drop_false_places(q, places)
     metrics: list[Span] = []
@@ -171,6 +183,7 @@ def extract_contract(question: str) -> QueryContract:
         for span in find_all(q, re.escape(text), "metric"):
             span.value = field
             metrics.append(span)
+    metrics.extend(_categorical_metrics(q))
     metrics = dedupe_nested(metrics)
     if "기초구역" in q:
         for span in metrics:
@@ -230,7 +243,7 @@ def extract_contract(question: str) -> QueryContract:
             "경계 안",
             "경계안",
         )
-    )
+    ) or bool(getattr(binding, "spatial_path", None))
     wants_basement = bool(re.search(r"지하(?!철)", q))
     wants_count = _explicit_count(q)
     from llm2sql.query_understanding.temporal import parse_temporal_filters
@@ -259,6 +272,12 @@ def extract_contract(question: str) -> QueryContract:
         wants_basement=wants_basement,
         wants_count=wants_count,
         wants_temporal=wants_temporal,
+        datasets=[item.id for item in getattr(binding, "datasets", [])],
+        spatial_path=(
+            f"{binding.spatial_path.left_entity}:{binding.spatial_path.op}:{binding.spatial_path.right_entity}"
+            if getattr(binding, "spatial_path", None) is not None
+            else None
+        ),
     )
     consumed = contract.consumed()
     conflicts = conflicting_ranges(ranges)
@@ -675,5 +694,150 @@ def _finalize_requests(contract: QueryContract) -> None:
     elif contract.output_fields:
         contract.operation = "list"
     else:
+        # 건수 단서가 없으면 기본 count. 목록은 output_fields가 있을 때만.
         contract.operation = "count"
+    contract.query_kind = _infer_query_kind(contract)
+
+
+def _looks_like_group(contract: QueryContract) -> bool:
+    """구간·그룹 질의. '건수'가 있어도 스칼라 count가 아니다."""
+    if contract.fixed_bins or contract.operation == "group_rank":
+        return True
+    if contract.group_fields and contract.aggregation_requests:
+        return True
+    return bool(_GROUP_KIND_RE.search(contract.question or ""))
+
+
+def _infer_query_kind(contract: QueryContract) -> str:
+    if contract.ratios:
+        return "ratio"
+    if contract.operation == "percentile":
+        return "scalar"
+    if _looks_like_group(contract):
+        return "group"
+    if contract.operation == "rank":
+        return "rank"
+    if contract.operation == "list":
+        return "list"
+    fns = {item.function for item in contract.aggregation_requests if item.function}
+    # avg·percentile과 count가 같이 있으면 한 행 다중 지표(scalar)
+    if fns - {"count"}:
+        return "scalar"
+    if contract.wants_count or (contract.operation == "aggregate" and fns <= {"count"}):
+        return "count"
+    return contract.operation or "count"
+
+
+def merge_contract(
+    prev: QueryContract,
+    delta: QueryContract,
+    binding: Any | None = None,
+) -> QueryContract:
+    """직전 Contract에 후속 Δ를 병합한다. 직전 SQL을 재사용하지 않는다.
+
+    결합 문장에 앞 질문의 '몇 채'가 남아 extract가 count로 기울 수 있다.
+    Δ가 구간·목록이면 그걸 이긴다.
+    """
+    prev_q = (prev.question or "").strip()
+    delta_q = (delta.question or "").strip()
+    combined = prev_q
+    if delta_q and delta_q not in prev_q:
+        combined = f"{prev_q} {delta_q}".strip()
+    merged = extract_contract(combined, binding=binding)
+    if not delta.places and prev.places and not merged.places:
+        merged.places = list(prev.places)
+    if delta.fixed_bins or delta.group_fields or _GROUP_KIND_RE.search(
+        delta.question or ""
+    ):
+        merged.query_kind = "group"
+        merged.wants_count = False
+    elif delta.wants_count:
+        merged.wants_count = True
+        merged.query_kind = "count"
+        merged.operation = "aggregate"
+    elif delta.query_kind and delta.query_kind != "count":
+        merged.query_kind = delta.query_kind
+        merged.wants_count = False
+        if delta.query_kind == "list":
+            merged.operation = "list"
+    elif delta.query_kind and delta.query_kind != prev.query_kind:
+        merged.query_kind = delta.query_kind
+    if prev.datasets and not merged.datasets:
+        merged.datasets = list(prev.datasets)
+    return merged
+
+
+def _categorical_metrics(question: str) -> list[Span]:
+    from llm2sql.domain import (
+        USAGE_ALIASES,
+        extract_special_land,
+        extract_structures,
+    )
+
+    found: list[Span] = []
+    occupied: list[tuple[int, int]] = []
+    for alias in sorted(USAGE_ALIASES, key=len, reverse=True):
+        start = 0
+        while True:
+            i = question.find(alias, start)
+            if i < 0:
+                break
+            end = i + len(alias)
+            if not any(not (end <= a or i >= b) for a, b in occupied):
+                occupied.append((i, end))
+                found.append(
+                    Span(
+                        kind="metric",
+                        text=alias,
+                        start=i,
+                        end=end,
+                        value="usage",
+                        meta={"field": "usage", "canonical": USAGE_ALIASES[alias]},
+                    )
+                )
+            start = end
+    for alias, pattern in extract_structures(question):
+        i = question.find(alias)
+        if i < 0:
+            continue
+        found.append(
+            Span(
+                kind="metric",
+                text=alias,
+                start=i,
+                end=i + len(alias),
+                value="structure",
+                meta={"field": "structure", "pattern": pattern},
+            )
+        )
+    for hint in ("위반건축물", "위반건축", "위반 건축"):
+        i = question.find(hint)
+        if i < 0:
+            continue
+        found.append(
+            Span(
+                kind="metric",
+                text=hint,
+                start=i,
+                end=i + len(hint),
+                value="violation_status",
+                meta={"field": "violation_status"},
+            )
+        )
+        break
+    special = extract_special_land(question)
+    if special is not None:
+        label, _sql = special
+        i = question.find(label) if label in question else 0
+        found.append(
+            Span(
+                kind="metric",
+                text=label,
+                start=max(0, i),
+                end=max(0, i) + len(label),
+                value="special_land",
+                meta={"field": "special_land"},
+            )
+        )
+    return found
 

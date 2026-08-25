@@ -1,0 +1,2262 @@
+{
+  "when": "2026-08-25 13:00:18",
+  "baseline": {
+    "passed": 198,
+    "failed": 302,
+    "accuracy_pct": 39.6,
+    "source": "artifacts/evaluation/q500_gold_eval.json (2026-08-24 12:53)"
+  },
+  "current": {
+    "passed": 383,
+    "failed": 117,
+    "accuracy_pct": 76.6,
+    "elapsed_s": 321.5,
+    "timeout_s": 40
+  },
+  "cause_counts": {
+    "PREDICATE_DROPPED": 58,
+    "ENTITY_SELECTION_ERROR": 41,
+    "FOLLOWUP_CONTEXT_LOST": 13,
+    "RANGE_BOUND_DROPPED": 10,
+    "BOOLEAN_NOT_DROPPED": 1,
+    "SPATIAL_TARGET_DROPPED": 1,
+    "BOOLEAN_OR_DROPPED": 1
+  },
+  "by_cat": {
+    "D198전용": {
+      "PREDICATE_DROPPED": 10,
+      "RANGE_BOUND_DROPPED": 4,
+      "ENTITY_SELECTION_ERROR": 3,
+      "BOOLEAN_OR_DROPPED": 1
+    },
+    "건물명": {
+      "ENTITY_SELECTION_ERROR": 1
+    },
+    "공간": {
+      "ENTITY_SELECTION_ERROR": 2
+    },
+    "공간복합": {
+      "PREDICATE_DROPPED": 4,
+      "FOLLOWUP_CONTEXT_LOST": 1,
+      "ENTITY_SELECTION_ERROR": 3
+    },
+    "구간BETWEEN": {
+      "PREDICATE_DROPPED": 1
+    },
+    "논리NOT": {
+      "PREDICATE_DROPPED": 2,
+      "BOOLEAN_NOT_DROPPED": 1,
+      "ENTITY_SELECTION_ERROR": 1
+    },
+    "메타": {
+      "ENTITY_SELECTION_ERROR": 1
+    },
+    "미사용속성": {
+      "ENTITY_SELECTION_ERROR": 4,
+      "PREDICATE_DROPPED": 3,
+      "RANGE_BOUND_DROPPED": 2
+    },
+    "복합AND": {
+      "RANGE_BOUND_DROPPED": 1,
+      "PREDICATE_DROPPED": 1
+    },
+    "비교": {
+      "ENTITY_SELECTION_ERROR": 1,
+      "PREDICATE_DROPPED": 1
+    },
+    "비교연도": {
+      "PREDICATE_DROPPED": 2,
+      "RANGE_BOUND_DROPPED": 1,
+      "ENTITY_SELECTION_ERROR": 1
+    },
+    "산업단지": {
+      "ENTITY_SELECTION_ERROR": 1
+    },
+    "순위": {
+      "ENTITY_SELECTION_ERROR": 2
+    },
+    "연도": {
+      "ENTITY_SELECTION_ERROR": 1,
+      "PREDICATE_DROPPED": 1
+    },
+    "임계": {
+      "PREDICATE_DROPPED": 1
+    },
+    "집계비율": {
+      "PREDICATE_DROPPED": 5,
+      "ENTITY_SELECTION_ERROR": 3,
+      "SPATIAL_TARGET_DROPPED": 1
+    },
+    "후속": {
+      "FOLLOWUP_CONTEXT_LOST": 12,
+      "ENTITY_SELECTION_ERROR": 14,
+      "PREDICATE_DROPPED": 25
+    },
+    "후속앵커": {
+      "ENTITY_SELECTION_ERROR": 3,
+      "RANGE_BOUND_DROPPED": 2,
+      "PREDICATE_DROPPED": 2
+    }
+  },
+  "by_kind": {
+    "compare": {
+      "ENTITY_SELECTION_ERROR": 2,
+      "PREDICATE_DROPPED": 6,
+      "RANGE_BOUND_DROPPED": 1
+    },
+    "count": {
+      "ENTITY_SELECTION_ERROR": 12,
+      "PREDICATE_DROPPED": 13,
+      "RANGE_BOUND_DROPPED": 7,
+      "BOOLEAN_OR_DROPPED": 1,
+      "FOLLOWUP_CONTEXT_LOST": 10
+    },
+    "group": {
+      "ENTITY_SELECTION_ERROR": 5,
+      "BOOLEAN_NOT_DROPPED": 1,
+      "PREDICATE_DROPPED": 5
+    },
+    "list": {
+      "ENTITY_SELECTION_ERROR": 8,
+      "PREDICATE_DROPPED": 4,
+      "RANGE_BOUND_DROPPED": 2
+    },
+    "scalar": {
+      "ENTITY_SELECTION_ERROR": 14,
+      "FOLLOWUP_CONTEXT_LOST": 3,
+      "PREDICATE_DROPPED": 30,
+      "SPATIAL_TARGET_DROPPED": 1
+    }
+  },
+  "samples": {
+    "ENTITY_SELECTION_ERROR": [
+      {
+        "id": "N016",
+        "q": "법정동명과 행정동명의 차이가 뭐야?",
+        "gold": "diff=법정동명(A4)은 토지·건물 대장 주소, 행정동명(ADM_NM)은 센서스 행정구역 경계",
+        "answer": "요청하신 「법정동명과 행정동명의 차이가 뭐야」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+        "sql": "",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:plan generation failed",
+        "ms": 849
+      },
+      {
+        "id": "N029",
+        "q": "엘시티의 높이와 층수는?",
+        "gold": "1. A24=중동 18290000 숙박시설 (주식회사엘시티피이에프브이), A25=랜드마크타워동, A4=부산광역시 해운대구 중동, A5=1829, A16=411.6, A26=101, A14=249,374.4587 / 2. A24=엘시티, A25=타워에이동, A4=부산광역시 해운대구 중동, A5=1829, A16=339.1, A26=85, A14=145,181.8812 / 3. A24=엘시티, A25=타워비동, A4=부산광역시 해운대구 중동, A5=1829, A16=333.1, A26=85, A14=145,181.8812 / 4. A24=르씨엘시티, A25=없음, A4=부산광역시 동래구 온천동, A5=1248-8, A16=57, A26=20, A14=4,220.66 / 5. A24=엘시티, A25=포디움동, A4=부산광역시 해운대구 중동, A5=1829, A16=43, A26=6, A14=121,396.5881",
+        "answer": "요청하신 「엘시티의 높이와 층수는」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+        "sql": "",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:plan generation failed",
+        "ms": 4
+      },
+      {
+        "id": "N063",
+        "q": "광안동에서 연면적이 가장 큰 숙박시설은?",
+        "gold": "A24=호텔아쿠아펠리스; A4=부산광역시 수영구 광안동; A5=192-5; A14=18,228.2; A16=71.2",
+        "answer": "요청하신 「광안동에서 연면적이 가장 큰 숙박시설은」에는 지금은 답하지 못했습니다. / 이유: P06 / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+        "sql": "",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:P06",
+        "ms": 74
+      },
+      {
+        "id": "N064",
+        "q": "그 건물 높이는?",
+        "gold": "height_m=71.2; A24=호텔아쿠아펠리스; A5=192-5",
+        "answer": "요청하신 「그 건물 높이는」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+        "sql": "",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:plan generation failed",
+        "ms": 941
+      },
+      {
+        "id": "N065",
+        "q": "남구에서 건물면적이 가장 큰 공동주택은?",
+        "gold": "A24=GS하이츠자이; A4=부산광역시 남구 용호동; A5=197; A12=30,636.6549; A14=103,795.1908",
+        "answer": "요청하신 「남구에서 건물면적이 가장 큰 공동주택은」에는 지금은 답하지 못했습니다. / 이유: P06 / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+        "sql": "",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:P06",
+        "ms": 4
+      },
+      {
+        "id": "N066",
+        "q": "지번 알려줘",
+        "gold": "lot=197; A24=GS하이츠자이; A4=부산광역시 남구 용호동",
+        "answer": "질문하신 속성에 대한 설명입니다. / [GIS건물통합정보_부산광역시 / `AL_D010_26_20250704`] / - `A5` → 지번 (text) /   예시: 16-26 / [용도별건물공간정보_부산광역시 금정구 / `AL_D198_26410_20250115`] / - `A7` → 지번 (text) /   예시: 210-664 (코드표: NaN) / [용도별건물공간정보_부산광역시 동래구 / `AL_D198_26260_...",
+        "sql": "",
+        "route": "meta_column_display",
+        "reason": "name-missing GS하이츠자이",
+        "ms": 16
+      },
+      {
+        "id": "N069",
+        "q": "엘시티랑 엘크루 블루오션 중에 더 높은 건물은?",
+        "gold": "name=중동 18290000 숙박시설 (주식회사엘시티피이에프브이); height_m=411.6 | name=엘시티, height_m=339.1 / name=르씨엘시티, height_m=57 / name=엘크루 블루오션, height_m=35.45",
+        "answer": "요청하신 「엘시티랑 엘크루 블루오션 중에 더 높은 건물은」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+        "sql": "",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:plan generation failed",
+        "ms": 646
+      },
+      {
+        "id": "N079",
+        "q": "대연3동과 교차하는 기초구역은 몇 개야?",
+        "gold": "49개",
+        "answer": "요청하신 「대연3동과 교차하는 기초구역은 몇 개야」에는 지금은 답하지 못했습니다. / 이유: - 기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다. / 시도한 SQL: SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / WHERE z.\"SIG_KOR_NM\" LIKE '%대연3동%'; / 질문을 조금 더 구체적으로 ...",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / WHERE z.\"SIG_KOR_NM\" LIKE '%대연3동%';",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:- 기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다.",
+        "ms": 67
+      }
+    ],
+    "PREDICATE_DROPPED": [
+      {
+        "id": "N056",
+        "q": "광안동에서 높이가 20미터를 넘는 건물은?",
+        "gold": "1. A24=광안동에스케이뷰, A4=부산광역시 수영구 광안동, A5=473-2, A16=105.55, A9=공동주택 / 2. A24=광안동에스케이뷰, A4=부산광역시 수영구 광안동, A5=473-2, A16=81.25, A9=공동주택 / 3. A24=협성엠파이어아파트, A4=부산광역시 수영구 광안동, A5=742-2, A16=78.5, A9=공동주택 / 4. A24=없음, A4=부산광역시 수영구 광안동, A5=744-32, A16=77.4, A9=공동주택 / 5. A24=협성엠파이어아파트, A4=부산광역시 수영구 광안동, A5=742-2, A16=75.7, A9=공동주택 / 6. A24=부산광안대우아이빌, A4=부산광역시 수영구 광안동, A5=193-4, A16=74.45, A9=업무시설 / 7. A24=호메르스관광호텔, A4=부산광역시 수영구 광안동, A5=193-1, A16=73.8, A9=숙박시설 / 8. A24=광안동에스케이뷰, A4=부산광역시 수영구 광안동, A5=473-2, A16=73.15, A9=공동주택 / 9. A24=협성엠파이어아파트, A4=부산광역시 수영구 광안동, A5=745-2, A16=72.9, A9=공동주택 / 10. A24=호텔아쿠아펠리스, A4=부산광역시 수영구 광안동, A5=192-5, A16=71.2, A9=숙박시설 / 11. A24=광안동에스케이뷰, A4=부산광역시 수영구 광안동, A5=473-2, A16=70.45, A9=공동주택 / 12. A24=베스테이 센트럴뷰, A4=부산광역시 수영구 광안동, A5=51-1, A16=69.9, A9=업무시설 / 13. A24=광원아파트, A4=부산광역시 수영구 광안동, A5=526-1, A16=68.8, A9=공동주택 / 14. A24=광안역 성원상떼빌, A4=부산광역시 수영구 광안동, A5=143-1, A16=67.91, A9=공동주택 / 15. A24=광안스윗팰리스, A4=부산광역시 수영구 광안동, A5=74-5, A16=67.9, A9=공동주택 외 15건",
+        "answer": "광안동의 조건에 해당하는 건물 100건을 조회했습니다. / 1. 토마스앤레지나 · 부산광역시 수영구 광안동 141-18 · 높이 54.8m / 2. 광안동 116-9 · 부산광역시 수영구 광안동 116-9 · 높이 21.8m / 3. HOTEL CENTRALBAY · 부산광역시 수영구 광안동 197-2 · 높이 59.9m / 4. MK메디컬 · 부산광역시 수영구 광안동 142-19 · 높이 58.1m / 5. 금강 빌딩 ...",
+        "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A16\"::float8 AS \"height_m\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 광안동' OR b.\"A4\" = '광안동') AND b.\"A16\"::float8 > 20 / LIMIT 100;",
+        "route": "semantic_plan_list",
+        "reason": "list-top-missing 광안동에스케이뷰",
+        "ms": 142
+      },
+      {
+        "id": "N070",
+        "q": "부산대학교와 부경대학교 건물 수를 비교해줘",
+        "gold": "pusan_n=95; pukyong_n=89",
+        "answer": "부산광역시의 조건에 해당하는 건물은 3,562건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A9\" = '교육연구시설';",
+        "route": "semantic_plan_count",
+        "reason": "compare-num-missing",
+        "ms": 903
+      },
+      {
+        "id": "N097",
+        "q": "안락동에서 지어진지 30년 넘은 건물은 몇 채야?",
+        "gold": "3,021채",
+        "answer": "안락동의 조건에 해당하는 건물은 3,004건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 안락동' OR b.\"A4\" = '안락동') AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 1995;",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=3021 pred=[3004.0, 3004.0]",
+        "ms": 166
+      },
+      {
+        "id": "Q137",
+        "q": "동구 공동주택 중 지어진지 20년 넘고 지상 10층 이상인 채수",
+        "gold": "19채",
+        "answer": "동구의 조건에 해당하는 건물은 18건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26170%' AND (b.\"A9\" = '공동주택' AND b.\"A26\"::float8 >= 10 AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2005);",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=19 pred=[18.0, 18.0]",
+        "ms": 1515
+      },
+      {
+        "id": "Q158",
+        "q": "강서구 공장·창고를 제외한 건물 중 연면적 5000㎡ 이상인 채수",
+        "gold": "244채",
+        "answer": "강서구의 조건에 해당하는 건물은 23건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26440%' AND ((b.\"A9\" = '창고시설' AND (NOT b.\"A9\" = '공장')) AND b.\"A9\" <> '공장' AND b.\"A9\" = '창고시설' AND b.\"A14\"::float8 >= 5000);",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=244 pred=[23.0, 23.0]",
+        "ms": 69
+      },
+      {
+        "id": "Q177",
+        "q": "금정구 단독주택 중 사용승인 1970~1989년이고 건축면적 60~150㎡인 채수",
+        "gold": "5,872채",
+        "answer": "금정구 단독주택 1989년은 모두 13,218채입니다.",
+        "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D198_26410_20250115\" / WHERE \"A4\" LIKE '%금정구%' AND TRIM(COALESCE(\"A25\"::text, '')) = '단독주택';",
+        "route": "d198_attr_count",
+        "reason": "count-mismatch gold=5872 pred=[1989.0, 13218.0, 13218.0]",
+        "ms": 807
+      },
+      {
+        "id": "Q184",
+        "q": "해운대구 위반건축물이 아니면서 높이 80m 이상인 공동주택 채수",
+        "gold": "73채",
+        "answer": "해운대구의 조건에 해당하는 건물은 70건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26350%' AND (b.\"A9\" = '공동주택' AND b.\"A16\"::float8 >= 80 AND b.\"A20\" <> 'Y');",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=73 pred=[70.0, 70.0]",
+        "ms": 77
+      },
+      {
+        "id": "Q206",
+        "q": "동래구 위반건축물이면서 지어진지 30년 넘은 단독주택 채수",
+        "gold": "151채",
+        "answer": "동래구의 조건에 해당하는 건물은 148건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26260%' AND (b.\"A9\" = '단독주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 1995 AND b.\"A20\" = 'Y');",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=151 pred=[148.0, 148.0]",
+        "ms": 827
+      }
+    ],
+    "FOLLOWUP_CONTEXT_LOST": [
+      {
+        "id": "N064",
+        "q": "그 건물 높이는?",
+        "gold": "height_m=71.2; A24=호텔아쿠아펠리스; A5=192-5",
+        "answer": "요청하신 「그 건물 높이는」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+        "sql": "",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:plan generation failed",
+        "ms": 941
+      },
+      {
+        "id": "Q284",
+        "q": "우동과 교차하는 기초구역 개수와 그 중 면적 최대값",
+        "gold": "n=30; max_ar=6.2449",
+        "answer": "요청하신 「우동과 교차하는 기초구역 개수와 그 중 면적 최대값」에는 지금은 답하지 못했습니다. / 이유: - 기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다. / 시도한 SQL: SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / WHERE z.\"SIG_KOR_NM\" LIKE '%우동%'; / 질문을 조금 더 구...",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / WHERE z.\"SIG_KOR_NM\" LIKE '%우동%';",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:- 기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다.",
+        "ms": 77
+      },
+      {
+        "id": "Q390",
+        "q": "그중 2000년 이후 사용승인만",
+        "gold": "265채",
+        "answer": "조건에 해당하는 건물 100건을 조회했습니다. / 1. 이지 더원 아파트 · 부산광역시 기장군 정관읍 모전리 723 / 2. B,C동 · 부산광역시 기장군 정관읍 예림리 329-4 / 3. 부경대학교 수산과학연구소 · 부산광역시 기장군 일광읍 동백리 256 / 4. 부산광역시 기장군 기장읍 대라리 889 / 5. 부산광역시 기장군 기장읍 대변리 472-6 / 6. 부산광역시 기장군 기장읍 교리 349-8 / 7. 부경대학...",
+        "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000 / LIMIT 100;",
+        "route": "semantic_plan_list",
+        "reason": "count-mismatch gold=265 pred=[100.0, 1.0, 723.0, 2.0, 329.0, -4.0]",
+        "ms": 746
+      },
+      {
+        "id": "Q402",
+        "q": "그중 2000년 이후 사용승인만",
+        "gold": "248채",
+        "answer": "조건에 해당하는 건물 100건을 조회했습니다. / 1. 부산광역시 기장군 기장읍 교리 345-8 / 2. 삼성강건사 · 부산광역시 기장군 정관읍 달산리 1069-2 / 3. 부산광역시 기장군 기장읍 대라리 942 / 4. 부산광역시 기장군 정관읍 모전리 741-8 / 5. 단독주택(장문념) · 부산광역시 기장군 기장읍 동부리 325-3 / 6. 부산광역시 기장군 정관읍 달산리 1264 / 7. 부산광역시 기장군 장안읍 좌...",
+        "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000 / LIMIT 100;",
+        "route": "semantic_plan_list",
+        "reason": "count-mismatch gold=248 pred=[100.0, 1.0, 345.0, -8.0, 2.0, 1069.0]",
+        "ms": 763
+      },
+      {
+        "id": "Q403",
+        "q": "그 건물들 평균 높이",
+        "gold": "n=248; avg_h=70.2789",
+        "answer": "집계 결과입니다. 건수 77,642, 평균 높이 13.9415.",
+        "sql": "SELECT COUNT(*) AS \"n\", /        AVG(b.\"A16\"::float8) AS \"avg_height_m\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000;",
+        "route": "semantic_plan_aggregate",
+        "reason": "scalar-mismatch hits=0 gold=[248.0, 70.2789]",
+        "ms": 1018
+      },
+      {
+        "id": "Q407",
+        "q": "그 건물들 지하층이 있는 것은 몇 채야?",
+        "gold": "14채",
+        "answer": "요청하신 「광안동 숙박시설 목록(연면적 큰 순 15개) 중에서 그 건물들 지하층이 있는 것은 몇 채야」에는 지금은 답하지 못했습니다. / 이유: P06 / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+        "sql": "",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:P06",
+        "ms": 121
+      },
+      {
+        "id": "Q426",
+        "q": "그중 사용승인 2000년 이후만",
+        "gold": "320채",
+        "answer": "금정구의 조건에 해당하는 건물은 380건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D198_26410_20250115\" b / WHERE b.\"A3\" LIKE '26410%' AND ((b.\"A34\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A34\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000 AND b.\"A31\"::float8 >= 10 AND (b.\"A34\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A34\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000);",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=320 pred=[380.0, 380.0]",
+        "ms": 892
+      },
+      {
+        "id": "Q450",
+        "q": "그중 10층 이상만",
+        "gold": "115채",
+        "answer": "영도구의 조건에 해당하는 건물은 114건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26200%' AND (b.\"A26\"::float8 >= 10 AND b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000 AND b.\"A26\"::float8 >= 10);",
+        "route": "semantic_plan_count",
+        "reason": "count-mismatch gold=115 pred=[114.0, 114.0]",
+        "ms": 819
+      }
+    ],
+    "RANGE_BOUND_DROPPED": [
+      {
+        "id": "Q105",
+        "q": "강서구 공장 중 일반철골구조이고 연면적 5000㎡ 이상인 건물명과 연면적",
+        "gold": "1. A24=？⑥?？댄?？？二？怨듭?, A4=부산광역시 강서구 화전동, A5=597-5, A11=일반철골구조, A14=1,094,925 / 2. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=74,540.74 / 3. A24=금성볼트공업(주) 제2공장, A4=부산광역시 강서구 화전동, A5=591-4, A11=일반철골구조, A14=74,445.88 / 4. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=69,736.75 / 5. A24=삼성전기(주), A4=부산광역시 강서구 송정동, A5=1623-2, A11=일반철골구조, A14=69,623.17 / 6. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=51,095.44 / 7. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=39,503.43 / 8. A24=(주)성광벤드, A4=부산광역시 강서구 송정동, A5=1720, A11=일반철골구조, A14=37,014.07 / 9. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=30,053.22 / 10. A24=삼성전기(주), A4=부산광역시 강서구 송정동, A5=1623-2, A11=일반철골구조, A14=27,377.12 / 11. A24=없음, A4=부산광역시 강서구 송정동, A5=1635-2, A11=일반철골구조, A14=27,214.85 / 12. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=27,139.62 / 13. A24=없음, A4=부산광역시 강서구 지사동, A5=1213, A11=일반철골구조, A14=25,814.7 / 14. A24=없음, A4=부산광역시 강서구 송정동, A5=1638-1, A11=일반철골구조, A14=24,231.98 / 15. A24=(주)삼공사 녹산공장, A4=부산광역시 강서구 송정동, A5=1464-2, A11=일반철골구조, A14=23,546.4",
+        "answer": "강서구의 조건에 해당하는 건물 100건을 조회했습니다. / 1. KOC전기 공장 · 부산광역시 강서구 송정동 1495-4 · 연면적 9661.48㎡ / 2. 삼성전기(주) · 부산광역시 강서구 송정동 1623-2 · 연면적 27377.12㎡ / 3. 삼성전기(주) · 부산광역시 강서구 송정동 1623-2 · 연면적 9480.32㎡ / 4. 삼성전기(주) · 부산광역시 강서구 송정동 1623-2 · 연면적 69623.17㎡...",
+        "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A14\"::float8 AS \"gross_floor_area_m2\", /        b.\"A11\" AS \"structure\", /        b.\"A9\" AS \"usage\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26440%' AND (b.\"A9\" = '공장' AND b.\"A11\" ILIKE '%일반철골%' AND b.\"A14\"::float8 >= 5000) / LIMIT 100;",
+        "route": "semantic_plan_list",
+        "reason": "list-top-missing ？⑥?？댄?？？二？怨듭?",
+        "ms": 67
+      },
+      {
+        "id": "Q209",
+        "q": "사하구 지하층이 있는 공장 중 연면적 3000㎡ 이상인 이름·지하층·연면적",
+        "gold": "1. A24=없음, A27=1, A14=55,254.03, A4=부산광역시 사하구 구평동 / 2. A24=없음, A27=1, A14=28,222.45, A4=부산광역시 사하구 신평동 / 3. A24=없음, A27=1, A14=21,944.46, A4=부산광역시 사하구 신평동 / 4. A24=없음, A27=1, A14=20,876.43, A4=부산광역시 사하구 신평동 / 5. A24=대한제강(주)신평공장, A27=1, A14=20,472.75, A4=부산광역시 사하구 신평동 / 6. A24=？쇱?？??(二？？？臾쇰?？쇳?, A27=1, A14=20,254.87, A4=부산광역시 사하구 구평동 / 7. A24=없음, A27=1, A14=18,863.59, A4=부산광역시 사하구 신평동 / 8. A24=없음, A27=1, A14=17,007.45, A4=부산광역시 사하구 신평동 / 9. A24=없음, A27=1, A14=16,776.12, A4=부산광역시 사하구 신평동 / 10. A24=(주)남청, A27=1, A14=16,326.42, A4=부산광역시 사하구 장림동 / 11. A24=CJ제일제당(주) 부산공장, A27=1, A14=15,736.09, A4=부산광역시 사하구 장림동 / 12. A24=없음, A27=1, A14=15,458.94, A4=부산광역시 사하구 신평동 / 13. A24=주식회사유영산업, A27=1, A14=14,684.28, A4=부산광역시 사하구 신평동 / 14. A24=없음, A27=1, A14=13,019.24, A4=부산광역시 사하구 구평동 / 15. A24=없음, A27=2, A14=12,302.19, A4=부산광역시 사하구 장림동",
+        "answer": "사하구의 조건에 해당하는 건물 100건을 조회했습니다. / 1. 청호냉동 · 부산광역시 사하구 신평동 550 · 연면적 10112.35㎡ / 2. 신화기업 · 부산광역시 사하구 장림동 1091-3 · 연면적 4552.87㎡ / 3. 부산광역시 사하구 구평동 117-2 / 4. 부산광역시 사하구 신평동 658-1 / 5. 부산광역시 사하구 다대동 1520-2 / 6. 에이스밀 · 부산광역시 사하구 장림동 1146 · 연면적...",
+        "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A14\"::float8 AS \"gross_floor_area_m2\", /        b.\"A9\" AS \"usage\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26380%' AND (b.\"A9\" = '공장' AND b.\"A14\"::float8 >= 3000 AND b.\"A27\"::float8 > 0) / LIMIT 100;",
+        "route": "semantic_plan_list",
+        "reason": "list-top-missing 대한제강(주)신평공장",
+        "ms": 71
+      },
+      {
+        "id": "Q216",
+        "q": "서구 위반건축물 중 높이 20m 이상인 채수",
+        "gold": "10채",
+        "answer": "서구 위반건축물 중 높이 20m 이상인 채수는 22건입니다.",
+        "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D010_26_20250704\" / WHERE \"A4\" LIKE '%서구%' AND \"A16\" >= 20 AND TRIM(COALESCE(\"A20\"::text, '')) = 'Y';",
+        "route": "d010_attr_count",
+        "reason": "count-mismatch gold=10 pred=[20.0, 22.0, 22.0]",
+        "ms": 889
+      },
+      {
+        "id": "Q308",
+        "q": "금정구 일반건축물대장 중 건폐율 50% 이상 80% 이하인 채수",
+        "gold": "4,536채",
+        "answer": "금정구 건물은 모두 5,698채입니다.",
+        "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D198_26410_20250115\" / WHERE \"A4\" LIKE '%금정구%' AND \"A21\" >= 50 AND TRIM(COALESCE(\"A12\"::text, '')) = '일반건축물대장';",
+        "route": "d198_attr_count",
+        "reason": "count-mismatch gold=4536 pred=[5698.0, 5698.0]",
+        "ms": 769
+      },
+      {
+        "id": "Q311",
+        "q": "동래구 허가일과 사용승인일 연도 차이가 3년 이상인 집합건축물 채수",
+        "gold": "360채",
+        "answer": "동래구 허가일과 사용승인일 연도 차이가 3년 이상인 집합건축물은 19,645채입니다.",
+        "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D010_26_20250704\" / WHERE \"A4\" LIKE '%동래구%' AND (\"A13\"::text ~ '^[0-9]{4}');",
+        "route": "d010_attr_count",
+        "reason": "count-mismatch gold=360 pred=[3.0, 19645.0, 19645.0]",
+        "ms": 4434
+      },
+      {
+        "id": "Q317",
+        "q": "동래구 학원(세부용도) 중 건물대지면적 200㎡ 이상인 채수",
+        "gold": "153채",
+        "answer": "동래구 건물 연면적 200㎡ 이상은 모두 154채입니다.",
+        "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D198_26260_20250115\" / WHERE \"A4\" LIKE '%동래구%' AND \"A17\" >= 200 AND \"A27\" ILIKE '%학원%';",
+        "route": "d198_attr_count",
+        "reason": "count-mismatch gold=153 pred=[200.0, 154.0, 154.0]",
+        "ms": 11
+      },
+      {
+        "id": "Q330",
+        "q": "금정구 허가일과 사용승인일의 연도 차이가 5년 이상인 건물 수",
+        "gold": "278채",
+        "answer": "금정구 허가일과 사용승인일의 연도 차이가 5년 이상인 건물 수는 23,435건입니다.",
+        "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D010_26_20250704\" / WHERE \"A4\" LIKE '%금정구%' AND (\"A13\"::text ~ '^[0-9]{4}');",
+        "route": "d010_attr_count",
+        "reason": "count-mismatch gold=278 pred=[5.0, 23435.0, 23435.0]",
+        "ms": 1883
+      },
+      {
+        "id": "Q358",
+        "q": "금정구 단독주택 경과 40년 이상 vs 10년 미만 채수",
+        "gold": "old40=6,495; young10=327",
+        "answer": "금정구의 조건에 해당하는 건물은 6,367건입니다.",
+        "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26410%' AND (b.\"A9\" = '단독주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 1985);",
+        "route": "semantic_plan_count",
+        "reason": "compare-num-missing",
+        "ms": 799
+      }
+    ],
+    "BOOLEAN_NOT_DROPPED": [
+      {
+        "id": "Q181",
+        "q": "기장군 공동주택을 제외하고 높이 25m 이상인 건물 용도 상위 8개",
+        "gold": "1. usage=제1종근린생활시설, n=43 / 2. usage=업무시설, n=22 / 3. usage=숙박시설, n=20 / 4. usage=제2종근린생활시설, n=18 / 5. usage=의료시설, n=5 / 6. usage=공장, n=5 / 7. usage=자동차관련시설, n=5 / 8. usage=운동시설, n=4",
+        "answer": "요청하신 「기장군 공동주택을 제외하고 높이 25m 이상인 건물 용도 상위 8개」에는 지금은 답하지 못했습니다. / 이유: missing_output / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+        "sql": "",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:missing_output",
+        "ms": 4
+      }
+    ],
+    "SPATIAL_TARGET_DROPPED": [
+      {
+        "id": "Q251",
+        "q": "사상구 산업단지 안 공장 비율(단지내 공장 / 사상구 공장)",
+        "gold": "pct=42.1833",
+        "answer": "사상구의 집계 결과입니다. ratio_pct 40.6885.",
+        "sql": "SELECT 100 * COUNT(*) FILTER (WHERE b.\"A9\" = '공장')::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE EXISTS (SELECT 1 FROM \"AL_D060_00_20250804\" ind WHERE ST_Intersects(b.geometry, ind.geometry)) AND b.\"A3\" LIKE '26530%';",
+        "route": "semantic_plan_aggregate",
+        "reason": "scalar-mismatch hits=0 gold=[42.1833]",
+        "ms": 1086
+      }
+    ],
+    "BOOLEAN_OR_DROPPED": [
+      {
+        "id": "Q327",
+        "q": "동래구 명륜동 오피스텔 또는 사무소(세부용도) 채수",
+        "gold": "81채",
+        "answer": "요청하신 「동래구 명륜동 오피스텔 또는 사무소(세부용도) 채수」에는 지금은 답하지 못했습니다. / 이유: slot_below_threshold:fields / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+        "sql": "",
+        "route": "semantic_plan_fallback",
+        "reason": "engine-fail:slot_below_threshold:fields",
+        "ms": 1153
+      }
+    ]
+  },
+  "failed_items": [
+    {
+      "id": "N016",
+      "cat": "메타",
+      "kind": "scalar",
+      "q": "법정동명과 행정동명의 차이가 뭐야?",
+      "gold": "diff=법정동명(A4)은 토지·건물 대장 주소, 행정동명(ADM_NM)은 센서스 행정구역 경계",
+      "answer": "요청하신 「법정동명과 행정동명의 차이가 뭐야」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:plan generation failed",
+      "route": "semantic_plan_fallback",
+      "ms": 849,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N029",
+      "cat": "건물명",
+      "kind": "list",
+      "q": "엘시티의 높이와 층수는?",
+      "gold": "1. A24=중동 18290000 숙박시설 (주식회사엘시티피이에프브이), A25=랜드마크타워동, A4=부산광역시 해운대구 중동, A5=1829, A16=411.6, A26=101, A14=249,374.4587 / 2. A24=엘시티, A25=타워에이동, A4=부산광역시 해운대구 중동, A5=1829, A16=339.1, A26=85, A14=145,181.8812 / 3. A24=엘시티, A25=타워비동, A4=부산광역시 해운대구 중동, A5=1829, A16=333.1, A26=85, A14=145,181.8812 / 4. A24=르씨엘시티, A25=없음, A4=부산광역시 동래구 온천동, A5=1248-8, A16=57, A26=20, A14=4,220.66 / 5. A24=엘시티, A25=포디움동, A4=부산광역시 해운대구 중동, A5=1829, A16=43, A26=6, A14=121,396.5881",
+      "answer": "요청하신 「엘시티의 높이와 층수는」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:plan generation failed",
+      "route": "semantic_plan_fallback",
+      "ms": 4,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N056",
+      "cat": "임계",
+      "kind": "list",
+      "q": "광안동에서 높이가 20미터를 넘는 건물은?",
+      "gold": "1. A24=광안동에스케이뷰, A4=부산광역시 수영구 광안동, A5=473-2, A16=105.55, A9=공동주택 / 2. A24=광안동에스케이뷰, A4=부산광역시 수영구 광안동, A5=473-2, A16=81.25, A9=공동주택 / 3. A24=협성엠파이어아파트, A4=부산광역시 수영구 광안동, A5=742-2, A16=78.5, A9=공동주택 / 4. A24=없음, A4=부산광역시 수영구 광안동, A5=744-32, A16=77.4, A9=공동주택 / 5. A24=협성엠파이어아파트, A4=부산광역시 수영구 광안동, A5=742-2, A16=75.7, A9=공동주택 / 6. A24=부산광안대우아이빌, A4=부산광역시 수영구 광안동, A5=193-4, A16=74.45, A9=업무시설 / 7. A24=호메르스관광호텔, A4=부산광역시 수영구 광안동, A5=193-1, A16=73.8, A9=숙박시설 / 8. A24=광안동에스케이뷰, A4=부산광역시 수영구 광안동, A5=473-2, A16=73.15, A9=공동주택 / 9. A24=협성엠파이어아파트, A4=부산광역시 수영구 광안동, A5=745-2, A16=72.9, A9=공동주택 / 10. A24=호텔아쿠아펠리스, A4=부산광역시 수영구 광안동, A5=192-5, A16=71.2, A9=숙박시설 / 11. A24=광안동에스케이뷰, A4=부산광역시 수영구 광안동, A5=473-2, A16=70.45, A9=공동주택 / 12. A24=베스테이 센트럴뷰, A4=부산광역시 수영구 광안동, A5=51-1, A16=69.9, A9=업무시설 / 13. A24=광원아파트, A4=부산광역시 수영구 광안동, A5=526-1, A16=68.8, A9=공동주택 / 14. A24=광안역 성원상떼빌, A4=부산광역시 수영구 광안동, A5=143-1, A16=67.91, A9=공동주택 / 15. A24=광안스윗팰리스, A4=부산광역시 수영구 광안동, A5=74-5, A16=67.9, A9=공동주택 외 15건",
+      "answer": "광안동의 조건에 해당하는 건물 100건을 조회했습니다. / 1. 토마스앤레지나 · 부산광역시 수영구 광안동 141-18 · 높이 54.8m / 2. 광안동 116-9 · 부산광역시 수영구 광안동 116-9 · 높이 21.8m / 3. HOTEL CENTRALBAY · 부산광역시 수영구 광안동 197-2 · 높이 59.9m / 4. MK메디컬 · 부산광역시 수영구 광안동 142-19 · 높이 58.1m / 5. 금강 빌딩 ...",
+      "reason": "list-top-missing 광안동에스케이뷰",
+      "route": "semantic_plan_list",
+      "ms": 142,
+      "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A16\"::float8 AS \"height_m\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 광안동' OR b.\"A4\" = '광안동') AND b.\"A16\"::float8 > 20 / LIMIT 100;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "N063",
+      "cat": "순위",
+      "kind": "scalar",
+      "q": "광안동에서 연면적이 가장 큰 숙박시설은?",
+      "gold": "A24=호텔아쿠아펠리스; A4=부산광역시 수영구 광안동; A5=192-5; A14=18,228.2; A16=71.2",
+      "answer": "요청하신 「광안동에서 연면적이 가장 큰 숙박시설은」에는 지금은 답하지 못했습니다. / 이유: P06 / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:P06",
+      "route": "semantic_plan_fallback",
+      "ms": 74,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N064",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "그 건물 높이는?",
+      "gold": "height_m=71.2; A24=호텔아쿠아펠리스; A5=192-5",
+      "answer": "요청하신 「그 건물 높이는」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:plan generation failed",
+      "route": "semantic_plan_fallback",
+      "ms": 941,
+      "sql": "",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST",
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N065",
+      "cat": "순위",
+      "kind": "scalar",
+      "q": "남구에서 건물면적이 가장 큰 공동주택은?",
+      "gold": "A24=GS하이츠자이; A4=부산광역시 남구 용호동; A5=197; A12=30,636.6549; A14=103,795.1908",
+      "answer": "요청하신 「남구에서 건물면적이 가장 큰 공동주택은」에는 지금은 답하지 못했습니다. / 이유: P06 / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:P06",
+      "route": "semantic_plan_fallback",
+      "ms": 4,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N066",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "지번 알려줘",
+      "gold": "lot=197; A24=GS하이츠자이; A4=부산광역시 남구 용호동",
+      "answer": "질문하신 속성에 대한 설명입니다. / [GIS건물통합정보_부산광역시 / `AL_D010_26_20250704`] / - `A5` → 지번 (text) /   예시: 16-26 / [용도별건물공간정보_부산광역시 금정구 / `AL_D198_26410_20250115`] / - `A7` → 지번 (text) /   예시: 210-664 (코드표: NaN) / [용도별건물공간정보_부산광역시 동래구 / `AL_D198_26260_...",
+      "reason": "name-missing GS하이츠자이",
+      "route": "meta_column_display",
+      "ms": 16,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N069",
+      "cat": "비교",
+      "kind": "compare",
+      "q": "엘시티랑 엘크루 블루오션 중에 더 높은 건물은?",
+      "gold": "name=중동 18290000 숙박시설 (주식회사엘시티피이에프브이); height_m=411.6 | name=엘시티, height_m=339.1 / name=르씨엘시티, height_m=57 / name=엘크루 블루오션, height_m=35.45",
+      "answer": "요청하신 「엘시티랑 엘크루 블루오션 중에 더 높은 건물은」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:plan generation failed",
+      "route": "semantic_plan_fallback",
+      "ms": 646,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N070",
+      "cat": "비교",
+      "kind": "compare",
+      "q": "부산대학교와 부경대학교 건물 수를 비교해줘",
+      "gold": "pusan_n=95; pukyong_n=89",
+      "answer": "부산광역시의 조건에 해당하는 건물은 3,562건입니다.",
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_count",
+      "ms": 903,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A9\" = '교육연구시설';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "N079",
+      "cat": "공간",
+      "kind": "count",
+      "q": "대연3동과 교차하는 기초구역은 몇 개야?",
+      "gold": "49개",
+      "answer": "요청하신 「대연3동과 교차하는 기초구역은 몇 개야」에는 지금은 답하지 못했습니다. / 이유: - 기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다. / 시도한 SQL: SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / WHERE z.\"SIG_KOR_NM\" LIKE '%대연3동%'; / 질문을 조금 더 구체적으로 ...",
+      "reason": "engine-fail:- 기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다.",
+      "route": "semantic_plan_fallback",
+      "ms": 67,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / WHERE z.\"SIG_KOR_NM\" LIKE '%대연3동%';",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N082",
+      "cat": "공간",
+      "kind": "count",
+      "q": "좌표(129.12, 35.15)에서 200미터 이내 건물 건수",
+      "gold": "0채",
+      "answer": "요청하신 「좌표(129.12, 35.15)에서 200미터 이내 건물 건수」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:plan generation failed",
+      "route": "semantic_plan_fallback",
+      "ms": 4,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N087",
+      "cat": "산업단지",
+      "kind": "list",
+      "q": "강서구 산업단지 이름을 알려줘",
+      "gold": "1. name=강서보고일반산업단지 / 2. name=강서해성일반산업단지 / 3. name=명지,녹산국가산업단지 / 4. name=명지국가산업단지 / 5. name=부산과학지방산업단지 / 6. name=부산신항 국제산업물류도시(1단계)일반산업단지 / 7. name=부산신항배후 국제물류도시(1단계)일반산업단지 / 8. name=성우일반산업단지 / 9. name=신호지방산업단지 / 10. name=정주일반산업단지 / 11. name=지사2일반산업단지 / 12. name=지사글로벌일반산업단지",
+      "answer": "「산업단지_전국」(`AL_D060_00_20250804`)는 분류상 토지 데이터입니다. / 설명: 산업단지, 전국, 2025년 08월 04일 자료 갱신 / 주요 속성은 다음과 같습니다. / - `A0` → 원천도형ID (integer) — 예시: 1123 / - `A1` → 도면번호 (text) — 예시: 32500002611020170021UDX2000009164 / - `A2` → 주제도명 (text) — 예시: 건축...",
+      "reason": "list-top-missing 강서보고일반산업단지",
+      "route": "meta_table",
+      "ms": 3,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N093",
+      "cat": "연도",
+      "kind": "group",
+      "q": "금정구 각년도별 단독주택 건립 수는?",
+      "gold": "1. yyyy=0976, n=1 / 2. yyyy=0989, n=1 / 3. yyyy=1683, n=1 / 4. yyyy=1915, n=1 / 5. yyyy=1931, n=1 / 6. yyyy=1941, n=1 / 7. yyyy=1949, n=1 / 8. yyyy=1967, n=1 / 9. yyyy=1968, n=17 / 10. yyyy=1969, n=38 / 11. yyyy=1970, n=44 / 12. yyyy=1971, n=60 / 13. yyyy=1972, n=80 / 14. yyyy=1973, n=264 / 15. yyyy=1974, n=363 외 50건",
+      "answer": "요청하신 「금정구 각년도별 단독주택 건립 수는」에는 지금은 답하지 못했습니다. / 이유: missing_aggregation / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:missing_aggregation",
+      "route": "semantic_plan_fallback",
+      "ms": 56,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "N097",
+      "cat": "연도",
+      "kind": "count",
+      "q": "안락동에서 지어진지 30년 넘은 건물은 몇 채야?",
+      "gold": "3,021채",
+      "answer": "안락동의 조건에 해당하는 건물은 3,004건입니다.",
+      "reason": "count-mismatch gold=3021 pred=[3004.0, 3004.0]",
+      "route": "semantic_plan_count",
+      "ms": 166,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 안락동' OR b.\"A4\" = '안락동') AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 1995;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q105",
+      "cat": "복합AND",
+      "kind": "list",
+      "q": "강서구 공장 중 일반철골구조이고 연면적 5000㎡ 이상인 건물명과 연면적",
+      "gold": "1. A24=？⑥?？댄?？？二？怨듭?, A4=부산광역시 강서구 화전동, A5=597-5, A11=일반철골구조, A14=1,094,925 / 2. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=74,540.74 / 3. A24=금성볼트공업(주) 제2공장, A4=부산광역시 강서구 화전동, A5=591-4, A11=일반철골구조, A14=74,445.88 / 4. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=69,736.75 / 5. A24=삼성전기(주), A4=부산광역시 강서구 송정동, A5=1623-2, A11=일반철골구조, A14=69,623.17 / 6. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=51,095.44 / 7. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=39,503.43 / 8. A24=(주)성광벤드, A4=부산광역시 강서구 송정동, A5=1720, A11=일반철골구조, A14=37,014.07 / 9. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=30,053.22 / 10. A24=삼성전기(주), A4=부산광역시 강서구 송정동, A5=1623-2, A11=일반철골구조, A14=27,377.12 / 11. A24=없음, A4=부산광역시 강서구 송정동, A5=1635-2, A11=일반철골구조, A14=27,214.85 / 12. A24=르노코리아자동차(주), A4=부산광역시 강서구 신호동, A5=185, A11=일반철골구조, A14=27,139.62 / 13. A24=없음, A4=부산광역시 강서구 지사동, A5=1213, A11=일반철골구조, A14=25,814.7 / 14. A24=없음, A4=부산광역시 강서구 송정동, A5=1638-1, A11=일반철골구조, A14=24,231.98 / 15. A24=(주)삼공사 녹산공장, A4=부산광역시 강서구 송정동, A5=1464-2, A11=일반철골구조, A14=23,546.4",
+      "answer": "강서구의 조건에 해당하는 건물 100건을 조회했습니다. / 1. KOC전기 공장 · 부산광역시 강서구 송정동 1495-4 · 연면적 9661.48㎡ / 2. 삼성전기(주) · 부산광역시 강서구 송정동 1623-2 · 연면적 27377.12㎡ / 3. 삼성전기(주) · 부산광역시 강서구 송정동 1623-2 · 연면적 9480.32㎡ / 4. 삼성전기(주) · 부산광역시 강서구 송정동 1623-2 · 연면적 69623.17㎡...",
+      "reason": "list-top-missing ？⑥?？댄?？？二？怨듭?",
+      "route": "semantic_plan_list",
+      "ms": 67,
+      "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A14\"::float8 AS \"gross_floor_area_m2\", /        b.\"A11\" AS \"structure\", /        b.\"A9\" AS \"usage\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26440%' AND (b.\"A9\" = '공장' AND b.\"A11\" ILIKE '%일반철골%' AND b.\"A14\"::float8 >= 5000) / LIMIT 100;",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q137",
+      "cat": "복합AND",
+      "kind": "count",
+      "q": "동구 공동주택 중 지어진지 20년 넘고 지상 10층 이상인 채수",
+      "gold": "19채",
+      "answer": "동구의 조건에 해당하는 건물은 18건입니다.",
+      "reason": "count-mismatch gold=19 pred=[18.0, 18.0]",
+      "route": "semantic_plan_count",
+      "ms": 1515,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26170%' AND (b.\"A9\" = '공동주택' AND b.\"A26\"::float8 >= 10 AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2005);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q158",
+      "cat": "논리NOT",
+      "kind": "count",
+      "q": "강서구 공장·창고를 제외한 건물 중 연면적 5000㎡ 이상인 채수",
+      "gold": "244채",
+      "answer": "강서구의 조건에 해당하는 건물은 23건입니다.",
+      "reason": "count-mismatch gold=244 pred=[23.0, 23.0]",
+      "route": "semantic_plan_count",
+      "ms": 69,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26440%' AND ((b.\"A9\" = '창고시설' AND (NOT b.\"A9\" = '공장')) AND b.\"A9\" <> '공장' AND b.\"A9\" = '창고시설' AND b.\"A14\"::float8 >= 5000);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q177",
+      "cat": "구간BETWEEN",
+      "kind": "count",
+      "q": "금정구 단독주택 중 사용승인 1970~1989년이고 건축면적 60~150㎡인 채수",
+      "gold": "5,872채",
+      "answer": "금정구 단독주택 1989년은 모두 13,218채입니다.",
+      "reason": "count-mismatch gold=5872 pred=[1989.0, 13218.0, 13218.0]",
+      "route": "d198_attr_count",
+      "ms": 807,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D198_26410_20250115\" / WHERE \"A4\" LIKE '%금정구%' AND TRIM(COALESCE(\"A25\"::text, '')) = '단독주택';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q181",
+      "cat": "논리NOT",
+      "kind": "group",
+      "q": "기장군 공동주택을 제외하고 높이 25m 이상인 건물 용도 상위 8개",
+      "gold": "1. usage=제1종근린생활시설, n=43 / 2. usage=업무시설, n=22 / 3. usage=숙박시설, n=20 / 4. usage=제2종근린생활시설, n=18 / 5. usage=의료시설, n=5 / 6. usage=공장, n=5 / 7. usage=자동차관련시설, n=5 / 8. usage=운동시설, n=4",
+      "answer": "요청하신 「기장군 공동주택을 제외하고 높이 25m 이상인 건물 용도 상위 8개」에는 지금은 답하지 못했습니다. / 이유: missing_output / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:missing_output",
+      "route": "semantic_plan_fallback",
+      "ms": 4,
+      "sql": "",
+      "root_causes": [
+        "BOOLEAN_NOT_DROPPED",
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q184",
+      "cat": "논리NOT",
+      "kind": "count",
+      "q": "해운대구 위반건축물이 아니면서 높이 80m 이상인 공동주택 채수",
+      "gold": "73채",
+      "answer": "해운대구의 조건에 해당하는 건물은 70건입니다.",
+      "reason": "count-mismatch gold=73 pred=[70.0, 70.0]",
+      "route": "semantic_plan_count",
+      "ms": 77,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26350%' AND (b.\"A9\" = '공동주택' AND b.\"A16\"::float8 >= 80 AND b.\"A20\" <> 'Y');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q200",
+      "cat": "미사용속성",
+      "kind": "list",
+      "q": "해운대구 용적율 상위 10개 공동주택의 이름·용적율·높이",
+      "gold": "1. A24=마린시티두산위브포세이돈, A4=부산광역시 해운대구 우동, A18=989.25, A16=162.58, A14=129,393.97 / 2. A24=해운대 경보이리스오션, A4=부산광역시 해운대구 중동, A18=977.47, A16=71.7, A14=23,328.42 / 3. A24=마린시티자이, A4=부산광역시 해운대구 우동, A18=953.79, A16=156.45, A14=48,627.2614 / 4. A24=현대아쿠아팰리스동백섬, A4=부산광역시 해운대구 우동, A18=935.71, A16=63.3, A14=14,205.42 / 5. A24=해운대 한솔 솔파크, A4=부산광역시 해운대구 우동, A18=916.03, A16=96.6, A14=42,892.436 / 6. A24=현대아파트, A4=부산광역시 해운대구 우동, A18=912.09, A16=52.3, A14=11,179.41 / 7. A24=해운대 비치베르빌, A4=부산광역시 해운대구 중동, A18=907.94, A16=99.15, A14=41,150.786 / 8. A24=현대 아쿠아팰리스 해운대, A4=부산광역시 해운대구 중동, A18=874.45, A16=95.7, A14=28,119.22 / 9. A24=아크로뷰, A4=부산광역시 해운대구 중동, A18=816.44, A16=56.02, A14=10,673.41 / 10. A24=삼영일리아, A4=부산광역시 해운대구 우동, A18=801.68, A16=46.7, A14=5,410.21",
+      "answer": "요청하신 「해운대구 용적율 상위 10개 공동주택의 이름·용적율·높이」에는 지금은 답하지 못했습니다. / 이유: missing_output / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:missing_output",
+      "route": "semantic_plan_fallback",
+      "ms": 29,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q201",
+      "cat": "미사용속성",
+      "kind": "list",
+      "q": "수영구 건폐율 상위 8개 숙박시설의 이름·건폐율·연면적",
+      "gold": "1. A24=없음, A4=부산광역시 수영구 광안동, A17=90.72, A14=585.92 / 2. A24=없음, A4=부산광역시 수영구 민락동, A17=83.1, A14=474.01 / 3. A24=없음, A4=부산광역시 수영구 광안동, A17=82.92, A14=1,216.99 / 4. A24=없음, A4=부산광역시 수영구 광안동, A17=79.86, A14=683.13 / 5. A24=호텔아쿠아펠리스, A4=부산광역시 수영구 광안동, A17=78.54, A14=18,228.2 / 6. A24=메종 드 센텀, A4=부산광역시 수영구 광안동, A17=77.86, A14=1,281.74 / 7. A24=골든벨모텔, A4=부산광역시 수영구 남천동, A17=77.09, A14=1,042.47 / 8. A24=호메르스관광호텔, A4=부산광역시 수영구 광안동, A17=76.59, A14=16,992.61",
+      "answer": "요청하신 「수영구 건폐율 상위 8개 숙박시설의 이름·건폐율·연면적」에는 지금은 답하지 못했습니다. / 이유: missing_output / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:missing_output",
+      "route": "semantic_plan_fallback",
+      "ms": 22,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q206",
+      "cat": "미사용속성",
+      "kind": "count",
+      "q": "동래구 위반건축물이면서 지어진지 30년 넘은 단독주택 채수",
+      "gold": "151채",
+      "answer": "동래구의 조건에 해당하는 건물은 148건입니다.",
+      "reason": "count-mismatch gold=151 pred=[148.0, 148.0]",
+      "route": "semantic_plan_count",
+      "ms": 827,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26260%' AND (b.\"A9\" = '단독주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 1995 AND b.\"A20\" = 'Y');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q209",
+      "cat": "미사용속성",
+      "kind": "list",
+      "q": "사하구 지하층이 있는 공장 중 연면적 3000㎡ 이상인 이름·지하층·연면적",
+      "gold": "1. A24=없음, A27=1, A14=55,254.03, A4=부산광역시 사하구 구평동 / 2. A24=없음, A27=1, A14=28,222.45, A4=부산광역시 사하구 신평동 / 3. A24=없음, A27=1, A14=21,944.46, A4=부산광역시 사하구 신평동 / 4. A24=없음, A27=1, A14=20,876.43, A4=부산광역시 사하구 신평동 / 5. A24=대한제강(주)신평공장, A27=1, A14=20,472.75, A4=부산광역시 사하구 신평동 / 6. A24=？쇱?？??(二？？？臾쇰?？쇳?, A27=1, A14=20,254.87, A4=부산광역시 사하구 구평동 / 7. A24=없음, A27=1, A14=18,863.59, A4=부산광역시 사하구 신평동 / 8. A24=없음, A27=1, A14=17,007.45, A4=부산광역시 사하구 신평동 / 9. A24=없음, A27=1, A14=16,776.12, A4=부산광역시 사하구 신평동 / 10. A24=(주)남청, A27=1, A14=16,326.42, A4=부산광역시 사하구 장림동 / 11. A24=CJ제일제당(주) 부산공장, A27=1, A14=15,736.09, A4=부산광역시 사하구 장림동 / 12. A24=없음, A27=1, A14=15,458.94, A4=부산광역시 사하구 신평동 / 13. A24=주식회사유영산업, A27=1, A14=14,684.28, A4=부산광역시 사하구 신평동 / 14. A24=없음, A27=1, A14=13,019.24, A4=부산광역시 사하구 구평동 / 15. A24=없음, A27=2, A14=12,302.19, A4=부산광역시 사하구 장림동",
+      "answer": "사하구의 조건에 해당하는 건물 100건을 조회했습니다. / 1. 청호냉동 · 부산광역시 사하구 신평동 550 · 연면적 10112.35㎡ / 2. 신화기업 · 부산광역시 사하구 장림동 1091-3 · 연면적 4552.87㎡ / 3. 부산광역시 사하구 구평동 117-2 / 4. 부산광역시 사하구 신평동 658-1 / 5. 부산광역시 사하구 다대동 1520-2 / 6. 에이스밀 · 부산광역시 사하구 장림동 1146 · 연면적...",
+      "reason": "list-top-missing 대한제강(주)신평공장",
+      "route": "semantic_plan_list",
+      "ms": 71,
+      "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A14\"::float8 AS \"gross_floor_area_m2\", /        b.\"A9\" AS \"usage\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26380%' AND (b.\"A9\" = '공장' AND b.\"A14\"::float8 >= 3000 AND b.\"A27\"::float8 > 0) / LIMIT 100;",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q214",
+      "cat": "미사용속성",
+      "kind": "list",
+      "q": "부산진구 용적율 400% 초과 건물 중 업무시설인 이름과 용적율",
+      "gold": "1. A24=서면베르빌, A18=1,587.5, A16=88.15, A4=부산광역시 부산진구 부전동 / 2. A24=다인 로얄팰리스, A18=1,357.1, A16=98.35, A4=부산광역시 부산진구 범천동 / 3. A24=부산 범일 로얄팰리스 2차, A18=1,329.9073, A16=95.8, A4=부산광역시 부산진구 범천동 / 4. A24=힐탑스타, A18=1,314.39, A16=79.4, A4=부산광역시 부산진구 당감동 / 5. A24=KH마이우스, A18=1,199.7, A16=64.2, A4=부산광역시 부산진구 부전동 / 6. A24=서면아크로, A18=1,193.56, A16=55.1, A4=부산광역시 부산진구 부전동 / 7. A24=삼정 그린코아 더 시티, A18=1,163.77, A16=77.45, A4=부산광역시 부산진구 부전동 / 8. A24=서면동일스위트원룸오피스텔, A18=1,159.92, A16=84, A4=부산광역시 부산진구 범천동 / 9. A24=디알에코시티, A18=1,156.81, A16=79.65, A4=부산광역시 부산진구 부전동 / 10. A24=부전동보성오페라, A18=1,153.98, A16=59.2, A4=부산광역시 부산진구 부전동 / 11. A24=유성넥스빌, A18=1,139.78, A16=62, A4=부산광역시 부산진구 전포동 / 12. A24=시청역 롯데골드로즈, A18=1,138.48, A16=90.1, A4=부산광역시 부산진구 양정동 / 13. A24=없음, A18=1,128.7, A16=56.5, A4=부산광역시 부산진구 범천동 / 14. A24=엘 프리메로, A18=1,098.85, A16=62.7, A4=부산광역시 부산진구 전포동 / 15. A24=큐브빌딩, A18=1,077.69, A16=74.65, A4=부산광역시 부산진구 부전동",
+      "answer": "요청하신 「부산진구 용적율 400% 초과 건물 중 업무시설인 이름과 용적율」에는 지금은 답하지 못했습니다. / 이유: missing_output / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:missing_output",
+      "route": "semantic_plan_fallback",
+      "ms": 6,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q215",
+      "cat": "미사용속성",
+      "kind": "count",
+      "q": "강서구 건폐율 10% 미만이면서 연면적 3000㎡ 이상인 공장 채수",
+      "gold": "9채",
+      "answer": "강서구의 조건에 해당하는 건물은 182건입니다.",
+      "reason": "count-mismatch gold=9 pred=[182.0, 182.0]",
+      "route": "semantic_plan_count",
+      "ms": 84,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26440%' AND (b.\"A9\" = '공장' AND b.\"A14\"::float8 >= 3000 AND b.\"A17\"::float8 < 10);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q216",
+      "cat": "미사용속성",
+      "kind": "count",
+      "q": "서구 위반건축물 중 높이 20m 이상인 채수",
+      "gold": "10채",
+      "answer": "서구 위반건축물 중 높이 20m 이상인 채수는 22건입니다.",
+      "reason": "count-mismatch gold=10 pred=[20.0, 22.0, 22.0]",
+      "route": "d010_attr_count",
+      "ms": 889,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D010_26_20250704\" / WHERE \"A4\" LIKE '%서구%' AND \"A16\" >= 20 AND TRIM(COALESCE(\"A20\"::text, '')) = 'Y';",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q224",
+      "cat": "미사용속성",
+      "kind": "list",
+      "q": "우동 공동주택 중 지하 2층 이상·건폐율 20% 이상·높이 60m 이상인 이름",
+      "gold": "1. A24=마린시티두산위브포세이돈, A27=5, A17=25.62, A16=162.58 / 2. A24=해운대 엑소디움, A27=4, A17=37, A16=158.25 / 3. A24=마린시티자이, A27=6, A17=43.97, A16=156.45 / 4. A24=트럼프월드센텀, A27=3, A17=59.1155, A16=119.6 / 5. A24=해운대 한솔 솔파크, A27=5, A17=59.67, A16=96.6 / 6. A24=현대카멜리아, A27=3, A17=34.75, A16=93.75 / 7. A24=없음, A27=4, A17=46.61, A16=92.5 / 8. A24=센텀엘카사, A27=2, A17=39.45, A16=87 / 9. A24=선프라자, A27=4, A17=49.86, A16=72.4 / 10. A24=현대아쿠아팰리스동백섬, A27=6, A17=68.74, A16=63.3",
+      "answer": "요청하신 「우동 공동주택 중 지하 2층 이상·건폐율 20% 이상·높이 60m 이상인 이름」에는 지금은 답하지 못했습니다. / 이유: missing_output / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:missing_output",
+      "route": "semantic_plan_fallback",
+      "ms": 89,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q225",
+      "cat": "미사용속성",
+      "kind": "count",
+      "q": "기장군 농수산 성격의 동식물관련시설 중 산지인 채수",
+      "gold": "85채",
+      "answer": "기장군의 조건에 해당하는 건물은 0건입니다.",
+      "reason": "count-mismatch gold=85 pred=[0.0, 0.0]",
+      "route": "semantic_plan_count",
+      "ms": 1349,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26710%' AND (b.\"A9\" = '동식물관련시설' AND (b.\"A6\"::text = '2' OR TRIM(COALESCE(b.\"A7\"::text, '')) = '산'));",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q236",
+      "cat": "집계비율",
+      "kind": "group",
+      "q": "해운대구 구별이 아니라 법정동별 공동주택 수 상위 8동",
+      "gold": "1. dong=부산광역시 해운대구 반여동, n=1,066 / 2. dong=부산광역시 해운대구 재송동, n=547 / 3. dong=부산광역시 해운대구 좌동, n=482 / 4. dong=부산광역시 해운대구 중동, n=456 / 5. dong=부산광역시 해운대구 반송동, n=426 / 6. dong=부산광역시 해운대구 우동, n=316 / 7. dong=부산광역시 해운대구 송정동, n=131",
+      "answer": "해운대구의 집계 결과입니다. sigungu_name 해운대구, 건수 3,424.",
+      "reason": "group-mismatch",
+      "route": "semantic_plan_aggregate",
+      "ms": 747,
+      "sql": "SELECT (CASE WHEN b.\"A3\" LIKE '26110%' THEN '중구' WHEN b.\"A3\" LIKE '26140%' THEN '서구' WHEN b.\"A3\" LIKE '26170%' THEN '동구' WHEN b.\"A3\" LIKE '26200%' THEN '영도구' WHEN b.\"A3\" LIKE '26230%' THEN '부산진구' WHEN b.\"A3\" LIKE '26260%' THEN '동래구' WHEN b.\"A3\" LIKE '26290%' THEN '남구' WHEN b.\"A3\" LIKE '26320%' THEN '북구' WHEN b.\"A3\" LIKE '26350%' THEN '해운대구' WHEN b.\"A3\" LIKE '26380%' THEN '사하구' WHEN b.\"A3\" LIKE '26410%' THEN '금정구' WHEN b.\"A3\" LIKE '26440%' THEN '강서구' WHEN b.\"A3\" LIKE '26470%' THEN '연제구' WHEN b.\"A3\" LIKE '26500%' THEN '수영구' WHEN b.\"A3\" LIKE '26530%' THEN '사상구' WHEN b.\"A3\" LIKE '26710%' THEN '기장군' ELSE NULL END) AS \"sigungu_name\", /        COUNT(*) AS \"n\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26350%' AND b.\"A9\" = '공동주택' / GROUP BY (CASE WHEN b.\"A3\" LIKE '26110%' THEN '중구' WHE...",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q243",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "중구 건물 중 높이 있는 건물의 평균·표준편차 높이",
+      "gold": "n=3,081; avg_h=13.8696; sd_h=9.8622",
+      "answer": "중구의 집계 결과입니다. 평균 높이 5.5195, stddev_height_m 9.2084.",
+      "reason": "scalar-mismatch hits=0 gold=[3081.0, 13.8696, 9.8622]",
+      "route": "semantic_plan_aggregate",
+      "ms": 874,
+      "sql": "SELECT AVG(b.\"A16\"::float8) AS \"avg_height_m\", /        STDDEV_POP(b.\"A16\"::float8) AS \"stddev_height_m\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26110%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q245",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "동구 용도 종류 수(distinct A9)와 가장 많은 용도 건수",
+      "gold": "n_usage=27; max_usage_n=9,360",
+      "answer": "요청하신 「동구 용도 종류 수(distinct A9)와 가장 많은 용도 건수」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:plan generation failed",
+      "route": "semantic_plan_fallback",
+      "ms": 3,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q251",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "사상구 산업단지 안 공장 비율(단지내 공장 / 사상구 공장)",
+      "gold": "pct=42.1833",
+      "answer": "사상구의 집계 결과입니다. ratio_pct 40.6885.",
+      "reason": "scalar-mismatch hits=0 gold=[42.1833]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1086,
+      "sql": "SELECT 100 * COUNT(*) FILTER (WHERE b.\"A9\" = '공장')::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE EXISTS (SELECT 1 FROM \"AL_D060_00_20250804\" ind WHERE ST_Intersects(b.geometry, ind.geometry)) AND b.\"A3\" LIKE '26530%';",
+      "root_causes": [
+        "SPATIAL_TARGET_DROPPED"
+      ]
+    },
+    {
+      "id": "Q252",
+      "cat": "집계비율",
+      "kind": "group",
+      "q": "남구 숙박시설이 있는 법정동별 숙박시설 채수",
+      "gold": "1. dong=부산광역시 남구 대연동, n=28 / 2. dong=부산광역시 남구 문현동, n=19 / 3. dong=부산광역시 남구 용호동, n=10 / 4. dong=부산광역시 남구 감만동, n=4 / 5. dong=부산광역시 남구 용당동, n=4 / 6. dong=부산광역시 남구 우암동, n=2",
+      "answer": "요청하신 「남구 숙박시설이 있는 법정동별 숙박시설 채수」에는 지금은 답하지 못했습니다. / 이유: missing_group / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:missing_group",
+      "route": "semantic_plan_fallback",
+      "ms": 870,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q256",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "사하구 공장 연면적 상위 10% 경계값(90백분위)",
+      "gold": "p90_gfa=2,741.139; n=2,549",
+      "answer": "사하구의 집계 결과입니다. 평균 연면적 1210.7456, pctl 2741.139.",
+      "reason": "scalar-mismatch hits=1 gold=[90.0, 2741.139, 2549.0]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1195,
+      "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\", /        PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY b.\"A14\"::float8) AS \"pctl\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26380%' AND b.\"A9\" = '공장';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q257",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "해운대구 아파트 중 높이 결측 비율 %",
+      "gold": "pct_null_h=0",
+      "answer": "해운대구의 집계 결과입니다. ratio_pct 100.",
+      "reason": "scalar-mismatch hits=0 gold=[0.0]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1014,
+      "sql": "SELECT 100 * COUNT(*) FILTER (WHERE b.\"A9\" = '공동주택')::float8 / NULLIF(COUNT(*) FILTER (WHERE b.\"A9\" = '공동주택'), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26350%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q259",
+      "cat": "집계비율",
+      "kind": "group",
+      "q": "기장군 법정동별 공장 수 상위 6",
+      "gold": "1. dong=부산광역시 기장군 정관읍 달산리, n=367 / 2. dong=부산광역시 기장군 장안읍 반룡리, n=153 / 3. dong=부산광역시 기장군 정관읍 예림리, n=127 / 4. dong=없음, n=116 / 5. dong=부산광역시 기장군 정관읍 매학리, n=90 / 6. dong=부산광역시 기장군 정관읍 용수리, n=66",
+      "answer": "요청하신 「기장군 법정동별 공장 수 상위 6」에는 지금은 답하지 못했습니다. / 이유: missing_group / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:missing_group",
+      "route": "semantic_plan_fallback",
+      "ms": 734,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q261",
+      "cat": "집계비율",
+      "kind": "scalar",
+      "q": "수영구 숙박시설 중 연면적 대비 건축면적 비(평균 A12/A14)",
+      "gold": "n=101; avg_ratio=0.2351",
+      "answer": "수영구의 집계 결과입니다. 평균 연면적 1612.3925, avg_building_area_m2 226.564, avg_ratio 0.2351.",
+      "reason": "scalar-mismatch hits=1 gold=[101.0, 0.2351]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1201,
+      "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\", /        AVG(b.\"A12\"::float8) AS \"avg_building_area_m2\", /        AVG((b.\"A12\"::float8 / NULLIF(b.\"A14\"::float8, 0))) AS \"avg_ratio\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26500%' AND b.\"A9\" = '숙박시설';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q278",
+      "cat": "공간복합",
+      "kind": "scalar",
+      "q": "감천1동 안 공장 중 산업단지와 교차하는 비율 %",
+      "gold": "pct=0",
+      "answer": "감천1동의 집계 결과를 조회했습니다.",
+      "reason": "scalar-mismatch hits=0 gold=[0.0]",
+      "route": "semantic_plan_aggregate",
+      "ms": 131,
+      "sql": "SELECT 100 * COUNT(*) FILTER (WHERE b.\"A9\" = '공장')::float8 / NULLIF(COUNT(*) FILTER (WHERE b.\"A9\" = '공장'), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / JOIN \"BND_ADM_DONG_PG\" adm ON ST_Intersects(b.geometry, adm.geometry) / WHERE EXISTS (SELECT 1 FROM \"AL_D060_00_20250804\" ind WHERE ST_Intersects(b.geometry, ind.geometry)) AND adm.\"ADM_NM\" = '감천1동' AND adm.\"ADM_CD\" LIKE '21%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q280",
+      "cat": "공간복합",
+      "kind": "group",
+      "q": "해운대구 기초구역 이동사유별 개수",
+      "gold": "1. reason=국가기초구역 최초생성, n=116 / 2. reason=분할에 의한 기초구역 생성, n=3 / 3. reason=분할에 의한 기초구역 변경, n=1 / 4. reason=행정구역 변경에 의한 기초구역 변경, n=1",
+      "answer": "해운대구 기초구역 이동사유별 건수는 121건입니다.",
+      "reason": "group-mismatch",
+      "route": "bas_attr_count",
+      "ms": 766,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"TL_KODIS_BAS_26_202507\" / WHERE \"SIG_KOR_NM\" = '해운대구';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q284",
+      "cat": "공간복합",
+      "kind": "scalar",
+      "q": "우동과 교차하는 기초구역 개수와 그 중 면적 최대값",
+      "gold": "n=30; max_ar=6.2449",
+      "answer": "요청하신 「우동과 교차하는 기초구역 개수와 그 중 면적 최대값」에는 지금은 답하지 못했습니다. / 이유: - 기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다. / 시도한 SQL: SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / WHERE z.\"SIG_KOR_NM\" LIKE '%우동%'; / 질문을 조금 더 구...",
+      "reason": "engine-fail:- 기초구역 공간 질의는 ST_Intersects/ST_Within/ST_DWithin을 써야 합니다.",
+      "route": "semantic_plan_fallback",
+      "ms": 77,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / WHERE z.\"SIG_KOR_NM\" LIKE '%우동%';",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST",
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q286",
+      "cat": "공간복합",
+      "kind": "scalar",
+      "q": "대연3동 안 교육연구시설 대지면적 합계",
+      "gold": "n=102; sum_land=4,493,737.873",
+      "answer": "대연3동의 집계 결과입니다. sum_site_area_m2 4493737.873.",
+      "reason": "scalar-mismatch hits=1 gold=[102.0, 4493737.873]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1293,
+      "sql": "SELECT SUM(b.\"A15\"::float8) AS \"sum_site_area_m2\" / FROM \"AL_D010_26_20250704\" b / JOIN \"BND_ADM_DONG_PG\" adm ON ST_Intersects(b.geometry, adm.geometry) / WHERE adm.\"ADM_NM\" = '대연3동' AND adm.\"ADM_CD\" LIKE '21%' AND b.\"A9\" = '교육연구시설';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q289",
+      "cat": "공간복합",
+      "kind": "count",
+      "q": "남구 기초구역과 교차하는 건물 중 높이 60m 이상인 채수(건물 중복 제거)",
+      "gold": "259채",
+      "answer": "요청하신 「남구 기초구역과 교차하는 건물 중 높이 60m 이상인 채수(건물 중복 제거)」에는 지금은 답하지 못했습니다. / 이유: unknown field: height_m / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:unknown field: height_m",
+      "route": "semantic_plan_fallback",
+      "ms": 4,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q293",
+      "cat": "공간복합",
+      "kind": "count",
+      "q": "부산 일반산업단지 도형 중 시군구코드가 강서구(26440)인 개수",
+      "gold": "10개",
+      "answer": "요청하신 「부산 일반산업단지 도형 중 시군구코드가 강서구(26440)인 개수」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:plan generation failed",
+      "route": "semantic_plan_fallback",
+      "ms": 2,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q298",
+      "cat": "공간복합",
+      "kind": "scalar",
+      "q": "북구 기초구역 면적 합계와 개수",
+      "gold": "n=154; sum_ar=39.7834",
+      "answer": "북구의 조건에 해당하는 건물은 154건입니다.",
+      "reason": "scalar-mismatch hits=1 gold=[154.0, 39.7834]",
+      "route": "semantic_plan_count",
+      "ms": 8,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"TL_KODIS_BAS_26_202507\" z / WHERE z.\"SIG_KOR_NM\" LIKE '%북구%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q307",
+      "cat": "D198전용",
+      "kind": "compare",
+      "q": "동래구 부속건축물 채수와 주건축물 채수",
+      "gold": "annex_n=109; main_n=18,039",
+      "answer": "동래구 건물은 모두 18,148채입니다.",
+      "reason": "compare-num-missing",
+      "route": "d198_attr_count",
+      "ms": 1043,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D198_26260_20250115\" / WHERE \"A4\" LIKE '%동래구%' AND (TRIM(COALESCE(\"A16\"::text, '')) = '부속건축물' OR TRIM(COALESCE(\"A16\"::text, '')) = '주건축물');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q308",
+      "cat": "D198전용",
+      "kind": "count",
+      "q": "금정구 일반건축물대장 중 건폐율 50% 이상 80% 이하인 채수",
+      "gold": "4,536채",
+      "answer": "금정구 건물은 모두 5,698채입니다.",
+      "reason": "count-mismatch gold=4536 pred=[5698.0, 5698.0]",
+      "route": "d198_attr_count",
+      "ms": 769,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D198_26410_20250115\" / WHERE \"A4\" LIKE '%금정구%' AND \"A21\" >= 50 AND TRIM(COALESCE(\"A12\"::text, '')) = '일반건축물대장';",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q311",
+      "cat": "D198전용",
+      "kind": "count",
+      "q": "동래구 허가일과 사용승인일 연도 차이가 3년 이상인 집합건축물 채수",
+      "gold": "360채",
+      "answer": "동래구 허가일과 사용승인일 연도 차이가 3년 이상인 집합건축물은 19,645채입니다.",
+      "reason": "count-mismatch gold=360 pred=[3.0, 19645.0, 19645.0]",
+      "route": "d010_attr_count",
+      "ms": 4434,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D010_26_20250704\" / WHERE \"A4\" LIKE '%동래구%' AND (\"A13\"::text ~ '^[0-9]{4}');",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q312",
+      "cat": "D198전용",
+      "kind": "count",
+      "q": "금정구 사용승인이 2000년 이후인 아파트(세부용도) 채수",
+      "gold": "400채",
+      "answer": "금정구 아파트(공동주택) 2000년 이후는 모두 713채입니다.",
+      "reason": "count-mismatch gold=400 pred=[2000.0, 713.0, 713.0]",
+      "route": "d198_attr_count",
+      "ms": 1294,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D198_26410_20250115\" / WHERE \"A4\" LIKE '%금정구%' AND \"A27\" ILIKE '%아파트%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q317",
+      "cat": "D198전용",
+      "kind": "count",
+      "q": "동래구 학원(세부용도) 중 건물대지면적 200㎡ 이상인 채수",
+      "gold": "153채",
+      "answer": "동래구 건물 연면적 200㎡ 이상은 모두 154채입니다.",
+      "reason": "count-mismatch gold=153 pred=[200.0, 154.0, 154.0]",
+      "route": "d198_attr_count",
+      "ms": 11,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D198_26260_20250115\" / WHERE \"A4\" LIKE '%동래구%' AND \"A17\" >= 200 AND \"A27\" ILIKE '%학원%';",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q322",
+      "cat": "D198전용",
+      "kind": "scalar",
+      "q": "금정구 구서동 아파트(세부용도) 평균 건물높이와 건수",
+      "gold": "n=235; avg_h=38.1403",
+      "answer": "금정구의 집계 결과입니다. 평균 높이 8.8773, 건수 2,246.",
+      "reason": "scalar-mismatch hits=0 gold=[235.0, 38.1403]",
+      "route": "semantic_plan_aggregate",
+      "ms": 75,
+      "sql": "SELECT AVG(b.\"A30\"::float8) AS \"avg_height_m\", /        COUNT(*) AS \"n\" / FROM \"AL_D198_26410_20250115\" b / WHERE b.\"A3\" LIKE '26410%' AND b.\"A4\" ILIKE '%구서동%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q323",
+      "cat": "D198전용",
+      "kind": "count",
+      "q": "동래구 사직동 상업용 중 허가 1990년대인 채수",
+      "gold": "163채",
+      "answer": "요청하신 「동래구 사직동 상업용 중 허가 1990년대인 채수」에는 지금은 답하지 못했습니다. / 이유: numeric operator on text field: permit_date / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:numeric operator on text field: permit_date",
+      "route": "semantic_plan_fallback",
+      "ms": 1373,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q324",
+      "cat": "D198전용",
+      "kind": "scalar",
+      "q": "금정구 장전동 문교사회용 건물연면적 합계",
+      "gold": "n=160; sum_gfa=559,127.324",
+      "answer": "금정구의 집계 결과입니다. sum_gross_floor_area_m2 559127.324.",
+      "reason": "scalar-mismatch hits=1 gold=[160.0, 559127.324]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1180,
+      "sql": "SELECT SUM(b.\"A19\"::float8) AS \"sum_gross_floor_area_m2\" / FROM \"AL_D198_26410_20250115\" b / WHERE b.\"A3\" LIKE '26410%' AND (b.\"A29\" = '문교사회용' AND b.\"A4\" ILIKE '%장전동%');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q325",
+      "cat": "D198전용",
+      "kind": "count",
+      "q": "동래구 안락동 다세대주택 중 사용승인 2000년 이후인 채수",
+      "gold": "130채",
+      "answer": "안락동 2000년 이후는 모두 219채입니다.",
+      "reason": "count-mismatch gold=130 pred=[2000.0, 219.0, 219.0]",
+      "route": "d198_attr_count",
+      "ms": 1310,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D198_26260_20250115\" / WHERE (\"A4\" LIKE '% 안락동' OR \"A4\" = '안락동') AND \"A4\" LIKE '%동래구%' AND \"A27\" ILIKE '%다세대주택%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q327",
+      "cat": "D198전용",
+      "kind": "count",
+      "q": "동래구 명륜동 오피스텔 또는 사무소(세부용도) 채수",
+      "gold": "81채",
+      "answer": "요청하신 「동래구 명륜동 오피스텔 또는 사무소(세부용도) 채수」에는 지금은 답하지 못했습니다. / 이유: slot_below_threshold:fields / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:slot_below_threshold:fields",
+      "route": "semantic_plan_fallback",
+      "ms": 1153,
+      "sql": "",
+      "root_causes": [
+        "BOOLEAN_OR_DROPPED",
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q328",
+      "cat": "D198전용",
+      "kind": "count",
+      "q": "금정구 남산동 단독주택(세부용도) 중 지어진지 30년 넘은 채수(사용승인 기준)",
+      "gold": "648채",
+      "answer": "남산동 단독주택은 모두 1,423채입니다.",
+      "reason": "count-mismatch gold=648 pred=[1423.0, 1423.0]",
+      "route": "building_age_count",
+      "ms": 1268,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D198_26410_20250115\" / WHERE \"A4\" LIKE '%남산동%' AND \"A4\" LIKE '%금정구%' AND \"A25\" = '단독주택' AND \"A34\" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' AND \"A34\"::date <= (CURRENT_DATE - INTERVAL '30 years');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q329",
+      "cat": "D198전용",
+      "kind": "compare",
+      "q": "동래구 집합 vs 일반건축물 평균 건물높이",
+      "gold": "jibhap_h=18.2192; general_h=6.0094; jibhap_n=2,592; general_n=15,556",
+      "answer": "동래구의 집계 결과입니다. 평균 높이 5.0122.",
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_aggregate",
+      "ms": 734,
+      "sql": "SELECT AVG(b.\"A16\"::float8) AS \"avg_height_m\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26260%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q330",
+      "cat": "D198전용",
+      "kind": "count",
+      "q": "금정구 허가일과 사용승인일의 연도 차이가 5년 이상인 건물 수",
+      "gold": "278채",
+      "answer": "금정구 허가일과 사용승인일의 연도 차이가 5년 이상인 건물 수는 23,435건입니다.",
+      "reason": "count-mismatch gold=278 pred=[5.0, 23435.0, 23435.0]",
+      "route": "d010_attr_count",
+      "ms": 1883,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D010_26_20250704\" / WHERE \"A4\" LIKE '%금정구%' AND (\"A13\"::text ~ '^[0-9]{4}');",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q333",
+      "cat": "D198전용",
+      "kind": "group",
+      "q": "동래구 용도분류별 평균 건물연면적",
+      "gold": "1. cls=주거용, n=12,765, avg_gfa=627.6896 / 2. cls=상업용, n=4,567, avg_gfa=692.3499 / 3. cls=문교사회용, n=619, avg_gfa=2,064.3721 / 4. cls=기타, n=152, avg_gfa=377.5484 / 5. cls=공업용, n=19, avg_gfa=747.9153 / 6. cls=공공용, n=6, avg_gfa=3,201.0233 / 7. cls=농수산용, n=1, avg_gfa=157.92",
+      "answer": "동래구의 집계 결과입니다. 평균 연면적 691.5284.",
+      "reason": "group-mismatch",
+      "route": "semantic_plan_aggregate",
+      "ms": 917,
+      "sql": "SELECT AVG(b.\"A19\"::float8) AS \"avg_gross_floor_area_m2\" / FROM \"AL_D198_26260_20250115\" b / WHERE b.\"A3\" LIKE '26260%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q334",
+      "cat": "D198전용",
+      "kind": "compare",
+      "q": "금정구 주거용 대비 상업용 건수 비",
+      "gold": "commercial_per_resi=0.2951; resi_n=15,942; com_n=4,705",
+      "answer": "금정구의 조건에 해당하는 건물은 38,794건입니다.",
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_count",
+      "ms": 54,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26410%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q337",
+      "cat": "D198전용",
+      "kind": "scalar",
+      "q": "동래구 명장동 다가구주택 평균 건물건축면적과 건수",
+      "gold": "n=524; avg_bldg_area=87.5702",
+      "answer": "동래구의 집계 결과입니다. avg_building_area_m2 87.4272, 건수 523.",
+      "reason": "scalar-mismatch hits=1 gold=[524.0, 87.5702]",
+      "route": "semantic_plan_aggregate",
+      "ms": 78,
+      "sql": "SELECT AVG(b.\"A18\"::float8) AS \"avg_building_area_m2\", /        COUNT(*) AS \"n\" / FROM \"AL_D198_26260_20250115\" b / WHERE b.\"A3\" LIKE '26260%' AND (b.\"A25\" = '단독주택' AND b.\"A27\" = '다가구주택' AND b.\"A4\" ILIKE '%명장동%');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q338",
+      "cat": "D198전용",
+      "kind": "count",
+      "q": "금정구 서동 주거용 중 지하층 있는 채수",
+      "gold": "358채",
+      "answer": "요청하신 「금정구 서동 주거용 중 지하층 있는 채수」에는 지금은 답하지 못했습니다. / 이유: slot_below_threshold:fields / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:slot_below_threshold:fields",
+      "route": "semantic_plan_fallback",
+      "ms": 834,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q349",
+      "cat": "비교연도",
+      "kind": "compare",
+      "q": "기장군 vs 강서구 산지 건물 비율 %",
+      "gold": "gijang_pct=5.622; gangseo_pct=0.719",
+      "answer": "기장군의 집계 결과입니다. ratio_pct 5.6826.",
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_aggregate",
+      "ms": 724,
+      "sql": "SELECT 100 * COUNT(*) FILTER (WHERE (b.\"A6\"::text = '2' OR TRIM(COALESCE(b.\"A7\"::text, '')) = '산'))::float8 / NULLIF(COUNT(*), 0) AS \"ratio_pct\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26710%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q358",
+      "cat": "비교연도",
+      "kind": "compare",
+      "q": "금정구 단독주택 경과 40년 이상 vs 10년 미만 채수",
+      "gold": "old40=6,495; young10=327",
+      "answer": "금정구의 조건에 해당하는 건물은 6,367건입니다.",
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_count",
+      "ms": 799,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26410%' AND (b.\"A9\" = '단독주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 1985);",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q363",
+      "cat": "비교연도",
+      "kind": "compare",
+      "q": "동래구 vs 금정구 D198 집합건축물 채수",
+      "gold": "dongnae_n=2,592; geumjeong_n=2,784",
+      "answer": "동래구의 조건에 해당하는 건물은 18,148건입니다.",
+      "reason": "compare-num-missing",
+      "route": "semantic_plan_count",
+      "ms": 737,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D198_26260_20250115\" b / WHERE b.\"A3\" LIKE '26260%';",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q374",
+      "cat": "비교연도",
+      "kind": "compare",
+      "q": "동래구 명장동 vs 안락동 다세대·다가구(D198 세부용도) 채수",
+      "gold": "myeongjang_n=704; allak_n=743",
+      "answer": "요청하신 「동래구 명장동 vs 안락동 다세대·다가구(D198 세부용도) 채수」에는 지금은 답하지 못했습니다. / 이유: slot_below_threshold:fields / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:slot_below_threshold:fields",
+      "route": "semantic_plan_fallback",
+      "ms": 731,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q390",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 2000년 이후 사용승인만",
+      "gold": "265채",
+      "answer": "조건에 해당하는 건물 100건을 조회했습니다. / 1. 이지 더원 아파트 · 부산광역시 기장군 정관읍 모전리 723 / 2. B,C동 · 부산광역시 기장군 정관읍 예림리 329-4 / 3. 부경대학교 수산과학연구소 · 부산광역시 기장군 일광읍 동백리 256 / 4. 부산광역시 기장군 기장읍 대라리 889 / 5. 부산광역시 기장군 기장읍 대변리 472-6 / 6. 부산광역시 기장군 기장읍 교리 349-8 / 7. 부경대학...",
+      "reason": "count-mismatch gold=265 pred=[100.0, 1.0, 723.0, 2.0, 329.0, -4.0]",
+      "route": "semantic_plan_list",
+      "ms": 746,
+      "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000 / LIMIT 100;",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST"
+      ]
+    },
+    {
+      "id": "Q391",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "그 집합의 평균 층수",
+      "gold": "n=265; avg_fl=19.3132",
+      "answer": "집계 결과입니다. 건수 77,642, avg_ground_floors 3.6095.",
+      "reason": "scalar-mismatch hits=0 gold=[265.0, 19.3132]",
+      "route": "semantic_plan_aggregate",
+      "ms": 967,
+      "sql": "SELECT COUNT(*) AS \"n\", /        AVG(b.\"A26\"::float8) AS \"avg_ground_floors\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q392",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "층수가 가장 많은 건물 이름",
+      "gold": "A24=부곡동 푸르지오; A4=부산광역시 금정구 부곡동; A26=43; A16=131.2",
+      "answer": "상위 건물 1건을 조회했습니다. / 1. 중동 18290000 숙박시설 (주식회사엘시티피이에프브이) · 부산광역시 해운대구 중동 1829",
+      "reason": "name-missing 부곡동 푸르지오",
+      "route": "semantic_plan_rank",
+      "ms": 214,
+      "sql": "SELECT b.\"A26\"::float8 AS \"ground_floors\", /        b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000 / ORDER BY b.\"A26\"::float8 DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q400",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "연면적이 가장 큰 공장 이름",
+      "gold": "A24=르노코리아자동차(주); A4=부산광역시 강서구 신호동; A14=74,540.74",
+      "answer": "강서구의 상위 건물 1건을 조회했습니다. / 1. 르노코리아자동차(주) · 부산광역시 강서구 신호동 185 · 연면적 74540.74㎡",
+      "reason": "scalar-mismatch hits=1 gold=[24.0, 4.0, 14.0, 74540.74]",
+      "route": "semantic_plan_rank",
+      "ms": 93,
+      "sql": "SELECT b.\"A14\"::float8 AS \"gross_floor_area_m2\", /        b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A26\"::float8 AS \"ground_floors\" / FROM \"AL_D010_26_20250704\" b / WHERE EXISTS (SELECT 1 FROM \"AL_D060_00_20250804\" ind WHERE ST_Intersects(b.geometry, ind.geometry)) AND b.\"A3\" LIKE '26440%' AND ((b.\"A9\" = '공장' AND b.\"A9\" = '공장') AND b.\"A14\"::float8 >= 3000 AND b.\"A9\" = '공장') / ORDER BY b.\"A14\"::float8 DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q402",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 2000년 이후 사용승인만",
+      "gold": "248채",
+      "answer": "조건에 해당하는 건물 100건을 조회했습니다. / 1. 부산광역시 기장군 기장읍 교리 345-8 / 2. 삼성강건사 · 부산광역시 기장군 정관읍 달산리 1069-2 / 3. 부산광역시 기장군 기장읍 대라리 942 / 4. 부산광역시 기장군 정관읍 모전리 741-8 / 5. 단독주택(장문념) · 부산광역시 기장군 기장읍 동부리 325-3 / 6. 부산광역시 기장군 정관읍 달산리 1264 / 7. 부산광역시 기장군 장안읍 좌...",
+      "reason": "count-mismatch gold=248 pred=[100.0, 1.0, 345.0, -8.0, 2.0, 1069.0]",
+      "route": "semantic_plan_list",
+      "ms": 763,
+      "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000 / LIMIT 100;",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST"
+      ]
+    },
+    {
+      "id": "Q403",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "그 건물들 평균 높이",
+      "gold": "n=248; avg_h=70.2789",
+      "answer": "집계 결과입니다. 건수 77,642, 평균 높이 13.9415.",
+      "reason": "scalar-mismatch hits=0 gold=[248.0, 70.2789]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1018,
+      "sql": "SELECT COUNT(*) AS \"n\", /        AVG(b.\"A16\"::float8) AS \"avg_height_m\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000;",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST"
+      ]
+    },
+    {
+      "id": "Q404",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "가장 높은 것의 이름과 층수",
+      "gold": "A24=오륙도 에스케이뷰 아파트; A4=부산광역시 남구 용호동; A16=141.79; A26=47",
+      "answer": "상위 건물 1건을 조회했습니다. / 1. 안락동 요양병원 · 부산광역시 동래구 안락동 293-4 · 높이 33,750m",
+      "reason": "name-missing 오륙도 에스케이뷰 아파트",
+      "route": "semantic_plan_rank",
+      "ms": 201,
+      "sql": "SELECT b.\"A16\"::float8 AS \"height_m\", /        b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A26\"::float8 AS \"ground_floors\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000 / ORDER BY b.\"A16\"::float8 DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q405",
+      "cat": "후속앵커",
+      "kind": "list",
+      "q": "광안동 숙박시설 목록(연면적 큰 순 15개)",
+      "gold": "1. A24=호텔아쿠아펠리스, A4=부산광역시 수영구 광안동, A14=18,228.2, A16=71.2 / 2. A24=호메르스관광호텔, A4=부산광역시 수영구 광안동, A14=16,992.61, A16=73.8 / 3. A24=광안 지웰에스테이트 더 테라스, A4=부산광역시 수영구 광안동, A14=10,841.09, A16=60 / 4. A24=HOTEL CENTRALBAY, A4=부산광역시 수영구 광안동, A14=9,656.46, A16=59.9 / 5. A24=하운드호텔, A4=부산광역시 수영구 광안동, A14=3,655.72, A16=28.6 / 6. A24=없음, A4=부산광역시 수영구 광안동, A14=3,419.18, A16=39.4 / 7. A24=STUDIO202, A4=부산광역시 수영구 광안동, A14=3,328.2999, A16=59.7 / 8. A24=브이관광호텔, A4=부산광역시 수영구 광안동, A14=2,213.47, A16=28.6 / 9. A24=없음, A4=부산광역시 수영구 광안동, A14=1,711.43, A16=23.2 / 10. A24=누리호스텔, A4=부산광역시 수영구 광안동, A14=1,458.68, A16=20 / 11. A24=브라운도트(BROWN-DOT)호텔, A4=부산광역시 수영구 광안동, A14=1,382.35, A16=18.75 / 12. A24=없음, A4=부산광역시 수영구 광안동, A14=1,375.74, A16=20 / 13. A24=광안동 202-8 숙박시설, A4=부산광역시 수영구 광안동, A14=1,321, A16=12.7 / 14. A24=메종 드 센텀, A4=부산광역시 수영구 광안동, A14=1,281.74, A16=17.2 / 15. A24=없음, A4=부산광역시 수영구 광안동, A14=1,270.17, A16=20.6",
+      "answer": "현재 조회 가능한 데이터셋은 다음과 같습니다. / - GIS건물통합정보_부산광역시 (`AL_D010_26_20250704`) [건물] — GIS건물통합정보, 부산광역시, 2025년 07월 04일 자료 갱신 / - 용도별건물공간정보_부산광역시 동래구 (`AL_D198_26260_20250115`) [건물] — 용도별건물공간정보, 부산광역시 동래구, 2025년 01월 15일 자료 갱신 / - 용도별건물공간정보_부산광역시 금정...",
+      "reason": "list-top-missing 호텔아쿠아펠리스",
+      "route": "meta_catalog",
+      "ms": 5,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q407",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그 건물들 지하층이 있는 것은 몇 채야?",
+      "gold": "14채",
+      "answer": "요청하신 「광안동 숙박시설 목록(연면적 큰 순 15개) 중에서 그 건물들 지하층이 있는 것은 몇 채야」에는 지금은 답하지 못했습니다. / 이유: P06 / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:P06",
+      "route": "semantic_plan_fallback",
+      "ms": 121,
+      "sql": "",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST",
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q408",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "남은 건물 평균 연면적",
+      "gold": "avg_gfa=5,399.9514; n=14",
+      "answer": "요청하신 「광안동 숙박시설 목록(연면적 큰 순 15개) 중에서 남은 건물 평균 연면적」에는 지금은 답하지 못했습니다. / 이유: - Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT. / 시도한 SQL: SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" ...",
+      "reason": "engine-fail:- Ranking questions require ORDER BY ... DESC NULLS LAST and LIMIT.",
+      "route": "semantic_plan_fallback",
+      "ms": 839,
+      "sql": "SELECT AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 광안동' OR b.\"A4\" = '광안동') AND b.\"A9\" = '숙박시설' / LIMIT 15;",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q424",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "가장 높은 건물명",
+      "gold": "name=벽산아스타; h=162.5; A4=부산광역시 동래구 온천동",
+      "answer": "건물 중 높이가 가장 높은 건물은 「중동 18290000 숙박시설 (주식회사엘시티피이에프브이)」입니다. 위치는 부산광역시 해운대구 중동, 용도는 숙박시설이며, 건물면적 2,860.1063㎡, 연면적 249,374.4587㎡, 높이 411.6m, 지상 101층입니다.",
+      "reason": "name-missing 벽산아스타",
+      "route": "building_rank_높이",
+      "ms": 83,
+      "sql": "SELECT \"A0\", \"A4\", \"A5\", \"A9\", \"A12\", \"A14\", \"A15\", \"A16\", \"A19\", \"A24\", \"A25\", \"A26\" / FROM \"AL_D010_26_20250704\" WHERE \"A16\" > 0 AND \"A16\" <= 600 AND (\"A26\" IS NULL OR \"A16\" <= (\"A26\" * 8 + 30)) / ORDER BY \"A16\" DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q425",
+      "cat": "후속앵커",
+      "kind": "count",
+      "q": "금정구 세부용도 아파트 중 10층 이상",
+      "gold": "470채",
+      "answer": "금정구 세부용도 아파트 중 10층 이상인 건물은 부곡동 푸르지오(사용승인일 2007년 8월 16일), 구서동 유림 노르웨이 아침(사용승인일 2004년 12월 16일), 구서 협성 엠파이어(사용승인일 2013년 4월 1일), 청룡동 협성 엠파이어(사용승인일 2013년 10월 18일), 허브팰리스 장전(사용승인일 2019년 1월 21일)입니다.",
+      "reason": "count-mismatch gold=470 pred=[10.0, 2007.0, 8.0, 16.0, 2004.0, 12.0]",
+      "route": "d198_attr_list",
+      "ms": 5034,
+      "sql": "SELECT \"A0\", \"A4\", \"A5\", \"A6\", \"A7\", \"A10\", \"A12\", \"A13\", \"A14\", \"A16\", \"A17\", \"A18\", \"A19\", \"A20\", \"A21\", \"A23\", \"A25\", \"A27\", \"A29\", \"A30\", \"A31\", \"A32\", \"A33\", \"A34\" / FROM \"AL_D198_26410_20250115\" / WHERE \"A4\" LIKE '%금정구%' AND \"A31\" >= 10 AND \"A27\" ILIKE '%아파트%' / ORDER BY \"A31\" DESC NULLS LAST / LIMIT 100;",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q426",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 사용승인 2000년 이후만",
+      "gold": "320채",
+      "answer": "금정구의 조건에 해당하는 건물은 380건입니다.",
+      "reason": "count-mismatch gold=320 pred=[380.0, 380.0]",
+      "route": "semantic_plan_count",
+      "ms": 892,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D198_26410_20250115\" b / WHERE b.\"A3\" LIKE '26410%' AND ((b.\"A34\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A34\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000 AND b.\"A31\"::float8 >= 10 AND (b.\"A34\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A34\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000);",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST"
+      ]
+    },
+    {
+      "id": "Q427",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "평균 건물연면적",
+      "gold": "avg_gfa=8,318.7581; n=320",
+      "answer": "금정구의 집계 결과입니다. 건수 380, 평균 연면적 7684.6654.",
+      "reason": "scalar-mismatch hits=0 gold=[8318.7581, 320.0]",
+      "route": "semantic_plan_aggregate",
+      "ms": 831,
+      "sql": "SELECT COUNT(*) AS \"n\", /        AVG(b.\"A19\"::float8) AS \"avg_gross_floor_area_m2\" / FROM \"AL_D198_26410_20250115\" b / WHERE b.\"A3\" LIKE '26410%' AND ((b.\"A34\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A34\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000 AND b.\"A31\"::float8 >= 10 AND (b.\"A34\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A34\"::text, '[^0-9]', '', 'g'), 4)::int >= 2000);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q428",
+      "cat": "후속",
+      "kind": "list",
+      "q": "연면적 상위 5 이름",
+      "gold": "1. name=부곡동 푸르지오, gfa=59,723.72, A4=부산광역시 금정구 부곡동 / 2. name=구서 협성 엠파이어, gfa=52,643.8973, A4=부산광역시 금정구 구서동 / 3. name=청룡동 협성 엠파이어, gfa=51,136.5657, A4=부산광역시 금정구 청룡동 / 4. name=구서동 유림 노르웨이 아침, gfa=43,452.52, A4=부산광역시 금정구 구서동 / 5. name=구서시티타워, gfa=26,139.023, A4=부산광역시 금정구 구서동",
+      "answer": "건물 중 연면적 상위 5곳은 다음과 같습니다. / 1) 「？⑥?？댄?？？二？怨듭?」 — 부산광역시 강서구 화전동, 공장, 연면적 1,094,925㎡, 지상 1층 / 2) 「부산롯데호텔,롯데백화점부산본점」 — 부산광역시 부산진구 부전동, 판매시설, 연면적 379,617.33㎡, 지상 42층 / 3) 「신세계백화점 센텀시티점」 — 부산광역시 해운대구 우동, 판매시설, 연면적 294,649.7㎡, 지상 14층 / 4) 「중동 ...",
+      "reason": "list-top-missing 부곡동 푸르지오",
+      "route": "building_rank_연면적",
+      "ms": 838,
+      "sql": "SELECT \"A0\", \"A4\", \"A5\", \"A9\", \"A12\", \"A14\", \"A15\", \"A16\", \"A19\", \"A24\", \"A25\", \"A26\" / FROM \"AL_D010_26_20250704\" WHERE \"A14\" > 0 AND \"A14\" <= 2e+06 / ORDER BY \"A14\" DESC NULLS LAST / LIMIT 5;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q432",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "연면적이 가장 큰 위반건축물 이름·용도",
+      "gold": "A24=대원플러스빌; A9=공동주택; A14=9,535.751; A4=부산광역시 부산진구 양정동",
+      "answer": "요청하신 「연면적이 가장 큰 위반건축물 이름·용도」에는 지금은 답하지 못했습니다. / 이유: P07 / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:P07",
+      "route": "semantic_plan_fallback",
+      "ms": 23,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q433",
+      "cat": "후속앵커",
+      "kind": "count",
+      "q": "기장군 산지 건물 채수",
+      "gold": "2,456채",
+      "answer": "기장군 건물 산지는 모두 2,300채입니다.",
+      "reason": "count-mismatch gold=2456 pred=[2300.0, 2300.0]",
+      "route": "building_special_land_count",
+      "ms": 982,
+      "sql": "SELECT COUNT(*) AS cnt / FROM \"AL_D010_26_20250704\" / WHERE \"A4\" LIKE '%기장군%' AND (\"A6\"::text = '2' OR TRIM(COALESCE(\"A7\", '')) = '산');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q440",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "용적율이 가장 큰 건물명",
+      "gold": "A24=청마 마이우스; A18=958.46; A17=79.46; A4=부산광역시 연제구 거제동",
+      "answer": "연제구의 상위 건물 1건을 조회했습니다. / 1. 연산동 에스케이 뷰 · 부산광역시 연제구 연산동 587-4 · 연면적 77208.9196㎡",
+      "reason": "name-missing 청마 마이우스",
+      "route": "semantic_plan_rank",
+      "ms": 67,
+      "sql": "SELECT b.\"A14\"::float8 AS \"gross_floor_area_m2\", /        b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A26\"::float8 AS \"ground_floors\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26470%' AND (b.\"A18\"::float8 >= 200 AND b.\"A9\" = '공동주택' AND b.\"A17\"::float8 >= 30 AND b.\"A18\"::float8 >= 200) / ORDER BY b.\"A14\"::float8 DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q444",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "지상층이 가장 많은 이름",
+      "gold": "A24=엘시티; A26=85; A27=5; A4=부산광역시 해운대구 중동",
+      "answer": "해운대구의 상위 건물 1건을 조회했습니다. / 1. 엘시티 · 부산광역시 해운대구 중동 1829",
+      "reason": "scalar-mismatch hits=1 gold=[24.0, 26.0, 85.0, 27.0]",
+      "route": "semantic_plan_rank",
+      "ms": 705,
+      "sql": "SELECT b.\"A26\"::float8 AS \"ground_floors\", /        b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26350%' AND (b.\"A9\" = '공동주택' AND b.\"A27\"::float8 >= 2 AND b.\"A9\" = '공동주택') / ORDER BY b.\"A26\"::float8 DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q448",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "대지면적이 가장 큰 이름",
+      "gold": "A24=부산과학기술대학교; A15=97,998; A4=부산광역시 북구 구포동; A5=870",
+      "answer": "북구의 상위 건물 1건을 조회했습니다. / 1. 용수초등학교 · 부산광역시 북구 화명동 2305 · 연면적 19096.45㎡",
+      "reason": "name-missing 부산과학기술대학교",
+      "route": "semantic_plan_rank",
+      "ms": 64,
+      "sql": "SELECT b.\"A14\"::float8 AS \"gross_floor_area_m2\", /        b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A26\"::float8 AS \"ground_floors\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26320%' AND (b.\"A16\"::float8 >= 15 AND b.\"A9\" = '교육연구시설' AND b.\"A15\"::float8 >= 1500 AND b.\"A16\"::float8 >= 15) / ORDER BY b.\"A14\"::float8 DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q449",
+      "cat": "후속앵커",
+      "kind": "count",
+      "q": "영도구 지어진지 25년 넘은 공동주택 채수",
+      "gold": "610채",
+      "answer": "영도구의 조건에 해당하는 건물은 601건입니다.",
+      "reason": "count-mismatch gold=610 pred=[601.0, 601.0]",
+      "route": "semantic_plan_count",
+      "ms": 1210,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26200%' AND (b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q450",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 10층 이상만",
+      "gold": "115채",
+      "answer": "영도구의 조건에 해당하는 건물은 114건입니다.",
+      "reason": "count-mismatch gold=115 pred=[114.0, 114.0]",
+      "route": "semantic_plan_count",
+      "ms": 819,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26200%' AND (b.\"A26\"::float8 >= 10 AND b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000 AND b.\"A26\"::float8 >= 10);",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST"
+      ]
+    },
+    {
+      "id": "Q451",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "평균 연면적",
+      "gold": "avg_gfa=11,510.4952; n=115",
+      "answer": "영도구의 집계 결과입니다. 건수 114, 평균 연면적 11481.3862.",
+      "reason": "scalar-mismatch hits=1 gold=[11510.4952, 115.0]",
+      "route": "semantic_plan_aggregate",
+      "ms": 912,
+      "sql": "SELECT COUNT(*) AS \"n\", /        AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26200%' AND (b.\"A26\"::float8 >= 10 AND b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000 AND b.\"A26\"::float8 >= 10);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q452",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "가장 오래된(사용승인 빠른) 건물명과 사용승인일",
+      "gold": "A24=대동대교맨션아파트; A13=1980-08-30; A4=부산광역시 영도구 대평동1가",
+      "answer": "영도구의 집계 결과입니다. 건수 114, 평균 연면적 11481.3862.",
+      "reason": "name-missing 대동대교맨션아파트",
+      "route": "semantic_plan_aggregate",
+      "ms": 887,
+      "sql": "SELECT COUNT(*) AS \"n\", /        AVG(b.\"A14\"::float8) AS \"avg_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26200%' AND (b.\"A26\"::float8 >= 10 AND b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int <= 2000 AND b.\"A26\"::float8 >= 10);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q455",
+      "cat": "후속",
+      "kind": "group",
+      "q": "구조별 건수",
+      "gold": "1. structure=일반철골구조, n=56 / 2. structure=철근콘크리트구조, n=27 / 3. structure=경량철골구조, n=2 / 4. structure=철골철근콘크리트구조, n=1",
+      "answer": "사상구의 조건에 해당하는 건물은 86건입니다.",
+      "reason": "group-mismatch",
+      "route": "semantic_plan_count",
+      "ms": 85,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26530%' AND (b.\"A16\"::float8 >= 12 AND b.\"A9\" = '공장' AND b.\"A14\"::float8 >= 2500 AND b.\"A16\"::float8 >= 12);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q456",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "연면적 최대 공장 이름",
+      "gold": "A24=부산디지털밸리아파트형공장; A14=50,856.97; A11=철근콘크리트구조; A4=부산광역시 사상구 감전동",
+      "answer": "사상구의 집계 결과입니다. 건수 86, max_gross_floor_area_m2 50856.97.",
+      "reason": "name-missing 부산디지털밸리아파트형공장",
+      "route": "semantic_plan_aggregate",
+      "ms": 733,
+      "sql": "SELECT COUNT(*) AS \"n\", /        MAX(b.\"A14\"::float8) AS \"max_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26530%' AND ((b.\"A16\"::float8 >= 12 AND b.\"A9\" = '공장') AND b.\"A14\"::float8 >= 2500 AND b.\"A16\"::float8 >= 12 AND b.\"A9\" = '공장');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q458",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 공동주택 또는 숙박시설만",
+      "gold": "3채",
+      "answer": "중동의 조건에 해당하는 건물은 2건입니다.",
+      "reason": "count-mismatch gold=3 pred=[2.0, 2.0]",
+      "route": "semantic_plan_count",
+      "ms": 1007,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 중동' OR b.\"A4\" = '중동') AND (b.\"A9\" = '공동주택' AND b.\"A16\"::float8 >= 150 AND b.\"A9\" = '공동주택');",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST"
+      ]
+    },
+    {
+      "id": "Q459",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "평균 층수",
+      "gold": "avg_fl=90.3333; n=3",
+      "answer": "중동의 집계 결과입니다. 건수 2, avg_ground_floors 85.",
+      "reason": "scalar-mismatch hits=0 gold=[90.3333, 3.0]",
+      "route": "semantic_plan_aggregate",
+      "ms": 937,
+      "sql": "SELECT COUNT(*) AS \"n\", /        AVG(b.\"A26\"::float8) AS \"avg_ground_floors\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 중동' OR b.\"A4\" = '중동') AND (b.\"A9\" = '공동주택' AND b.\"A16\"::float8 >= 150 AND b.\"A9\" = '공동주택');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q460",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "가장 높은 건물의 건물동명과 지번",
+      "gold": "A24=중동 18290000 숙박시설 (주식회사엘시티피이에프브이); A25=랜드마크타워동; A5=1829; A16=411.6",
+      "answer": "중동의 상위 건물 1건을 조회했습니다. / 1. 엘시티 · 부산광역시 해운대구 중동 1829 · 높이 339.1m",
+      "reason": "name-missing 중동 18290000 숙박시설 (주식회사엘시티피이에프브이)",
+      "route": "semantic_plan_rank",
+      "ms": 59,
+      "sql": "SELECT b.\"A16\"::float8 AS \"height_m\", /        b.\"A5\" AS \"lot_address\", /        b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A26\"::float8 AS \"ground_floors\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 중동' OR b.\"A4\" = '중동') AND (b.\"A9\" = '공동주택' AND b.\"A16\"::float8 >= 150 AND b.\"A9\" = '공동주택') / ORDER BY b.\"A16\"::float8 DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q463",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "높이 합계(1~500m)",
+      "gold": "sum_h=5,353.86; n=76",
+      "answer": "집계 결과입니다. sum_height_m 1827753.7663.",
+      "reason": "scalar-mismatch hits=0 gold=[5353.86, 76.0]",
+      "route": "semantic_plan_aggregate",
+      "ms": 913,
+      "sql": "SELECT SUM(b.\"A16\"::float8) AS \"sum_height_m\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A16\"::float8 BETWEEN 1 AND 500;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q464",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "층수 1위 이름",
+      "gold": "A24=대연 힐스테이트푸르지오; A26=41; A4=부산광역시 남구 대연동",
+      "answer": "집계 결과입니다. sum_height_m 1826659.6693.",
+      "reason": "name-missing 대연 힐스테이트푸르지오",
+      "route": "semantic_plan_aggregate",
+      "ms": 976,
+      "sql": "SELECT SUM(b.\"A16\"::float8) AS \"sum_height_m\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A26\"::float8 >= 1 AND b.\"A16\"::float8 BETWEEN 1 AND 500 AND b.\"A26\"::float8 >= 1);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q468",
+      "cat": "후속",
+      "kind": "list",
+      "q": "연면적 상위 3 이름",
+      "gold": "1. A24=구서 협성 엠파이어, A14=52,643.8973, A16=90.9, A4=부산광역시 금정구 구서동 / 2. A24=구서동 유림 노르웨이 아침, A14=43,452.52, A16=99.3, A4=부산광역시 금정구 구서동 / 3. A24=구서시티타워, A14=26,139.023, A16=79.7, A4=부산광역시 금정구 구서동",
+      "answer": "건물 중 연면적 상위 3곳은 다음과 같습니다. / 1) 「？⑥?？댄?？？二？怨듭?」 — 부산광역시 강서구 화전동, 공장, 연면적 1,094,925㎡, 지상 1층 / 2) 「부산롯데호텔,롯데백화점부산본점」 — 부산광역시 부산진구 부전동, 판매시설, 연면적 379,617.33㎡, 지상 42층 / 3) 「신세계백화점 센텀시티점」 — 부산광역시 해운대구 우동, 판매시설, 연면적 294,649.7㎡, 지상 14층",
+      "reason": "list-top-missing 구서 협성 엠파이어",
+      "route": "building_rank_연면적",
+      "ms": 829,
+      "sql": "SELECT \"A0\", \"A4\", \"A5\", \"A9\", \"A12\", \"A14\", \"A15\", \"A16\", \"A19\", \"A24\", \"A25\", \"A26\" / FROM \"AL_D010_26_20250704\" WHERE \"A14\" > 0 AND \"A14\" <= 2e+06 / ORDER BY \"A14\" DESC NULLS LAST / LIMIT 3;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q472",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "연면적 최대 공동주택명",
+      "gold": "A24=명지롯데캐슬; A14=42,808.16; A5=3244",
+      "answer": "명지동의 집계 결과입니다. 건수 171, max_gross_floor_area_m2 42808.16.",
+      "reason": "name-missing 명지롯데캐슬",
+      "route": "semantic_plan_aggregate",
+      "ms": 715,
+      "sql": "SELECT COUNT(*) AS \"n\", /        MAX(b.\"A14\"::float8) AS \"max_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / WHERE EXISTS (SELECT 1 FROM \"AL_D060_00_20250804\" ind WHERE ST_Intersects(b.geometry, ind.geometry)) AND (b.\"A4\" LIKE '% 명지동' OR b.\"A4\" = '명지동') AND (((b.\"A9\" = '공동주택' AND b.\"A9\" = '공동주택') AND b.\"A9\" = '공동주택') AND b.\"A9\" = '공동주택');",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q473",
+      "cat": "후속앵커",
+      "kind": "count",
+      "q": "동래 온천동 상업용(D198) 채수",
+      "gold": "1,309채",
+      "answer": "확인이 필요합니다. 세부용도·용도분류는 동래·금정 용도별건물(D198)에서만 조회할 수 있습니다",
+      "reason": "count-mismatch gold=1309 pred=[198.0]",
+      "route": "semantic_plan_clarify",
+      "ms": 1138,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q474",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 건물높이 15m 이상만",
+      "gold": "313채",
+      "answer": "확인이 필요합니다. 세부용도·용도분류는 동래·금정 용도별건물(D198)에서만 조회할 수 있습니다",
+      "reason": "count-mismatch gold=313 pred=[198.0]",
+      "route": "semantic_plan_clarify",
+      "ms": 3,
+      "sql": "",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST",
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q475",
+      "cat": "후속",
+      "kind": "group",
+      "q": "세부용도 상위 5",
+      "gold": "1. detail=오피스텔, n=90 / 2. detail=사무소, n=39 / 3. detail=의원, n=38 / 4. detail=여관, n=32 / 5. detail=일반음식점, n=16",
+      "answer": "확인이 필요합니다. 세부용도·용도분류는 동래·금정 용도별건물(D198)에서만 조회할 수 있습니다",
+      "reason": "group-mismatch",
+      "route": "semantic_plan_clarify",
+      "ms": 722,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q476",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "가장 높은 건물명",
+      "gold": "name=없음; h=173.5; A27=오피스텔",
+      "answer": "확인이 필요합니다. 세부용도·용도분류는 동래·금정 용도별건물(D198)에서만 조회할 수 있습니다",
+      "reason": "scalar-mismatch hits=0 gold=[173.5, 27.0]",
+      "route": "semantic_plan_clarify",
+      "ms": 7,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q477",
+      "cat": "후속앵커",
+      "kind": "list",
+      "q": "좌동 15층 이상 공동주택 이름과 층수",
+      "gold": "1. A24=해운대케이씨씨스위첸, A26=29, A16=88, A14=19,371.657 / 2. A24=해운대케이씨씨스위첸, A26=29, A16=88, A14=18,715.551 / 3. A24=해운대케이씨씨스위첸, A26=28, A16=87.7, A14=16,346.842 / 4. A24=대우2차, A26=27, A16=74.1, A14=12,575.496 / 5. A24=대우2차, A26=27, A16=74.1, A14=11,215.744 / 6. A24=대우2차, A26=27, A16=74.1, A14=13,024.212 / 7. A24=두산1차아파트, A26=27, A16=74.9, A14=16,001.8 / 8. A24=대우2차, A26=27, A16=74.1, A14=8,391.824 / 9. A24=대우2차, A26=27, A16=74.1, A14=8,391.824 / 10. A24=대우2차, A26=27, A16=74.1, A14=9,549.344 / 11. A24=두산1차아파트, A26=27, A16=74.9, A14=16,001.8 / 12. A24=두산1차아파트, A26=27, A16=74.9, A14=16,001.8 / 13. A24=대우2차, A26=27, A16=74.1, A14=9,549.344 / 14. A24=대림아파트, A26=26, A16=71.65, A14=11,401.212 / 15. A24=한라아파트, A26=26, A16=0, A14=10,558.56",
+      "answer": "「좌동」이(가) 여러 지역에 있어 의미가 불분명합니다. / 아래 중 어디를 말씀하신 건가요? / 1) 부산광역시 해운대구 좌동 (건물 2,077동) / 2) 부산광역시 기장군 장안읍 좌동리 (건물 334동) / 번호로 답해도 됩니다. 예: 1 또는 1번 / 또는 이렇게 다시 질문해 주세요: 해운대구 좌동 건물 몇 채야?",
+      "reason": "list-top-missing 해운대케이씨씨스위첸",
+      "route": "clarify_place",
+      "ms": 71,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q478",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 연면적 6000㎡ 이상만",
+      "gold": "362채",
+      "answer": "「좌동」이(가) 여러 지역에 있어 의미가 불분명합니다. / 아래 중 어디를 말씀하신 건가요? / 1) 부산광역시 해운대구 좌동 (건물 2,077동) / 2) 부산광역시 기장군 장안읍 좌동리 (건물 334동) / 번호로 답해도 됩니다. 예: 1 또는 1번 / 또는 이렇게 다시 질문해 주세요: 해운대구 좌동 건물 몇 채야?",
+      "reason": "count-mismatch gold=362 pred=[1.0, 2077.0, 2.0, 334.0, 1.0, 1.0]",
+      "route": "clarify_place",
+      "ms": 68,
+      "sql": "",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST",
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q479",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "평균 높이",
+      "gold": "avg_h=59.9616; n=362",
+      "answer": "요청하신 「평균 높이」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:plan generation failed",
+      "route": "semantic_plan_fallback",
+      "ms": 895,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q480",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "지번 알려줘(연면적 1위)",
+      "gold": "A24=경남선경아파트; A5=1448; A4=부산광역시 해운대구 좌동; A14=49,777.696",
+      "answer": "질문하신 속성에 대한 설명입니다. / [GIS건물통합정보_부산광역시 / `AL_D010_26_20250704`] / - `A14` → 연면적 (double precision) /   예시: 230.96 / [GIS건물통합정보_부산광역시 / `AL_D010_26_20250704`] / - `A5` → 지번 (text) /   예시: 16-26 / [용도별건물공간정보_부산광역시 금정구 / `AL_D198_26410_20250...",
+      "reason": "name-missing 경남선경아파트",
+      "route": "meta_column_display",
+      "ms": 10,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q481",
+      "cat": "후속앵커",
+      "kind": "count",
+      "q": "전포동 제2종근린생활시설 중 연면적 400㎡ 이상",
+      "gold": "181채",
+      "answer": "전포동의 조건에 해당하는 건물 100건을 조회했습니다. / 1. 부산광역시 부산진구 전포동 337-8 / 2. 부산광역시 부산진구 전포동 307-10 / 3. 부산광역시 부산진구 전포동 309-38 / 4. 부산광역시 부산진구 전포동 146-2 / 5. 부산광역시 부산진구 전포동 690-2 / 6. 부산광역시 부산진구 전포동 347-4 / 7. 부산광역시 부산진구 전포동 674-14 / 8. 부산광역시 부산진구 전포동 6...",
+      "reason": "count-mismatch gold=181 pred=[100.0, 1.0, 337.0, -8.0, 2.0, 307.0]",
+      "route": "semantic_plan_list",
+      "ms": 133,
+      "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A14\"::float8 AS \"gross_floor_area_m2\", /        b.\"A9\" AS \"usage\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A4\" LIKE '% 전포동' OR b.\"A4\" = '전포동') AND (b.\"A9\" = '제2종근린생활시설' AND b.\"A14\"::float8 >= 400) / LIMIT 100;",
+      "root_causes": [
+        "RANGE_BOUND_DROPPED"
+      ]
+    },
+    {
+      "id": "Q484",
+      "cat": "후속",
+      "kind": "list",
+      "q": "연면적 상위 5 이름",
+      "gold": "1. A24=없음, A14=3,823.91, A26=9, A4=부산광역시 부산진구 전포동 / 2. A24=세화빌딩, A14=2,970.68, A26=8, A4=부산광역시 부산진구 전포동 / 3. A24=없음, A14=2,739.14, A26=5, A4=부산광역시 부산진구 전포동 / 4. A24=없음, A14=2,634.89, A26=5, A4=부산광역시 부산진구 전포동 / 5. A24=GATE688, A14=2,385.87, A26=6, A4=부산광역시 부산진구 전포동",
+      "answer": "건물 중 연면적 상위 5곳은 다음과 같습니다. / 1) 「？⑥?？댄?？？二？怨듭?」 — 부산광역시 강서구 화전동, 공장, 연면적 1,094,925㎡, 지상 1층 / 2) 「부산롯데호텔,롯데백화점부산본점」 — 부산광역시 부산진구 부전동, 판매시설, 연면적 379,617.33㎡, 지상 42층 / 3) 「신세계백화점 센텀시티점」 — 부산광역시 해운대구 우동, 판매시설, 연면적 294,649.7㎡, 지상 14층 / 4) 「중동 ...",
+      "reason": "list-top-missing 세화빌딩",
+      "route": "building_rank_연면적",
+      "ms": 826,
+      "sql": "SELECT \"A0\", \"A4\", \"A5\", \"A9\", \"A12\", \"A14\", \"A15\", \"A16\", \"A19\", \"A24\", \"A25\", \"A26\" / FROM \"AL_D010_26_20250704\" WHERE \"A14\" > 0 AND \"A14\" <= 2e+06 / ORDER BY \"A14\" DESC NULLS LAST / LIMIT 5;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q486",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 1995년 이후 사용승인만",
+      "gold": "177채",
+      "answer": "조건에 해당하는 건물 100건을 조회했습니다. / 1. 부산광역시 기장군 일광읍 화전리 322-35 / 2. 부산광역시 기장군 일광읍 문동리 279-1 / 3. 부산광역시 기장군 일광읍 이천리 260-2 / 4. 부산광역시 기장군 정관읍 용수리 641-1 / 5. 부산광역시 기장군 정관읍 달산리 1072-2 / 6. (주)해오름 바이오 · 부산광역시 기장군 일광읍 동백리 197-1 / 7. 부산광역시 기장군 기장읍 대변리...",
+      "reason": "count-mismatch gold=177 pred=[100.0, 1.0, 322.0, -35.0, 2.0, 279.0]",
+      "route": "semantic_plan_list",
+      "ms": 755,
+      "sql": "SELECT b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 1995 / LIMIT 100;",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST"
+      ]
+    },
+    {
+      "id": "Q487",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "평균 층수와 평균 높이",
+      "gold": "avg_fl=23.2599; avg_h=65.344; n=177",
+      "answer": "집계 결과입니다. 건수 101,505, 평균 높이 13.4478, avg_ground_floors 3.6518.",
+      "reason": "scalar-mismatch hits=0 gold=[23.2599, 65.344, 177.0]",
+      "route": "semantic_plan_aggregate",
+      "ms": 1044,
+      "sql": "SELECT COUNT(*) AS \"n\", /        AVG(b.\"A16\"::float8) AS \"avg_height_m\", /        AVG(b.\"A26\"::float8) AS \"avg_ground_floors\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 1995;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q488",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "가장 높은 건물 이름",
+      "gold": "A24=대림\u001a쌍용강변타운; A16=82.4; A26=29; A4=부산광역시 북구 화명동",
+      "answer": "상위 건물 1건을 조회했습니다. / 1. 안락동 요양병원 · 부산광역시 동래구 안락동 293-4 · 높이 33,750m",
+      "reason": "name-missing 대림\u001a쌍용강변타운",
+      "route": "semantic_plan_rank",
+      "ms": 204,
+      "sql": "SELECT b.\"A16\"::float8 AS \"height_m\", /        b.\"A24\" AS \"name\", /        b.\"A4\" AS \"legal_dong\", /        b.\"A5\" AS \"lot_address\", /        b.\"A26\"::float8 AS \"ground_floors\" / FROM \"AL_D010_26_20250704\" b / WHERE (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 1995 / ORDER BY b.\"A16\"::float8 DESC NULLS LAST / LIMIT 1;",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q490",
+      "cat": "후속",
+      "kind": "count",
+      "q": "그중 이동사유가 최초생성인 것만",
+      "gold": "29개",
+      "answer": "요청하신 「그중 이동사유가 최초생성인 것만」에는 지금은 답하지 못했습니다. / 이유: plan generation failed / 질문을 조금 더 구체적으로 바꿔 다시 시도해 주세요.",
+      "reason": "engine-fail:plan generation failed",
+      "route": "semantic_plan_fallback",
+      "ms": 625,
+      "sql": "",
+      "root_causes": [
+        "FOLLOWUP_CONTEXT_LOST",
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q491",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "면적 합계",
+      "gold": "sum_ar=12.7918; n=29",
+      "answer": "확인이 필요합니다. 면적이 건축면적·연면적·대지면적 중 어떤 것인지 필요합니다",
+      "reason": "scalar-mismatch hits=0 gold=[12.7918, 29.0]",
+      "route": "semantic_plan_clarify",
+      "ms": 754,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q492",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "면적 최대 기초구역번호",
+      "gold": "BAS_ID=48481; BAS_AR=1.5929; MVMN_RESN=국가기초구역 최초생성",
+      "answer": "확인이 필요합니다. 면적이 건축면적·연면적·대지면적 중 어떤 것인지 필요합니다",
+      "reason": "scalar-mismatch hits=0 gold=[48481.0, 1.5929]",
+      "route": "semantic_plan_clarify",
+      "ms": 804,
+      "sql": "",
+      "root_causes": [
+        "ENTITY_SELECTION_ERROR"
+      ]
+    },
+    {
+      "id": "Q495",
+      "cat": "후속",
+      "kind": "group",
+      "q": "법정동별 건수",
+      "gold": "1. dong=부산광역시 기장군 정관읍 모전리, n=64 / 2. dong=부산광역시 기장군 정관읍 달산리, n=23 / 3. dong=부산광역시 기장군 정관읍 용수리, n=19 / 4. dong=부산광역시 기장군 정관읍 매학리, n=16 / 5. dong=부산광역시 기장군 일광읍 삼성리, n=15 / 6. dong=부산광역시 기장군 철마면 고촌리, n=12 / 7. dong=부산광역시 기장군 기장읍 교리, n=10 / 8. dong=부산광역시 기장군 정관읍 방곡리, n=7 / 9. dong=부산광역시 기장군 일광읍 이천리, n=5 / 10. dong=부산광역시 기장군 기장읍 대라리, n=5 / 11. dong=부산광역시 기장군 기장읍 청강리, n=3 / 12. dong=부산광역시 기장군 정관읍 예림리, n=1",
+      "answer": "기장군의 조건에 해당하는 건물은 180건입니다.",
+      "reason": "group-mismatch",
+      "route": "semantic_plan_count",
+      "ms": 73,
+      "sql": "SELECT COUNT(*) AS \"count\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26710%' AND (b.\"A26\"::float8 >= 15 AND b.\"A9\" = '공동주택' AND (b.\"A13\"::text ~ '^[0-9]{4}') AND LEFT(regexp_replace(b.\"A13\"::text, '[^0-9]', '', 'g'), 4)::int >= 2010 AND b.\"A26\"::float8 >= 15);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    },
+    {
+      "id": "Q500",
+      "cat": "후속",
+      "kind": "scalar",
+      "q": "연면적 1위 이름과 지번",
+      "gold": "A24=동아대학교 의료원; A5=552; A4=부산광역시 서구 동대신동3가; A14=58,753.15",
+      "answer": "서구의 집계 결과입니다. 건수 14, sum_gross_floor_area_m2 190396.95.",
+      "reason": "name-missing 동아대학교 의료원",
+      "route": "semantic_plan_aggregate",
+      "ms": 723,
+      "sql": "SELECT COUNT(*) AS \"n\", /        SUM(b.\"A14\"::float8) AS \"sum_gross_floor_area_m2\" / FROM \"AL_D010_26_20250704\" b / WHERE b.\"A3\" LIKE '26140%' AND ((b.\"A16\"::float8 >= 18 AND b.\"A14\"::float8 >= 1) AND b.\"A9\" = '의료시설' AND b.\"A16\"::float8 >= 18 AND b.\"A14\"::float8 >= 1);",
+      "root_causes": [
+        "PREDICATE_DROPPED"
+      ]
+    }
+  ]
+}
