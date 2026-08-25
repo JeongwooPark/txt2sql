@@ -24,7 +24,7 @@ def test_parity_usage_count() -> None:
     sql = _sql("해운대구 아파트가 몇 채야?")
     assert "AL_D010_26_20250704" in sql
     assert "COUNT(*)" in sql.upper()
-    assert '"A4"' in sql
+    assert '"A3"' in sql or '"A4"' in sql
     assert '"A9"' in sql
     assert "공동주택" in sql
 

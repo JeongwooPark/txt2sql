@@ -69,7 +69,7 @@ def test_intersects_touches_buffer_nearest_overlap() -> None:
         )
     ).sql
     assert "ST_Distance" in near
-    assert "LIMIT 10" in near
+    assert "LIMIT" not in near.upper()
 
     overlap = compile_semantic_plan(
         SemanticQueryPlan(

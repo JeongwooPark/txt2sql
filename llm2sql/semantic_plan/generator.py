@@ -288,7 +288,9 @@ def extract_plan_hints(question: str) -> dict[str, Any]:
         extra_filters.append(
             {"field": "building_dong_name", "operator": "is_not_null", "value": None}
         )
-    if re.search(r"지하층이\s*있", q) or ("지하층" in q and "있고" in q):
+    if re.search(r"지하층이\s*있", q) or (
+        "지하층" in q and "있고" in q and "합계" not in q
+    ):
         extra_filters.append(
             {"field": "basement_floors", "operator": "gt", "value": 0}
         )
@@ -858,11 +860,21 @@ def try_heuristic_plan(
     ratios: list[RatioSpec] = []
     if hints.get("ratio"):
         query_kind = "aggregate"
-        aggregations = [
-            AggregationSpec(function="count", field=None, alias="matching_n"),
-        ]
-        assumptions.append("ratio_percent")
         ratios = _build_ratio_specs(q, filters)
+        if ratios:
+            ratio_fields: set[str] = set()
+            for item in ratios:
+                ratio_fields.update(_pred_field_names(item.numerator_predicate))
+                ratio_fields.update(_pred_field_names(item.denominator_predicate))
+            filters = [item for item in filters if item.field not in ratio_fields]
+            if predicate is not None:
+                pred_fields = set(_pred_field_names(predicate))
+                if pred_fields and pred_fields <= ratio_fields:
+                    predicate = None
+        if not any(text in q for text in AGG_MAP) and not any(
+            k in q for k in ("건수", "채수", "몇 채", "몇채")
+        ):
+            aggregations = []
     contract_extra = extract_contract(q)
     seen_percentiles: set[tuple[str | None, float]] = set()
     for req in contract_extra.percentile_requests:
@@ -1207,6 +1219,19 @@ def _term_is_negated(question: str, term: str) -> bool:
     ):
         return True
     return False
+
+
+def _pred_field_names(pred: PredicateSpec | None) -> list[str]:
+    if pred is None:
+        return []
+    found: list[str] = []
+    if pred.left and pred.left.kind == "field" and pred.left.field:
+        found.append(pred.left.field)
+    if pred.right and pred.right.kind == "field" and pred.right.field:
+        found.append(pred.right.field)
+    for arg in pred.args or []:
+        found.extend(_pred_field_names(arg))
+    return found
 
 
 def _and_pred(

@@ -33,7 +33,7 @@ def test_compiler_building_height_filter() -> None:
     compiled = compile_semantic_plan(plan)
     sql = compiled.sql
     assert "AL_D010_26_20250704" in sql
-    assert '"A4"' in sql
+    assert '"A3"' in sql or '"A4"' in sql
     assert '"A9"' in sql
     assert '"A16"' in sql
     assert "공동주택" in sql

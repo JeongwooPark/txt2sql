@@ -19,6 +19,7 @@ from llm2sql.semantic_plan.catalog import (
 )
 from llm2sql.semantic_plan.migrate import validate_predicate
 from llm2sql.semantic_plan.models import (
+    ExpressionSpec,
     FilterSpec,
     PredicateSpec,
     SemanticCompileError,
@@ -100,10 +101,9 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
 
     spatial_places: set[str] = set()
     spatial_order: list[str] = []
-    spatial_limit: list[int] = []
     if plan.spatial_relations:
         spatial_boundary, spatial_places = _apply_spatial_relations(
-            alias, plan, tables, joins, where, spatial_order, spatial_limit
+            alias, plan, tables, joins, where, spatial_order
         )
         uses_boundary = uses_boundary or spatial_boundary
 
@@ -135,21 +135,14 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
             else:
                 where.append(_a4_place_sql(alias, name))
 
-    height_used = False
     params: list[object] = []
-    ratio = "ratio_percent" in (plan.assumptions or [])
-    pred_clause: str | None = None
     pred = effective_predicate(plan)
     if pred is not None:
         validate_predicate(pred)
-        clause, used_height, pred_params = _predicate_sql(
+        clause, _, pred_params = _predicate_sql(
             alias, plan.entity, pred, col_map=col_map
         )
-        if ratio:
-            pred_clause = clause
-        else:
-            where.append(clause)
-        height_used = height_used or used_height
+        where.append(clause)
         params.extend(pred_params)
         compiled_nodes.extend(_predicate_node_ids(pred))
 
@@ -167,16 +160,7 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
         where.append(f"{a34}::text ~ '^[0-9]{{4}}'")
         where.append(f"ABS({y33} - {y34}) >= {n}")
 
-    if plan.query_kind in {"rank", "list"} and any(
-        item.field == "height_m" for item in plan.order_by
-    ):
-        height_used = True
-    if height_used and plan.entity == "building":
-        height_col = col_map.get("height_m") or "A16"
-        floors_col = col_map.get("ground_floors") or "A26"
-        where.append(_sane_height_sql(alias, height_col, floors_col))
-
-    select_sql = _select_sql(alias, plan, filter_clause=pred_clause, col_map=col_map)
+    select_sql = _select_sql(alias, plan, col_map=col_map)
     from_sql = f"FROM {_ident(default_table, physical=True)} {alias}"
     if joins:
         from_sql = from_sql + "\n" + "\n".join(joins)
@@ -194,8 +178,6 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
         extra_order = ", ".join(spatial_order)
         order_sql = f"{order_sql}, {extra_order}" if order_sql else f"ORDER BY {extra_order}"
     limit_sql = f"LIMIT {int(plan.limit)}" if plan.limit else ""
-    if not limit_sql and spatial_limit:
-        limit_sql = f"LIMIT {int(spatial_limit[0])}"
 
     parts = [select_sql, from_sql]
     if where_sql:
@@ -248,18 +230,9 @@ def _field_col(
 def _select_sql(
     alias: str,
     plan: SemanticQueryPlan,
-    filter_clause: str | None = None,
     col_map: dict[str, str] | None = None,
 ) -> str:
-    if "ratio_percent" in (plan.assumptions or []):
-        if filter_clause:
-            return (
-                "SELECT 100.0 * COUNT(*) FILTER "
-                f"(WHERE {filter_clause})::float8 "
-                '/ NULLIF(COUNT(*), 0) AS "ratio_pct"'
-            )
-        return 'SELECT 100.0 * COUNT(*)::float8 / NULLIF(COUNT(*), 0) AS "ratio_pct"'
-    if plan.query_kind == "count":
+    if plan.query_kind == "count" and not plan.ratios:
         industrial_join = any(
             getattr(rel.target, "entity", None) == "industrial_complex"
             for rel in plan.spatial_relations
@@ -272,7 +245,7 @@ def _select_sql(
             }.get(plan.entity, "A0")
             return f'SELECT COUNT(DISTINCT {alias}."{pk}") AS "count"'
         return 'SELECT COUNT(*) AS "count"'
-    if plan.query_kind in {"aggregate", "distribution"}:
+    if plan.query_kind in {"aggregate", "distribution"} or plan.ratios:
         pieces: list[str] = []
         for key in plan.group_by:
             _field, col = _field_col(alias, plan.entity, key, col_map)
@@ -282,8 +255,10 @@ def _select_sql(
                 pieces.append(f"{_sigungu_name_sql(alias)} AS {_ident(key)}")
             else:
                 pieces.append(f"{col} AS {_ident(key)}")
+        for ratio in plan.ratios:
+            pieces.append(_ratio_sql(alias, plan, ratio, col_map=col_map))
         aggs = list(plan.aggregations)
-        if not aggs and plan.query_kind == "distribution":
+        if not aggs and not plan.ratios and plan.query_kind == "distribution":
             pieces.append('COUNT(*) AS "n"')
         for agg in aggs:
             pieces.append(_agg_sql(alias, plan.entity, agg, col_map=col_map))
@@ -310,6 +285,57 @@ def _select_sql(
     return "SELECT " + ",\n       ".join(pieces)
 
 
+def _compile_expression(
+    alias: str,
+    entity: str,
+    expr: ExpressionSpec,
+    col_map: dict[str, str] | None = None,
+) -> str:
+    if expr.kind == "field":
+        if not expr.field:
+            raise SemanticCompileError("expression field missing")
+        field, col = _field_col(alias, entity, expr.field, col_map)
+        return f"{col}::float8" if field.data_type == "number" else col
+    if expr.left is None or expr.right is None:
+        raise SemanticCompileError("expression operands required")
+    left = _compile_expression(alias, entity, expr.left, col_map)
+    right = _compile_expression(alias, entity, expr.right, col_map)
+    if expr.kind == "divide":
+        return f"({left} / NULLIF({right}, 0))"
+    if expr.kind == "multiply":
+        return f"({left} * {right})"
+    if expr.kind == "add":
+        return f"({left} + {right})"
+    if expr.kind == "subtract":
+        return f"({left} - {right})"
+    raise SemanticCompileError(f"unsupported expression kind: {expr.kind}")
+
+
+def _ratio_sql(
+    alias: str,
+    plan: SemanticQueryPlan,
+    ratio,
+    col_map: dict[str, str] | None = None,
+) -> str:
+    num, _, _ = _predicate_sql(
+        alias, plan.entity, ratio.numerator_predicate, col_map=col_map
+    )
+    if ratio.denominator_predicate is not None:
+        den, _, _ = _predicate_sql(
+            alias, plan.entity, ratio.denominator_predicate, col_map=col_map
+        )
+        den_count = f"COUNT(*) FILTER (WHERE {den})"
+    else:
+        den_count = "COUNT(*)"
+    out = ratio.alias or "ratio_pct"
+    if not _IDENT_RE.fullmatch(out):
+        raise SemanticCompileError(f"invalid ratio alias: {out}")
+    return (
+        f"{sql_number(float(ratio.multiplier))} * COUNT(*) FILTER "
+        f"(WHERE {num})::float8 / NULLIF({den_count}, 0) AS {_ident(out)}"
+    )
+
+
 def _agg_sql(
     alias: str,
     entity: str,
@@ -321,9 +347,8 @@ def _agg_sql(
     out = agg.alias or (f"{function}_{field_key}" if field_key else function)
     if not _IDENT_RE.fullmatch(out):
         raise SemanticCompileError(f"invalid aggregation alias: {out}")
+    filter_parts: list[str] = []
     if getattr(agg, "filter_field", None):
-        from llm2sql.semantic_plan.models import FilterSpec
-
         extra, _ = _filter_sql(
             alias,
             entity,
@@ -334,22 +359,41 @@ def _agg_sql(
             ),
             col_map=col_map,
         )
-        return f"COUNT(*) FILTER (WHERE {extra}) AS {_ident(out)}"
-    if function == "count" and not field_key:
-        return f'COUNT(*) AS {_ident(out)}'
-    if not field_key:
+        filter_parts.append(extra)
+    if agg.predicate is not None:
+        clause, _, _ = _predicate_sql(alias, entity, agg.predicate, col_map=col_map)
+        filter_parts.append(clause)
+    filter_sql = f" FILTER (WHERE {' AND '.join(filter_parts)})" if filter_parts else ""
+    if agg.expression is not None:
+        expr = _compile_expression(alias, entity, agg.expression, col_map)
+    elif function == "count" and not field_key:
+        return f"COUNT(*){filter_sql} AS {_ident(out)}"
+    elif not field_key:
         raise SemanticCompileError(f"{function} requires a field")
-    field, col = _field_col(alias, entity, field_key, col_map)
-    if not field.aggregatable:
-        raise SemanticCompileError(f"field is not aggregatable: {field_key}")
-    expr = f"{col}::float8"
+    else:
+        field, col = _field_col(alias, entity, field_key, col_map)
+        if not field.aggregatable:
+            raise SemanticCompileError(f"field is not aggregatable: {field_key}")
+        expr = f"{col}::float8"
+    if function == "percentile":
+        if agg.percentile is None:
+            raise SemanticCompileError("percentile requires a value")
+        return (
+            f"PERCENTILE_CONT({sql_number(float(agg.percentile))}) "
+            f"WITHIN GROUP (ORDER BY {expr}){filter_sql} AS {_ident(out)}"
+        )
     if function == "median":
-        return f"PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {expr}) AS {_ident(out)}"
+        return (
+            f"PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {expr})"
+            f"{filter_sql} AS {_ident(out)}"
+        )
+    if function == "stddev":
+        return f"STDDEV_POP({expr}){filter_sql} AS {_ident(out)}"
     fn = {"avg": "AVG", "sum": "SUM", "min": "MIN", "max": "MAX", "count": "COUNT"}
     sql_fn = fn.get(function)
     if sql_fn is None:
         raise SemanticCompileError(f"unsupported aggregation: {function}")
-    return f"{sql_fn}({expr}) AS {_ident(out)}"
+    return f"{sql_fn}({expr}){filter_sql} AS {_ident(out)}"
 
 
 def _group_sql(
@@ -372,15 +416,11 @@ def _group_sql(
 def _order_sql(
     alias: str, plan: SemanticQueryPlan, col_map: dict[str, str] | None = None
 ) -> str:
-    if plan.query_kind == "distribution" and not plan.order_by:
-        return 'ORDER BY "n" DESC NULLS LAST'
-    if not plan.order_by and plan.group_by and plan.aggregations:
-        metric = plan.aggregations[-1].alias or "n"
-        return f"ORDER BY {_ident(metric)} DESC NULLS LAST"
     if not plan.order_by:
         return ""
     bits = []
     agg_aliases = {item.alias for item in plan.aggregations if item.alias}
+    agg_aliases.update(item.alias for item in plan.ratios if item.alias)
     for item in plan.order_by:
         if item.field in agg_aliases or item.field in {"count", "n"}:
             expr = _ident(item.field)
@@ -598,7 +638,6 @@ def _apply_spatial_relations(
     joins: list[str],
     where: list[str],
     spatial_order: list[str],
-    spatial_limit: list[int],
 ) -> tuple[bool, set[str]]:
     """spatial_relations → JOIN/WHERE. 물리 함수명은 compiler 정책만 고른다."""
     from llm2sql.semantic_plan.spatial_policy import resolve_spatial_policy
@@ -708,8 +747,6 @@ def _apply_spatial_relations(
             )
             where.append(f"{z_alias}.geom IS NOT NULL")
             spatial_order.append(f"ST_Distance({alias}.geometry, {z_alias}.geom)")
-            if plan.limit is None:
-                spatial_limit.append(10)
             uses_boundary = True
             continue
         if policy.kind == "ratio":
@@ -866,17 +903,6 @@ def _predicate_node_ids(pred: PredicateSpec) -> list[str]:
         else:
             out.append(f"{node.op}:{index}")
     return out
-
-
-def _sane_height_sql(
-    alias: str, height_col: str = "A16", floors_col: str = "A26"
-) -> str:
-    col = f'{alias}."{height_col}"::float8'
-    floors = f'{alias}."{floors_col}"::float8'
-    return (
-        f"{col} > 0 AND {col} <= 600 AND "
-        f"({alias}.\"{floors_col}\" IS NULL OR {col} <= ({floors} * 8 + 30))"
-    )
 
 
 def _plan_uses_d198_slots(plan: SemanticQueryPlan) -> bool:
