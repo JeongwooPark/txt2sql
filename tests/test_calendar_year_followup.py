@@ -43,12 +43,12 @@ def test_subset_followup_injects_calendar_year() -> None:
 
 
 def test_router_area_range_plus_calendar_year() -> None:
+    from llm2sql.route_capability import select_execution_path
     from llm2sql.semantic_plan.compiler import compile_semantic_plan
     from llm2sql.semantic_plan.generator import try_heuristic_plan
 
     q = "구서1동에서 면적이 100평이상 200평이하 2000년 이후 건물을 찾아라"
-    routed = try_route(q)
-    assert routed is None
+    assert select_execution_path(q) == "semantic_plan"
     plan = try_heuristic_plan(q)
     assert plan is not None
     fields = {item.field for item in plan.filters}

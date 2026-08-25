@@ -31,6 +31,7 @@ class RouteCapability:
     supports_derived_metric: bool = False
     supports_fixed_bins: bool = False
     supports_basement: bool = False
+    supports_temporal: bool = False
     supported_fields: frozenset[str] = field(default_factory=frozenset)
 
 
@@ -112,6 +113,7 @@ D198 = RouteCapability(
     supports_top_n=True,
     supports_fixed_bins=True,
     supported_aggregations=_COUNT_ONLY,
+    supports_temporal=True,
 )
 BAS = RouteCapability(
     route="bas",
@@ -151,6 +153,7 @@ PLAN_ROUTE = RouteCapability(
     supports_derived_metric=True,
     supports_fixed_bins=True,
     supports_basement=True,
+    supports_temporal=True,
 )
 
 
@@ -286,6 +289,8 @@ def missing_requirements(capability: RouteCapability, contract: QueryContract) -
         contract.wants_basement or "basement_floors" in pred_fields
     ) and not capability.supports_basement:
         missing.append("basement")
+    if contract.wants_temporal and not capability.supports_temporal:
+        missing.append("temporal")
     threshold_fields = pred_fields & _THRESHOLD_FIELDS
     if (
         threshold_fields

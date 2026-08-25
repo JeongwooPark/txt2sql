@@ -105,6 +105,7 @@ class QueryContract(BaseModel):
     wants_spatial: bool = False
     wants_basement: bool = False
     wants_count: bool = False
+    wants_temporal: bool = False
 
     def consumed(self) -> list[Span]:
         return (
@@ -232,6 +233,10 @@ def extract_contract(question: str) -> QueryContract:
     )
     wants_basement = bool(re.search(r"지하(?!철)", q))
     wants_count = _explicit_count(q)
+    from llm2sql.query_understanding.temporal import parse_temporal_filters
+    from llm2sql.domain import looks_like_age_question
+
+    wants_temporal = bool(parse_temporal_filters(q)) or looks_like_age_question(q)
 
     contract = QueryContract(
         question=q,
@@ -253,6 +258,7 @@ def extract_contract(question: str) -> QueryContract:
         wants_spatial=wants_spatial,
         wants_basement=wants_basement,
         wants_count=wants_count,
+        wants_temporal=wants_temporal,
     )
     consumed = contract.consumed()
     conflicts = conflicting_ranges(ranges)
