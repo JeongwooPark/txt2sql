@@ -1,0 +1,24 @@
+{
+  "when": "2026-08-25",
+  "base_commit": "271afef",
+  "base_branch": "systematic-fix-q500-20260825",
+  "pytest": {
+    "query_understanding_and_semantic_plan": {"passed": 200, "failed": 0},
+    "full_suite": {"passed": 246, "failed": 0}
+  },
+  "full500_reference": {
+    "source": "artifacts/systematic_fix/32_post_fix500.json",
+    "passed": 393,
+    "total": 500,
+    "accuracy_pct": 78.6,
+    "elapsed_s": 820.9,
+    "p50_ms": 139,
+    "p95_ms": 12344
+  },
+  "q3_reference": {
+    "source": "artifacts/systematic_fix/31_q3_agg_rank.json",
+    "passed": 10,
+    "total": 24,
+    "accuracy_pct": 41.7
+  }
+}
