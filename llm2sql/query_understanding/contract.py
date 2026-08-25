@@ -13,6 +13,42 @@ from llm2sql.query_understanding.complexity import complexity_score
 from llm2sql.query_understanding.spans import Span, dedupe_nested, find_all
 
 
+class AggregationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    function: str
+    field: str | None = None
+    percentile: float | None = None
+
+
+class RatioRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    has_denominator: bool = False
+
+
+class DerivedMetricRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str = "divide"
+    left: str
+    right: str
+
+
+class PercentileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    percentile: float
+    field: str | None = None
+
+
+class OrderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    direction: str = "desc"
+    field: str | None = None
+
+
 class QueryContract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -35,6 +71,16 @@ class QueryContract(BaseModel):
     all_numeric_expressions_bound: bool = True
     all_requested_outputs_bound: bool = True
     complexity: int = 0
+    operation: str | None = None
+    group_fields: list[str] = Field(default_factory=list)
+    aggregation_requests: list[AggregationRequest] = Field(default_factory=list)
+    ratios: list[RatioRequest] = Field(default_factory=list)
+    derived_metrics: list[DerivedMetricRequest] = Field(default_factory=list)
+    percentile_requests: list[PercentileRequest] = Field(default_factory=list)
+    output_fields: list[str] = Field(default_factory=list)
+    order_requests: list[OrderRequest] = Field(default_factory=list)
+    limit: int | None = None
+    fixed_bins: bool = False
 
     def consumed(self) -> list[Span]:
         return (
@@ -85,16 +131,24 @@ def extract_contract(question: str) -> QueryContract:
     ranges = _extract_ranges(q)
     numbers = _extract_numbers(q, ranges)
     order = _extract_order(q)
-    limits = _extract_limits(q)
     outputs = _extract_outputs(q)
     comparisons = _extract_comparisons(q)
     groups: list[Span] = []
     for hint in ops.GROUP_HINTS:
-        groups.extend(find_all(q, re.escape(hint), "group"))
+        for span in find_all(q, re.escape(hint), "group"):
+            span.value = ops.GROUP_FIELD_MAP.get(hint, hint)
+            groups.append(span)
+    groups = dedupe_nested(groups)
     if "기초구역" in q:
         for span in numbers + ranges:
             if span.meta.get("field") == "gross_floor_area_m2":
                 span.meta["field"] = "area_m2"
+
+    limits = _extract_limits(q, places)
+    percentile_requests = _extract_percentiles(q)
+    ratios = _extract_ratios(q)
+    derived_metrics = _extract_derived(q)
+    fixed_bins = any(h in q for h in ops.BIN_HINTS)
 
     contract = QueryContract(
         question=q,
@@ -109,6 +163,10 @@ def extract_contract(question: str) -> QueryContract:
         comparisons=comparisons,
         ranges=ranges,
         groups=groups,
+        percentile_requests=percentile_requests,
+        ratios=ratios,
+        derived_metrics=derived_metrics,
+        fixed_bins=fixed_bins,
     )
     consumed = contract.consumed()
     conflicts = conflicting_ranges(ranges)
@@ -139,6 +197,7 @@ def extract_contract(question: str) -> QueryContract:
     if conflicts:
         contract.boolean_structure_supported = False
         contract.coverage_ratio = min(contract.coverage_ratio, 0.99)
+    _finalize_requests(contract)
     return contract
 
 
@@ -230,15 +289,21 @@ def _extract_order(question: str) -> list[Span]:
     return dedupe_nested(found)
 
 
-def _extract_limits(question: str) -> list[Span]:
+def _extract_limits(question: str, places: list[Span] | None = None) -> list[Span]:
     found: list[Span] = []
+    places = places or []
     for match in re.finditer(ops.LIMIT_PATTERN, question):
+        if question[match.end() : match.end() + 1] == "%":
+            continue
+        start, end = match.start(), match.end()
+        if any(item.start <= start and end <= item.end for item in places):
+            continue
         found.append(
             Span(
                 kind="limit",
                 text=match.group(0),
-                start=match.start(),
-                end=match.end(),
+                start=start,
+                end=end,
                 value=int(match.group("n")),
             )
         )
@@ -374,7 +439,7 @@ def _aggregation_complete(contract: QueryContract) -> bool:
     if not contract.aggregations:
         return True
     fns = {item.value for item in contract.aggregations}
-    if "avg" in fns or "sum" in fns or "min" in fns or "max" in fns or "median" in fns:
+    if "avg" in fns or "sum" in fns or "min" in fns or "max" in fns or "median" in fns or "stddev" in fns:
         return bool(contract.metrics) or bool(contract.groups)
     return True
 
@@ -407,3 +472,100 @@ def _slot_coverage(contract: QueryContract) -> float:
     if not contract.all_requested_outputs_bound:
         bound -= 1
     return round(max(0.0, bound / len(slots)), 4)
+
+
+def _extract_percentiles(question: str) -> list[PercentileRequest]:
+    found: list[PercentileRequest] = []
+    field = _nearest_metric(question, len(question))
+    for match in re.finditer(r"상위\s*(\d+(?:\.\d+)?)\s*%", question):
+        pct = float(match.group(1))
+        found.append(
+            PercentileRequest(percentile=max(0.0, min(1.0, 1.0 - pct / 100.0)), field=field)
+        )
+    for match in re.finditer(r"(\d+(?:\.\d+)?)\s*백분위", question):
+        pct = float(match.group(1))
+        if pct > 1:
+            pct = pct / 100.0
+        found.append(PercentileRequest(percentile=max(0.0, min(1.0, pct)), field=field))
+    return found
+
+
+def _extract_ratios(question: str) -> list[RatioRequest]:
+    if not any(h in question for h in ops.RATIO_HINTS):
+        return []
+    hits = sum(question.count(h) for h in ("비율", "퍼센트", "몇%"))
+    hits += len(re.findall(r"(?<!\d)%", question))
+    n = 2 if hits >= 2 or question.count("비율") >= 2 else 1
+    has_den = "중" in question or "/" in question or "대비" in question
+    return [RatioRequest(has_denominator=has_den) for _ in range(n)]
+
+
+def _extract_derived(question: str) -> list[DerivedMetricRequest]:
+    if "대비" in question or "비(" in question or re.search(r"건축면적\s*/\s*연면적", question):
+        if "건축면적" in question and "연면적" in question:
+            return [
+                DerivedMetricRequest(
+                    kind="divide",
+                    left="building_area_m2",
+                    right="gross_floor_area_m2",
+                )
+            ]
+    return []
+
+
+def _finalize_requests(contract: QueryContract) -> None:
+    q = contract.question
+    contract.group_fields = [
+        str(item.value) for item in contract.groups if item.value
+    ]
+    seen_fn: list[str] = []
+    for item in contract.aggregations:
+        fn = str(item.value or "")
+        if fn and fn not in seen_fn:
+            seen_fn.append(fn)
+            field = contract.metrics[0].value if contract.metrics else None
+            contract.aggregation_requests.append(
+                AggregationRequest(function=fn, field=str(field) if field else None)
+            )
+    if any(k in q for k in ("건수", "채수", "몇 채", "몇채", "건물 수")) and "count" not in seen_fn:
+        contract.aggregation_requests.append(AggregationRequest(function="count"))
+    for item in contract.percentile_requests:
+        contract.aggregation_requests.append(
+            AggregationRequest(
+                function="percentile",
+                field=item.field,
+                percentile=item.percentile,
+            )
+        )
+    contract.output_fields = [
+        str(item.value) for item in contract.outputs if item.value
+    ]
+    for item in contract.order:
+        contract.order_requests.append(
+            OrderRequest(direction=str(item.value or "desc"))
+        )
+    if (
+        not contract.order_requests
+        and not contract.percentile_requests
+        and any(h in q for h in ops.RANK_HINTS)
+        and "백분위" not in q
+        and not re.search(r"상위\s*\d+\s*%", q)
+    ):
+        contract.order_requests.append(OrderRequest(direction="desc"))
+    if contract.limits:
+        contract.limit = int(contract.limits[-1].value)
+    if contract.ratios:
+        contract.operation = "ratio"
+    elif contract.percentile_requests:
+        contract.operation = "percentile"
+    elif contract.group_fields and (contract.order_requests or contract.limit):
+        contract.operation = "group_rank"
+    elif contract.order_requests or (contract.limit and any(h in q for h in ops.RANK_HINTS)):
+        contract.operation = "rank"
+    elif contract.aggregation_requests:
+        contract.operation = "aggregate"
+    elif contract.output_fields:
+        contract.operation = "list"
+    else:
+        contract.operation = "count"
+

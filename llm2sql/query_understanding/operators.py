@@ -23,6 +23,7 @@ AGG_MAP = {
     "최솟값": "min",
     "최댓값": "max",
     "중앙값": "median",
+    "표준편차": "stddev",
 }
 METRIC_MAP = {
     "높이": "height_m",
@@ -78,8 +79,20 @@ COMPARE_PATTERNS = (
     r"(?P<left>건축면적|건물면적|연면적|대지면적|높이).{0,4}(?P<right>건축면적|건물면적|연면적|대지면적|높이).{0,4}(?P<rel>보다 큰|보다 작은|보다 높은|보다 낮은)",
     r"(?P<left>건축면적|건물면적).{0,8}(?P<right>연면적|대지면적).{0,4}(보다 큰|보다 작)",
 )
-GROUP_HINTS = ("용도별", "층수별", "층별", "구별")
+GROUP_HINTS = ("용도별", "층수별", "층별", "구별", "구조별", "법정동별")
+GROUP_FIELD_MAP = {
+    "용도별": "usage",
+    "층수별": "ground_floors",
+    "층별": "ground_floors",
+    "구별": "sigungu_name",
+    "구조별": "structure",
+    "법정동별": "legal_dong",
+}
+RATIO_HINTS = ("비율", "퍼센트", "몇%", "몇 %", "%씩", "몇 프로")
+RANK_HINTS = ("상위", "순위", "가장", "제일", "랭킹", "큰 순", "높은 순")
+PERCENTILE_HINTS = ("백분위", "분위")
+BIN_HINTS = ("구간별", "구간 별", "크기별")
 HAVING_HINTS = ("평균이", "합계가", "건수가")
-LIMIT_PATTERN = r"(?P<n>\d+)\s*(개|곳|채|동)\b"
+LIMIT_PATTERN = r"(?P<n>\d+)\s*(개|곳|채|동)"
 PLACE_PATTERN = r"[가-힣A-Za-z0-9]+(?:구|군|시|동|읍|면|리)"
 NUMBER_UNIT_PATTERN = r"(?P<num>\d+(?:\.\d+)?)\s*(?P<unit>m|미터|km|㎡|m2|평|층)?"

@@ -72,8 +72,10 @@ from llm2sql.profile_qa import (
     is_usage_overview_question,
 )
 from llm2sql.progress import ProgressCallback, ProgressTracker, TokenCallback
+from llm2sql.query_understanding.contract import extract_contract
 from llm2sql.rag_sql import run_rag_sql
 from llm2sql.rank_compare_qa import answer_rank_compare, is_rank_compare_question
+from llm2sql.route_capability import route_allowed
 from llm2sql.route_dispatch import (
     DispatchMode,
     match_route,
@@ -1108,6 +1110,14 @@ def _ask_inner(
     on_token: TokenCallback | None = None,
     preferred_intent: IntentPrediction | None = None,
 ) -> dict[str, Any]:
+    contract = extract_contract(question)
+    progress.emit(
+        "understand",
+        "Query Contract 생성",
+        operation=contract.operation,
+        complexity=contract.complexity,
+    )
+
     if (
         session is not None
         and settings.semantic_plan_mode in {"shadow", "hybrid"}
@@ -1170,7 +1180,7 @@ def _ask_inner(
 
     if session is not None:
         subset = try_subset_followup(question, session)
-        if subset is not None:
+        if subset is not None and route_allowed(subset.intent, contract):
             return _finish_routed_query(
                 question,
                 settings,
@@ -1192,7 +1202,9 @@ def _ask_inner(
             if base and base.strip() not in question:
                 merged = f"{base} {question}".strip()
             routed_year = try_route(merged, conn=conn)
-            if routed_year is not None and routed_year.intent == "d198_year_stats":
+            if routed_year is not None and routed_year.intent == "d198_year_stats" and route_allowed(
+                routed_year.intent, contract
+            ):
                 return _finish_routed_query(
                     merged,
                     settings,
@@ -1209,7 +1221,9 @@ def _ask_inner(
             if base and base.strip() not in question:
                 merged = f"{base} {question}".strip()
             routed_bin = try_route(merged, conn=conn)
-            if routed_bin is not None and routed_bin.intent == "d198_value_bins":
+            if routed_bin is not None and routed_bin.intent == "d198_value_bins" and route_allowed(
+                routed_bin.intent, contract
+            ):
                 return _finish_routed_query(
                     merged,
                     settings,
@@ -1253,24 +1267,26 @@ def _ask_inner(
     deferred_route = route_match.deferred
     if route_match.early is not None:
         early = route_match.early
-        if early.intent == "building_name_lookup":
-            label = "건물명 조회 라우트"
-        elif early.intent.startswith("building_rank_"):
-            label = f"건물 순위 라우트 ({early.intent})"
-        elif early.intent == "legal_dong_admin_members":
-            label = "법정동 구성 행정동 목록"
-        else:
-            label = f"산업단지 라우트 ({early.intent})"
-        return _finish_routed_query(
-            question,
-            settings,
-            progress,
-            conn=conn,
-            ollama_client=ollama_client,
-            on_token=on_token,
-            routed=early,
-            route_label=label,
-        )
+        if route_allowed(early.intent, contract):
+            if early.intent == "building_name_lookup":
+                label = "건물명 조회 라우트"
+            elif early.intent.startswith("building_rank_"):
+                label = f"건물 순위 라우트 ({early.intent})"
+            elif early.intent == "legal_dong_admin_members":
+                label = "법정동 구성 행정동 목록"
+            else:
+                label = f"산업단지 라우트 ({early.intent})"
+            return _finish_routed_query(
+                question,
+                settings,
+                progress,
+                conn=conn,
+                ollama_client=ollama_client,
+                on_token=on_token,
+                routed=early,
+                route_label=label,
+            )
+        progress.emit("route", f"early route capability 부족: {early.intent}")
 
     if preferred_intent is not None and settings.intent_mode in {"hybrid", "llm"}:
         dispatched = _try_preferred_intent(
@@ -1287,7 +1303,7 @@ def _ask_inner(
         progress.emit("route", "선호 의도 처리 실패 → 규칙 체인")
 
     llm = _llm_kw(settings, ollama_client)
-    if is_rank_compare_question(question):
+    if is_rank_compare_question(question) and route_allowed("building_rank_compare", contract):
         progress.emit("route", "복수 지역 최고 건물 비교로 판단")
         progress.emit("answer", "최고 건물 비교 답변 생성")
         ranked = answer_rank_compare(conn, question, on_token=on_token, **llm)
@@ -1296,7 +1312,7 @@ def _ask_inner(
             return _qa_ok(ranked)
         progress.emit("route", "최고 건물 비교 매칭 실패 → 계속 진행")
 
-    if is_usage_overview_question(question):
+    if is_usage_overview_question(question) and route_allowed("building_usage_count", contract):
         progress.emit("route", "건물 용도 구성 설명 질의로 판단")
         progress.emit("answer", "용도 분포 자연어 생성")
         usage_ov = answer_usage_overview_question(
@@ -1313,7 +1329,7 @@ def _ask_inner(
             return _qa_ok(usage_ov)
         progress.emit("route", "용도 구성 설명 매칭 실패 → 계속 진행")
 
-    if is_profile_question(question):
+    if is_profile_question(question) and route_allowed("building_profile", contract):
         progress.emit("route", "건물 특징 요약 질의로 판단")
         progress.emit("answer", "특징 요약 자연어 생성")
         profile = answer_profile_question(conn, question, on_token=on_token, **llm)
@@ -1366,6 +1382,9 @@ def _ask_inner(
 
     progress.emit("route", "규칙 라우터 매칭 시도")
     routed = deferred_route if deferred_route is not None else try_route(question, conn=conn)
+    if routed is not None and not route_allowed(routed.intent, contract):
+        progress.emit("route", f"라우트 capability 부족: {routed.intent} → Semantic Plan")
+        routed = None
     if routed is not None:
         progress.emit(
             "route",
