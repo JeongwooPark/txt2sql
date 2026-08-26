@@ -189,17 +189,37 @@ def should_try_semantic_v2(bundle: ExecutionPlanBundle) -> bool:
     if bundle.physical.strategy in {"FAST_SIMPLE_COUNT", "FAST_THRESHOLD"}:
         return False
     ir = bundle.query_ir
-    if ir.task in {"aggregate", "group", "distribution", "ratio"}:
-        return True
-    if ir.temporal is not None:
-        return True
+    # Unstable / high-regression operators stay on legacy/SQP until compilers mature.
+    if ir.task in {"meta", "list", "rank", "compare", "unknown"}:
+        return False
+    # SpatialFilter→PostGIS still available via SQP/legacy; v2 ownership gated carefully.
     if ir.spatial:
+        return False
+
+    hints = ir.provenance.legacy_hints or {}
+    source = ir.provenance.source_text or ""
+
+    if ir.task == "aggregate":
+        # Bare "면적 평균" is often clarify/meta — do not force AVG(gross_floor_area).
+        if "면적" in source and not any(
+            tok in source for tok in ("연면적", "건축면적", "대지면적", "부지면적")
+        ):
+            return False
+        return bool(ir.aggregations)
+    if ir.task in {"group", "distribution"}:
+        return bool(ir.dimensions)
+    if ir.task == "ratio":
         return True
-    if ir.task == "rank":
-        return True
-    # count with multiple predicates / aggs beyond simple — allow v2
-    if ir.task == "count" and (len(ir.predicates) >= 2 or ir.dimensions or ir.aggregations):
-        return True
+    if ir.task == "count":
+        # Avoid list-shaped questions mis-tagged as count (e.g. "보여줘").
+        if not hints.get("wants_count"):
+            return False
+        if ir.temporal is not None:
+            return True
+        # Multi-predicate attribute counts (e.g. coverage + FAR thresholds).
+        if len(ir.predicates) >= 2:
+            return True
+        return False
     return False
 
 
