@@ -1,0 +1,330 @@
+{
+  "total_count_mismatch": 51,
+  "counts": {
+    "spatial": 9,
+    "predicate": 17,
+    "grain": 4,
+    "scope": 4,
+    "dataset": 6,
+    "temporal": 10,
+    "unknown": 1
+  },
+  "share_pct": {
+    "spatial": 17.65,
+    "predicate": 33.33,
+    "grain": 7.84,
+    "scope": 7.84,
+    "dataset": 11.76,
+    "temporal": 19.61,
+    "unknown": 1.96
+  },
+  "concrete_pct": 98.04,
+  "cases": [
+    {
+      "id": "Q020",
+      "cause": "spatial",
+      "reason": "count-mismatch gold=8820 pred=[1.0, 8824.0, 8824.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q021",
+      "cause": "spatial",
+      "reason": "count-mismatch gold=8468 pred=[2.0, 8474.0, 8474.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q049",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=2948 pred=[2967.0, 2967.0]",
+      "route": "building_structure_count"
+    },
+    {
+      "id": "Q055",
+      "cause": "grain",
+      "reason": "count-mismatch gold=323440 pred=[0.0]",
+      "route": "building_name_lookup"
+    },
+    {
+      "id": "Q056",
+      "cause": "scope",
+      "reason": "count-mismatch gold=1 pred=[]",
+      "route": "semantic_plan_clarify"
+    },
+    {
+      "id": "Q069",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=472321 pred=[100.0, 1.0, 43.0, -1.0, 2.0, 1116.0]",
+      "route": "semantic_plan_list"
+    },
+    {
+      "id": "Q122",
+      "cause": "grain",
+      "reason": "count-mismatch gold=5420 pred=[5310.0, 5310.0]",
+      "route": "d198_attr_count"
+    },
+    {
+      "id": "Q127",
+      "cause": "grain",
+      "reason": "count-mismatch gold=477 pred=[462.0, 462.0]",
+      "route": "d198_attr_count"
+    },
+    {
+      "id": "Q132",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=139700 pred=[100.0, 1.0, 18290000.0, 1829.0, 411.6, 2.0]",
+      "route": "semantic_plan_list"
+    },
+    {
+      "id": "Q137",
+      "cause": "scope",
+      "reason": "count-mismatch gold=193368 pred=[]",
+      "route": "semantic_plan_clarify"
+    },
+    {
+      "id": "Q201",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=13218 pred=[13905.0, 13905.0]",
+      "route": "building_usage_count"
+    },
+    {
+      "id": "Q205",
+      "cause": "dataset",
+      "reason": "count-mismatch gold=787 pred=[779.0, 779.0]",
+      "route": "d198_attr_count"
+    },
+    {
+      "id": "Q209",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=98 pred=[117.0, 117.0]",
+      "route": "building_usage_count"
+    },
+    {
+      "id": "Q229",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=10 pred=[17.0, 17.0]",
+      "route": "building_usage_count"
+    },
+    {
+      "id": "Q237",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=1919 pred=[1993.0, 1993.0]",
+      "route": "building_usage_count"
+    },
+    {
+      "id": "Q241",
+      "cause": "dataset",
+      "reason": "count-mismatch gold=2531 pred=[2520.0, 2520.0]",
+      "route": "d198_attr_count"
+    },
+    {
+      "id": "Q249",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=15 pred=[16.0, 16.0]",
+      "route": "building_usage_count"
+    },
+    {
+      "id": "Q256",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=180 pred=[5.0, 185.0, 185.0]",
+      "route": "building_floor_count"
+    },
+    {
+      "id": "Q258",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=18 pred=[500.0, 20.0, 20.0]",
+      "route": "building_area_threshold_count"
+    },
+    {
+      "id": "Q261",
+      "cause": "dataset",
+      "reason": "count-mismatch gold=15796 pred=[15672.0, 15672.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q262",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=146 pred=[24.0, 24.0]",
+      "route": "building_usage_count"
+    },
+    {
+      "id": "Q267",
+      "cause": "grain",
+      "reason": "count-mismatch gold=62 pred=[15.0, 555.0, 555.0]",
+      "route": "d198_attr_count"
+    },
+    {
+      "id": "Q274",
+      "cause": "dataset",
+      "reason": "count-mismatch gold=619 pred=[613.0, 613.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q289",
+      "cause": "dataset",
+      "reason": "count-mismatch gold=22124 pred=[21995.0, 30.0, 13093.0, 59.5, 2.0, 2599.0]",
+      "route": "usage_overview"
+    },
+    {
+      "id": "Q290",
+      "cause": "dataset",
+      "reason": "count-mismatch gold=19 pred=[17989.0, 29.0, 10173.0, 56.6, 2.0, 2583.0]",
+      "route": "usage_overview"
+    },
+    {
+      "id": "Q301",
+      "cause": "temporal",
+      "reason": "count-mismatch gold=16155 pred=[18012.0, 18012.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q302",
+      "cause": "temporal",
+      "reason": "count-mismatch gold=1694 pred=[1782.0, 1782.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q304",
+      "cause": "temporal",
+      "reason": "count-mismatch gold=1419 pred=[1620.0, 1620.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q305",
+      "cause": "temporal",
+      "reason": "count-mismatch gold=184 pred=[3195.0, 3195.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q306",
+      "cause": "temporal",
+      "reason": "count-mismatch gold=2537 pred=[2714.0, 2714.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q307",
+      "cause": "temporal",
+      "reason": "count-mismatch gold=13291 pred=[1995.0, 13214.0, 13214.0]",
+      "route": "d198_attr_count"
+    },
+    {
+      "id": "Q313",
+      "cause": "temporal",
+      "reason": "count-mismatch gold=2856 pred=[2918.0, 2918.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q314",
+      "cause": "temporal",
+      "reason": "count-mismatch gold=343 pred=[386.0, 386.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q322",
+      "cause": "temporal",
+      "reason": "count-mismatch gold=0 pred=[]",
+      "route": "chart_help"
+    },
+    {
+      "id": "Q326",
+      "cause": "temporal",
+      "reason": "count-mismatch gold=459 pred=[19603.0, 19603.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q362",
+      "cause": "spatial",
+      "reason": "count-mismatch gold=1691 pred=[2.0, 1693.0, 1693.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q370",
+      "cause": "spatial",
+      "reason": "count-mismatch gold=5151 pred=[3.0, 5155.0, 5155.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q373",
+      "cause": "spatial",
+      "reason": "count-mismatch gold=10047 pred=[1.0, 10050.0, 10050.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q374",
+      "cause": "spatial",
+      "reason": "count-mismatch gold=15966 pred=[5.0, 1622.0, 1622.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q401",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=130 pred=[36.0, 36.0]",
+      "route": "industrial_count"
+    },
+    {
+      "id": "Q407",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=16 pred=[13.0, 13.0]",
+      "route": "industrial_count"
+    },
+    {
+      "id": "Q410",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=1 pred=[0.0, 0.0]",
+      "route": "industrial_count"
+    },
+    {
+      "id": "Q425",
+      "cause": "spatial",
+      "reason": "count-mismatch gold=115 pred=[1.0, 1.0, 46028.0, 2.0, 15.928517, 46028.0]",
+      "route": "semantic_plan_rank"
+    },
+    {
+      "id": "Q438",
+      "cause": "spatial",
+      "reason": "count-mismatch gold=18679 pred=[116.0, 116.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q441",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=66648 pred=[38794.0, 38794.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q443",
+      "cause": "scope",
+      "reason": "count-mismatch gold=9247 pred=[]",
+      "route": "chart_help"
+    },
+    {
+      "id": "Q444",
+      "cause": "scope",
+      "reason": "count-mismatch gold=3 pred=[]",
+      "route": "chart_help"
+    },
+    {
+      "id": "Q473",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=0 pred=[100.0, 1.0, 412.0, 2.0, 1.0, 527.0]",
+      "route": "semantic_plan_list"
+    },
+    {
+      "id": "Q476",
+      "cause": "predicate",
+      "reason": "count-mismatch gold=469 pred=[38794.0, 38794.0]",
+      "route": "building_place_count"
+    },
+    {
+      "id": "Q482",
+      "cause": "spatial",
+      "reason": "count-mismatch gold=1399 pred=[0.0, 0.0]",
+      "route": "semantic_plan_count"
+    },
+    {
+      "id": "Q497",
+      "cause": "unknown",
+      "reason": "count-mismatch gold=226 pred=[]",
+      "route": "chart_help"
+    }
+  ]
+}
