@@ -428,13 +428,19 @@ def launch_browser(
         "headless": not headed,
         "args": [
             "--disable-dev-shm-usage",
-            "--disable-gpu",
             "--no-sandbox",
         ],
     }
     if headed:
-        # Avoid OS window focus fights on Windows while still allowing visual debug.
-        launch_kwargs["args"].append("--start-minimized")
+        # Visible watch mode: bring window to front (do NOT start minimized).
+        launch_kwargs["args"].extend(
+            [
+                "--start-maximized",
+                "--window-position=40,40",
+            ]
+        )
+    else:
+        launch_kwargs["args"].append("--disable-gpu")
     if slow_mo_ms:
         launch_kwargs["slow_mo"] = slow_mo_ms
     try:
@@ -456,7 +462,11 @@ def launch_browser(
         raise BrowserUnavailableError(str(exc)) from exc
 
     context = browser.new_context(
-        viewport={"width": 1440, "height": 900},
+        **(
+            {"no_viewport": True}
+            if headed
+            else {"viewport": {"width": 1440, "height": 900}}
+        ),
         locale="ko-KR",
     )
     page = context.new_page()

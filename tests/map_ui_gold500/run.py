@@ -3,13 +3,15 @@
 맵 화면(`/map`) 또는 동일 서버 `/api/chat`로 문항을 실행하고, 답·과정(SSE)을
 저장한 다음 골드 수치와 대조한다.
 
-기본은 **headless Chromium** (창을 띄우지 않음). 브라우저 창이 필요하면
-`--headed`를 명시한다. Chromium 미설치 시 자동 설치를 시도하고, 실패하면
-맵 UI 서버의 API SSE로 폴백한다 (`--require-browser`로 폴백 금지 가능).
+기본은 **headless Chromium** (창 없음, CI/장시간 평가용). 챗창에 질문이 입력되고
+답변이 나오는 모습을 보려면:
 
-    uv run python -m tests.map_ui_gold500.run --start-server
+    uv run python -m tests.map_ui_gold500.run --watch --start-server
+    # 동일: --headed --driver browser --slow-mo 80
+
+순수 API(창 없음)만 쓰려면 `--driver api`.
+
     uv run python -m tests.map_ui_gold500.run --headless --start-server
-    uv run python -m tests.map_ui_gold500.run --headed
     uv run python -m tests.map_ui_gold500.run --driver api --start-server
     uv run python -m tests.map_ui_gold500.run --limit 10
     uv run python -m tests.map_ui_gold500.run --ids N001,N004
@@ -35,9 +37,42 @@ DEFAULT_MAP = DEFAULT_BASE + "/map"
 
 
 def _utf8_stdio() -> None:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    """Windows 콘솔 한글 깨짐 방지: CP65001 + UTF-8 stdout."""
+    if sys.platform == "win32":
+        os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+        os.environ.setdefault("PYTHONUTF8", "1")
+        try:
+            import ctypes
+
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+            ctypes.windll.kernel32.SetConsoleCP(65001)
+        except Exception:
+            pass
+        try:
+            # Best-effort; may fail in some hosts.
+            subprocess.run(
+                ["cmd", "/c", "chcp", "65001"],
+                check=False,
+                capture_output=True,
+            )
+        except Exception:
+            pass
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+def _safe_print(msg: str) -> None:
+    """콘솔 인코딩이 달라도 최대한 한글을 출력한다."""
+    try:
+        print(msg, flush=True)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        sys.stdout.buffer.write((msg + "\n").encode(enc, errors="replace"))
+        sys.stdout.flush()
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -52,11 +87,16 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=0, help="앞에서 N문항만 (0=전체)")
     p.add_argument("--url", default=DEFAULT_MAP, help="맵 UI URL")
     p.add_argument("--timeout", type=int, default=60, help="문항당 초")
-    # Default: headless. Only --headed opens a visible window.
+    # Default: headless. Only --headed / --watch opens a visible window.
     p.add_argument(
         "--headed",
         action="store_true",
-        help="브라우저 창 표시 (기본은 headless — 창을 띄우지 않음)",
+        help="Chromium 창 표시 (챗 입력·답변을 눈으로 확인)",
+    )
+    p.add_argument(
+        "--watch",
+        action="store_true",
+        help="시각 관측 모드 (= --headed --driver browser, slow-mo 기본 80ms)",
     )
     p.add_argument(
         "--headless",
@@ -67,7 +107,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--driver",
         choices=("auto", "browser", "api"),
         default="auto",
-        help="browser=Playwright, api=/api/chat SSE, auto=browser 실패 시 api 폴백",
+        help="browser=Playwright 맵챗, api=/api/chat SSE(창 없음), auto=browser 실패 시 api",
     )
     p.add_argument(
         "--require-browser",
@@ -87,13 +127,21 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def resolve_headed(args: argparse.Namespace) -> bool:
-    """Headless is default. --headed wins; bare --headless keeps headless."""
-    if args.headed and args.headless:
-        # Explicit conflict: prefer headless for automation safety.
+    """Headless is default. --watch / --headed open a window; --headless wins on conflict."""
+    if args.headless and (args.headed or getattr(args, "watch", False)):
         return False
-    if args.headed:
+    if getattr(args, "watch", False) or args.headed:
         return True
     return False
+
+
+def resolve_driver(args: argparse.Namespace) -> str:
+    """Watch/headed prefers real Chromium map chat (not API-only)."""
+    if getattr(args, "watch", False) and args.driver == "auto":
+        return "browser"
+    if args.headed and args.driver == "auto":
+        return "browser"
+    return args.driver
 
 
 def _select(
@@ -122,16 +170,18 @@ def _ensure_server(base: str, start: bool) -> subprocess.Popen[Any] | None:
     from tests.map_ui_gold500.driver import health_ok, wait_health
 
     if health_ok(base):
-        print(f"[server] 기존 맵 UI 사용 {base}", flush=True)
+        _safe_print(f"[server] 기존 맵 UI 사용 {base}")
         return None
     if not start:
         raise SystemExit(
             f"맵 UI 서버가 없습니다 ({base}/api/health). "
             "uv run txt2sql-web 후 다시 실행하거나 --start-server 를 쓰세요."
         )
-    print(f"[server] {base} 기동 중…", flush=True)
+    _safe_print(f"[server] {base} 기동 중…")
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUTF8", "1")
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -153,7 +203,7 @@ def _ensure_server(base: str, start: bool) -> subprocess.Popen[Any] | None:
     except Exception:
         proc.terminate()
         raise
-    print("[server] 기동 완료", flush=True)
+    _safe_print("[server] 기동 완료")
     return proc
 
 
@@ -195,6 +245,12 @@ def main(argv: list[str] | None = None) -> int:
 
     args = _parse_args(argv)
     headed = resolve_headed(args)
+    driver_mode = resolve_driver(args)
+    if getattr(args, "watch", False) and args.slow_mo <= 0:
+        args.slow_mo = 80
+    if headed:
+        # 창을 보는 모드에서는 API 폴백으로 조용히 넘어가지 않음.
+        args.require_browser = True
     from tests.map_ui_gold500.driver import (
         BrowserUnavailableError,
         MapUiDriver,
@@ -215,7 +271,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.transcript.exists():
         args.transcript.unlink()
 
-    driver_mode = args.driver
     pw = browser = context = page = None
     driver: Any = None
 
@@ -232,15 +287,14 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 driver_mode = "browser"
             except BrowserUnavailableError as exc:
-                if args.driver == "browser" or args.require_browser:
+                if args.driver == "browser" or args.require_browser or headed:
                     raise SystemExit(
                         f"브라우저 기동 실패: {exc}\n"
                         "uv run playwright install chromium\n"
-                        "또는 --driver api 로 맵 UI 서버 SSE만 사용하세요."
+                        "또는 창 없이 돌리려면 --driver api 를 쓰세요."
                     ) from exc
-                print(
-                    f"[browser] 사용 불가 → API 드라이버로 폴백\n  reason: {exc}",
-                    flush=True,
+                _safe_print(
+                    f"[browser] 사용 불가 → API 드라이버로 폴백\n  reason: {exc}"
                 )
                 driver = _make_api_driver(base, args.timeout)
                 driver_mode = "api"
@@ -248,13 +302,30 @@ def main(argv: list[str] | None = None) -> int:
             driver = _make_api_driver(base, args.timeout)
             driver_mode = "api"
 
-        print(
+        mode_label = (
+            "headed-watch"
+            if headed and driver_mode == "browser"
+            else ("headless-browser" if driver_mode == "browser" else "api-cli-only")
+        )
+        _safe_print(
             f"=== 맵 UI 골드 테스트 questions={meta.get('path')} "
             f"n={len(questions)} url={args.url} timeout={args.timeout}s "
-            f"driver={driver_mode} "
-            f"{'headed' if headed and driver_mode == 'browser' else 'headless/cli'} ===\n",
-            flush=True,
+            f"driver={driver_mode} mode={mode_label} ==="
         )
+        if driver_mode == "api":
+            _safe_print(
+                "[안내] API 모드라 Chromium 창이 없습니다. "
+                "챗창 입력을 보려면: --watch --start-server"
+            )
+        elif headed:
+            _safe_print(
+                "[안내] Chromium 창에서 질문 입력·답변 출력을 확인할 수 있습니다."
+            )
+        else:
+            _safe_print(
+                "[안내] headless라 창이 보이지 않습니다. "
+                "보려면 --watch (또는 --headed --driver browser)"
+            )
 
         rows: list[dict[str, Any]] = []
         t0 = time.perf_counter()
@@ -265,7 +336,8 @@ def main(argv: list[str] | None = None) -> int:
             # session이 없으면 문항마다 새 대화. 같은 session 키만 후속으로 이어간다.
             new_session = sid is None or sid != prev_session
             prev_session = sid
-            print(f"[{i:03d}/{len(questions)}] … {case['id']} {case['q'][:48]}", flush=True)
+            q_preview = str(case["q"]).replace("\n", " ")[:48]
+            _safe_print(f"[{i:03d}/{len(questions)}] … {case['id']} {q_preview}")
             raw = driver.ask(case["q"], new_session=new_session)
             rec = score_case(
                 case,
@@ -288,10 +360,10 @@ def main(argv: list[str] | None = None) -> int:
             rows.append(rec)
             _append_jsonl(args.transcript, rec)
             mark = "OK" if rec["pass"] else "FAIL"
-            print(
+            reason = str(rec.get("reason") or "")
+            _safe_print(
                 f"[{i:03d}/{len(questions)}] {mark} {case['id']} "
-                f"{rec['ms']}ms {case.get('kind')} {rec['reason']}",
-                flush=True,
+                f"{rec['ms']}ms {case.get('kind')} {reason}"
             )
             if i % 5 == 0 or i == len(questions):
                 payload = summarize(rows, time.perf_counter() - t0)
@@ -308,10 +380,9 @@ def main(argv: list[str] | None = None) -> int:
                     "mode": "map-ui-chat" if driver_mode == "browser" else "map-ui-api",
                 }
                 _dump(args.out, payload)
-                print(
+                _safe_print(
                     f"  .. saved {payload['passed']}/{payload['total']} "
-                    f"acc={payload['accuracy_pct']}% elapsed={payload['elapsed_s']}s",
-                    flush=True,
+                    f"acc={payload['accuracy_pct']}% elapsed={payload['elapsed_s']}s"
                 )
 
         payload = summarize(rows, time.perf_counter() - t0)
@@ -329,13 +400,12 @@ def main(argv: list[str] | None = None) -> int:
             "transcript": str(args.transcript),
         }
         _dump(args.out, payload)
-        print(
+        _safe_print(
             f"\n=== 결과 {payload['passed']}/{payload['total']} "
-            f"({payload['accuracy_pct']}%) {payload['elapsed_s']}s ===",
-            flush=True,
+            f"({payload['accuracy_pct']}%) {payload['elapsed_s']}s ==="
         )
-        print("wrote", args.out, flush=True)
-        print("wrote", args.transcript, flush=True)
+        _safe_print(f"wrote {args.out}")
+        _safe_print(f"wrote {args.transcript}")
         return 0 if payload.get("failed", 1) == 0 else 1
     finally:
         # Ordered Playwright teardown avoids TargetClosedError noise on Windows.

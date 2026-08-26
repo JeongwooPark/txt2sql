@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from tests.map_ui_gold500.driver import parse_sse, sse_result
-from tests.map_ui_gold500.run import _parse_args, resolve_headed
+from tests.map_ui_gold500.run import _parse_args, resolve_driver, resolve_headed
 
 
 def test_default_is_headless() -> None:
@@ -14,6 +14,13 @@ def test_default_is_headless() -> None:
 def test_headed_opt_in() -> None:
     args = _parse_args(["--headed"])
     assert resolve_headed(args) is True
+    assert resolve_driver(args) == "browser"
+
+
+def test_watch_enables_headed_browser() -> None:
+    args = _parse_args(["--watch"])
+    assert resolve_headed(args) is True
+    assert resolve_driver(args) == "browser"
 
 
 def test_headless_flag_keeps_headless() -> None:
@@ -26,9 +33,21 @@ def test_headed_and_headless_prefers_headless() -> None:
     assert resolve_headed(args) is False
 
 
+def test_watch_and_headless_prefers_headless() -> None:
+    args = _parse_args(["--watch", "--headless"])
+    assert resolve_headed(args) is False
+
+
 def test_driver_choices_default_auto() -> None:
     args = _parse_args([])
     assert args.driver == "auto"
+    assert resolve_driver(args) == "auto"
+
+
+def test_explicit_api_driver_kept_with_headed() -> None:
+    args = _parse_args(["--headed", "--driver", "api"])
+    assert resolve_headed(args) is True
+    assert resolve_driver(args) == "api"
 
 
 def test_parse_sse_and_result() -> None:
