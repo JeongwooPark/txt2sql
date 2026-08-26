@@ -1,0 +1,8 @@
+{
+  "pytest_passed": 349,
+  "pytest_failed": 1,
+  "newset500_passed": 244,
+  "newset500_total": 500,
+  "newset500_accuracy_pct": 48.8,
+  "gold_checksum_frozen": true
+}

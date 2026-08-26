@@ -1,0 +1,7 @@
+{
+  "total_collected_approx": 350,
+  "passed": 349,
+  "failed": 1,
+  "known_failure": "tests/query_understanding/test_systematic_fix.py::test_violate_negation_is_not_y",
+  "note": "IS DISTINCT FROM is correct negation; assertion looks for NOT/<> only. Frozen as baseline."
+}
