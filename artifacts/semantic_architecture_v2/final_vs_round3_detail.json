@@ -1,0 +1,158 @@
+{
+  "gold_checksum_ok": true,
+  "round3": {
+    "passed": 244,
+    "acc": 48.8,
+    "latency": {
+      "avg_ms": 1337,
+      "p50_ms": 1021,
+      "p95_ms": 3941,
+      "max_ms": 12024,
+      "avg_ms_passed": 1420,
+      "buckets": {
+        "0.5–2s": 253,
+        "100–500ms": 172,
+        "2–10s": 74,
+        "10–30s": 1
+      }
+    },
+    "by_kind": {
+      "count": {
+        "n": 180,
+        "ok": 97,
+        "acc_pct": 53.9
+      },
+      "list": {
+        "n": 128,
+        "ok": 84,
+        "acc_pct": 65.6
+      },
+      "group": {
+        "n": 93,
+        "ok": 31,
+        "acc_pct": 33.3
+      },
+      "scalar": {
+        "n": 62,
+        "ok": 8,
+        "acc_pct": 12.9
+      },
+      "meta": {
+        "n": 19,
+        "ok": 16,
+        "acc_pct": 84.2
+      },
+      "compare": {
+        "n": 18,
+        "ok": 8,
+        "acc_pct": 44.4
+      }
+    },
+    "fail_reasons": {
+      "count-mismatch": 51,
+      "list-top-missing": 28,
+      "scalar-mismatch": 25,
+      "engine-fail:plan": 22,
+      "group-mismatch": 20,
+      "engine-fail:P03": 18,
+      "engine-fail:unsupported_coverage:": 15,
+      "engine-fail:slot_below_threshold:fields": 14,
+      "engine-fail:P07": 10,
+      "engine-fail:missing_aggregation": 7,
+      "compare-num-missing": 7,
+      "engine-fail:-": 6,
+      "engine-fail:missing_predicate": 5,
+      "engine-fail:P06": 5,
+      "engine-fail:field": 5,
+      "engine-fail:unknown": 4,
+      "engine-fail:missing_order": 3,
+      "meta-mismatch": 3,
+      "engine-fail:rejected": 2,
+      "engine-fail:numeric": 2
+    }
+  },
+  "v2": {
+    "passed": 244,
+    "acc": 48.8,
+    "latency": {
+      "avg_ms": 1345,
+      "p50_ms": 1026,
+      "p95_ms": 4211,
+      "max_ms": 12126,
+      "avg_ms_passed": 1424,
+      "buckets": {
+        "0.5–2s": 260,
+        "100–500ms": 164,
+        "2–10s": 74,
+        "10–30s": 2
+      }
+    },
+    "by_kind": {
+      "count": {
+        "n": 180,
+        "ok": 97,
+        "acc_pct": 53.9
+      },
+      "list": {
+        "n": 128,
+        "ok": 84,
+        "acc_pct": 65.6
+      },
+      "group": {
+        "n": 93,
+        "ok": 31,
+        "acc_pct": 33.3
+      },
+      "scalar": {
+        "n": 62,
+        "ok": 8,
+        "acc_pct": 12.9
+      },
+      "meta": {
+        "n": 19,
+        "ok": 16,
+        "acc_pct": 84.2
+      },
+      "compare": {
+        "n": 18,
+        "ok": 8,
+        "acc_pct": 44.4
+      }
+    },
+    "fail_reasons": {
+      "count-mismatch": 51,
+      "list-top-missing": 28,
+      "scalar-mismatch": 25,
+      "engine-fail:plan": 22,
+      "group-mismatch": 20,
+      "engine-fail:P03": 18,
+      "engine-fail:unsupported_coverage:": 15,
+      "engine-fail:slot_below_threshold:fields": 14,
+      "engine-fail:P07": 10,
+      "engine-fail:missing_aggregation": 7,
+      "compare-num-missing": 7,
+      "engine-fail:-": 6,
+      "engine-fail:missing_predicate": 5,
+      "engine-fail:P06": 5,
+      "engine-fail:field": 5,
+      "engine-fail:unknown": 4,
+      "engine-fail:missing_order": 3,
+      "meta-mismatch": 3,
+      "engine-fail:rejected": 2,
+      "engine-fail:numeric": 2
+    }
+  },
+  "delta_passed": 0,
+  "delta_acc_pct": 0.0,
+  "migration": {
+    "fixed": 0,
+    "regressed": 0,
+    "still_fail": 500,
+    "still_pass": 0
+  },
+  "fixed_sample": [],
+  "regressed_sample": [],
+  "taxonomy_v2_top": {
+    "unknown": 500
+  }
+}
