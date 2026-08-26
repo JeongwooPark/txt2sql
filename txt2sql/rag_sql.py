@@ -72,11 +72,26 @@ def run_rag_sql(
     ollama_client: Any | None = None,
     skip_answer: bool = True,
     progress: ProgressTracker | None = None,
+    fallback_reason: str | None = None,
+    query_ir_snapshot: dict[str, Any] | None = None,
+    logical_plan_snapshot: dict[str, Any] | None = None,
+    binding_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Schema RAG + 동적 few-shot + SQLGlot/EXPLAIN + 실행 재시도.
 
-    의도 라우터/안내 QA를 건너뛰어 모델 SQL 생성 능력을 공정 비교한다.
+    Emergency SQL fallback should pass fallback_reason + planning snapshots so
+    RAG hits do not silently mask semantic-layer failures.
     """
+    if fallback_reason:
+        _emit(
+            progress,
+            "fallback",
+            f"RAG emergency fallback: {fallback_reason}",
+            fallback_reason=fallback_reason,
+            query_ir_snapshot=query_ir_snapshot,
+            logical_plan_snapshot=logical_plan_snapshot,
+            binding_snapshot=binding_snapshot,
+        )
     host = _llm_host(settings, ollama_client)
     _emit(progress, "schema", "스키마 검색(임베딩 RAG)")
     retrieved = retrieve_schema(
@@ -241,6 +256,10 @@ def run_rag_sql(
             "diagnostics": post_diag or pre_diag,
             "retries": retries,
             "error": None,
+            "fallback_reason": fallback_reason,
+            "query_ir_snapshot": query_ir_snapshot,
+            "logical_plan_snapshot": logical_plan_snapshot,
+            "binding_snapshot": binding_snapshot,
         }
     except Exception as exc:
         _emit(progress, "error", f"실패: {type(exc).__name__}: {exc}")
@@ -255,4 +274,8 @@ def run_rag_sql(
             "diagnostics": pre_diag,
             "retries": retries,
             "error": f"{type(exc).__name__}: {exc}",
+            "fallback_reason": fallback_reason,
+            "query_ir_snapshot": query_ir_snapshot,
+            "logical_plan_snapshot": logical_plan_snapshot,
+            "binding_snapshot": binding_snapshot,
         }
