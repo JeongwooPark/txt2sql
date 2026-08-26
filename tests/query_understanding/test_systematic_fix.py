@@ -993,7 +993,9 @@ def test_violate_negation_is_not_y() -> None:
     assert plan is not None
     sql = compile_semantic_plan(plan).sql
     assert '"A20"' in sql
-    assert "<>" in sql or "NOT" in sql.upper()
+    # Negation may be NOT, <>, or IS DISTINCT FROM (NULL-safe)
+    upper = sql.upper()
+    assert "<>" in sql or "NOT" in upper or "IS DISTINCT FROM" in upper
     assert "'Y'" in sql
     assert "공동주택" in sql
 
