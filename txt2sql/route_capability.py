@@ -318,7 +318,9 @@ def route_cost(intent: str) -> int:
         ("spatial_", 70),
         ("place_buffer", 70),
         ("buffer_", 70),
-        ("semantic_plan", 1000),
+        # Physical executor cost after LogicalPlan is fixed — not a
+        # competing "last resort" against understanding (v2).
+        ("semantic_plan", 90),
     ]
     for prefix, cost in rules:
         if name == prefix or name.startswith(prefix):

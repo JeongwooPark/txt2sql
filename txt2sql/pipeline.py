@@ -1676,10 +1676,40 @@ def _ask_inner(
         return _qa_ok(clarify, ambiguous_terms=clarify.ambiguous_terms)
 
     progress.emit("route", "규칙 라우터 매칭 시도")
+    # Semantic Architecture v2: build QueryIR/Logical/Physical before router execute.
+    plan_bundle = None
+    try:
+        from txt2sql.planner.executor_adapter import build_execution_plan, route_allowed_by_plan
+
+        plan_bundle = build_execution_plan(question, contract=contract)
+        progress.emit(
+            "plan",
+            f"QueryIR/Plan: task={plan_bundle.query_ir.task} "
+            f"logical={plan_bundle.logical.status} "
+            f"physical={plan_bundle.physical.strategy}",
+            query_ir_task=plan_bundle.query_ir.task,
+            logical_status=plan_bundle.logical.status,
+            physical_strategy=plan_bundle.physical.strategy,
+            reason_codes=list(plan_bundle.logical.reason_codes),
+        )
+    except Exception as plan_exc:  # noqa: BLE001 — planning must not break legacy path
+        progress.emit("plan", f"plan build skipped: {type(plan_exc).__name__}")
+
     routed = picked
     if routed is None:
         routed = deferred_route if deferred_route is not None else try_route(question, conn=conn)
         routed = pick_eligible_routed([routed], contract)
+    if (
+        plan_bundle is not None
+        and not route_allowed_by_plan(plan_bundle)
+        and plan_bundle.logical.status in {"CLARIFY", "UNSUPPORTED"}
+    ):
+        progress.emit(
+            "route",
+            "LogicalPlan not READY → skip partial router execution",
+            logical_status=plan_bundle.logical.status,
+        )
+        routed = None
     if routed is not None and not route_allowed(routed.intent, contract):
         miss = missing_requirements(capability_for(routed.intent), contract)
         progress.emit(
@@ -1788,6 +1818,25 @@ def _ask_inner(
         )
 
     progress.emit("route", "라우트 미매칭 → RAG+LLM 경로")
+    rag_kwargs: dict[str, Any] = {
+        "fallback_reason": "route_and_plan_miss",
+    }
+    if plan_bundle is not None:
+        rag_kwargs.update(
+            {
+                "fallback_reason": f"logical={plan_bundle.logical.status};physical={plan_bundle.physical.strategy}",
+                "query_ir_snapshot": plan_bundle.query_ir.model_dump(),
+                "logical_plan_snapshot": {
+                    "status": plan_bundle.logical.status,
+                    "reason_codes": list(plan_bundle.logical.reason_codes),
+                    "root_op": plan_bundle.logical.root.op,
+                },
+                "binding_snapshot": {
+                    "datasets": [b.dataset for b in plan_bundle.logical.bindings],
+                    "concepts": [b.concept for b in plan_bundle.logical.bindings],
+                },
+            }
+        )
     rag = run_rag_sql(
         question,
         settings,
@@ -1795,6 +1844,7 @@ def _ask_inner(
         ollama_client=ollama_client,
         skip_answer=True,
         progress=progress,
+        **rag_kwargs,
     )
     if not rag.get("ok"):
         answer = format_failure(
