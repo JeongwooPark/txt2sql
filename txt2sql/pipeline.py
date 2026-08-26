@@ -1695,6 +1695,62 @@ def _ask_inner(
     except Exception as plan_exc:  # noqa: BLE001 — planning must not break legacy path
         progress.emit("plan", f"plan build skipped: {type(plan_exc).__name__}")
 
+    # Phase C+/F: semantic-v2 compile+exec for READY aggregate/group/temporal before legacy.
+    if plan_bundle is not None:
+        try:
+            from txt2sql.planner.semantic_executor import (
+                should_try_semantic_v2,
+                try_execute_semantic_v2,
+            )
+
+            if should_try_semantic_v2(plan_bundle):
+                progress.emit(
+                    "route",
+                    "semantic-v2 executor 시도",
+                    physical_strategy=plan_bundle.physical.strategy,
+                )
+                v2 = try_execute_semantic_v2(
+                    question,
+                    plan_bundle,
+                    conn=conn,
+                    default_limit=settings.default_limit,
+                )
+                if v2 is not None and v2.get("ok"):
+                    progress.emit(
+                        "route",
+                        "semantic-v2 적중",
+                        execution_source="semantic_v2",
+                        compiler_source="deterministic_compiler_v2",
+                    )
+                    llm = _llm_kw(settings, ollama_client)
+                    rows = list(v2.get("rows") or [])
+                    sql = v2.get("sql") or ""
+                    answer = format_success(
+                        question,
+                        sql=sql,
+                        rows=rows,
+                        row_count=len(rows),
+                        route="semantic_v2",
+                        on_token=on_token,
+                        **llm,
+                    )
+                    return _payload(
+                        answer=answer,
+                        sql=sql,
+                        tables=v2.get("tables"),
+                        rows=rows,
+                        route="semantic_v2",
+                        query_ir_task=v2.get("query_ir_task"),
+                        logical_status=v2.get("logical_status"),
+                        physical_strategy=v2.get("physical_strategy"),
+                        execution_source="semantic_v2",
+                        compiler_source="deterministic_compiler_v2",
+                        fallback_source=None,
+                    )
+                progress.emit("route", "semantic-v2 미지원/실패 → legacy 경로")
+        except Exception as v2_exc:  # noqa: BLE001
+            progress.emit("route", f"semantic-v2 skip: {type(v2_exc).__name__}")
+
     routed = picked
     if routed is None:
         routed = deferred_route if deferred_route is not None else try_route(question, conn=conn)
@@ -1724,6 +1780,8 @@ def _ask_inner(
             "route",
             f"라우트 적중: {routed.intent}",
             intent=routed.intent,
+            execution_source="legacy_router",
+            compiler_source="legacy_route_sql",
         )
         if routed.intent == "building_age_count_d198_partial":
             progress.emit(
@@ -1745,6 +1803,12 @@ def _ask_inner(
             contract=contract,
         )
         if finished is not None:
+            finished.setdefault("execution_source", "legacy_router")
+            finished.setdefault("compiler_source", "legacy_route_sql")
+            if plan_bundle is not None:
+                finished.setdefault("query_ir_task", plan_bundle.query_ir.task)
+                finished.setdefault("logical_status", plan_bundle.logical.status)
+                finished.setdefault("physical_strategy", plan_bundle.physical.strategy)
             return finished
 
     if settings.semantic_plan_mode in {"shadow", "hybrid"}:
@@ -1791,6 +1855,12 @@ def _ask_inner(
             shadow_message="Semantic Plan shadow 완료",
         )
         if finished is not None:
+            finished.setdefault("execution_source", "semantic_plan")
+            finished.setdefault("compiler_source", "legacy_sqp_compiler")
+            if plan_bundle is not None:
+                finished.setdefault("query_ir_task", plan_bundle.query_ir.task)
+                finished.setdefault("logical_status", plan_bundle.logical.status)
+                finished.setdefault("physical_strategy", plan_bundle.physical.strategy)
             return finished
         if settings.semantic_plan_mode == "hybrid" and semantic.get("fallback"):
             error = semantic.get("error") or semantic.get("fallback_reason") or "plan_fallback"
@@ -1817,14 +1887,23 @@ def _ask_inner(
             deferred_unknown, ambiguous_terms=deferred_unknown.ambiguous_terms
         )
 
-    progress.emit("route", "라우트 미매칭 → RAG+LLM 경로")
+    progress.emit("route", "라우트 미매칭 → RAG+LLM 경로 (emergency fallback)")
     rag_kwargs: dict[str, Any] = {
         "fallback_reason": "route_and_plan_miss",
     }
     if plan_bundle is not None:
+        # Phase J: unrestricted RAG only after planner coverage miss; snapshot required.
+        if plan_bundle.logical.status == "READY":
+            fallback_reason = (
+                f"emergency_after_ready_miss;physical={plan_bundle.physical.strategy}"
+            )
+        else:
+            fallback_reason = (
+                f"logical={plan_bundle.logical.status};physical={plan_bundle.physical.strategy}"
+            )
         rag_kwargs.update(
             {
-                "fallback_reason": f"logical={plan_bundle.logical.status};physical={plan_bundle.physical.strategy}",
+                "fallback_reason": fallback_reason,
                 "query_ir_snapshot": plan_bundle.query_ir.model_dump(),
                 "logical_plan_snapshot": {
                     "status": plan_bundle.logical.status,
@@ -1846,6 +1925,19 @@ def _ask_inner(
         progress=progress,
         **rag_kwargs,
     )
+    rag_trace: dict[str, Any] = {
+        "execution_source": "rag_sql",
+        "compiler_source": "rag_llm",
+        "fallback_source": rag_kwargs.get("fallback_reason"),
+    }
+    if plan_bundle is not None:
+        rag_trace.update(
+            {
+                "query_ir_task": plan_bundle.query_ir.task,
+                "logical_status": plan_bundle.logical.status,
+                "physical_strategy": plan_bundle.physical.strategy,
+            }
+        )
     if not rag.get("ok"):
         answer = format_failure(
             question, error=rag.get("error") or "실패", sql=rag.get("sql")
@@ -1857,9 +1949,10 @@ def _ask_inner(
             sql=rag.get("sql"),
             tables=rag.get("tables"),
             error=rag.get("error"),
+            **rag_trace,
         )
 
-    progress.emit("answer", "LLM 한국어 답변 생성")
+    progress.emit("answer", "LLM 한국어 답변 생성", execution_source="rag_sql")
     rows = list(rag.get("rows") or [])
     sql = rag.get("sql")
     answer = format_success(
@@ -1878,4 +1971,5 @@ def _ask_inner(
         tables=rag.get("tables"),
         rows=rows,
         diagnostics=rag.get("diagnostics"),
+        **rag_trace,
     )
