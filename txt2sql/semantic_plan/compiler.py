@@ -15,13 +15,12 @@ from txt2sql.gazetteer import (
 )
 from txt2sql.semantic_plan.catalog import (
     ADMIN_TABLE,
-    ALLOWED_COLUMNS,
-    ALLOWED_TABLES,
     BASIC_ZONE_TABLE,
     BUILDING_TABLE,
     INDUSTRIAL_TABLE,
     get_entity,
     get_field,
+    is_allowed_physical_identifier,
 )
 from txt2sql.semantic_plan.migrate import validate_predicate
 from txt2sql.semantic_plan.models import (
@@ -38,7 +37,7 @@ from txt2sql.units import sql_number
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _OPS = {
     "eq": "=",
-    "neq": "<>",
+    "neq": "IS DISTINCT FROM",
     "gt": ">",
     "gte": ">=",
     "lt": "<",
@@ -575,7 +574,7 @@ def _predicate_sql(
     op = _OPS.get(pred.operator)
     if op is None:
         if pred.operator == "neq":
-            op = "<>"
+            op = "IS DISTINCT FROM"
         elif pred.operator == "contains":
             return f"{left_sql} ILIKE {_literal('%' + str(pred.right.value if pred.right else '') + '%', 'text')}", h1 or h2, p1 + p2
         else:
@@ -1019,7 +1018,7 @@ _SQL_WORDS = frozenset(
 def _ident(name: str, *, physical: bool = False) -> str:
     if not _IDENT_RE.fullmatch(name) or name.lower() in _SQL_WORDS:
         raise SemanticCompileError(f"invalid identifier: {name}")
-    if physical and name not in ALLOWED_TABLES and name not in ALLOWED_COLUMNS:
+    if physical and not is_allowed_physical_identifier(name):
         raise SemanticCompileError(f"rejected physical identifier: {name}")
     return '"' + name + '"'
 

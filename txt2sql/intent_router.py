@@ -144,14 +144,14 @@ def _a4_place_filters(place: str | None, gu: str | None) -> list[str]:
     where: list[str] = []
     if place and uses_admin_boundary(place):
         if gu:
-            where.append(f'"A4" LIKE \'%{gu}%\'')
+            where.append(place_a4_predicate(gu))
         return where
     if place and is_legal_dong(place):
         where.append(place_a4_predicate(place))
         if gu:
-            where.append(f'"A4" LIKE \'%{gu}%\'')
+            where.append(place_a4_predicate(gu))
     elif gu:
-        where.append(f'"A4" LIKE \'%{gu}%\'')
+        where.append(place_a4_predicate(gu))
     elif place:
         where.append(place_a4_predicate(place))
     return where
@@ -1321,6 +1321,10 @@ def _route_place_building_count(q: str) -> RoutedQuery | None:
         return None
     if extract_usage(q):
         return None
+    from txt2sql.domain import extract_detail_usages
+
+    if extract_detail_usages(q):
+        return None
     if not _wants_count(q):
         return None
     if looks_like_age_question(q):
@@ -1367,10 +1371,18 @@ def _route_place_usage_count(
     *,
     conn: psycopg.Connection | None,
 ) -> RoutedQuery | None:
+    from txt2sql.domain import extract_detail_usages
+
+    # 아파트·오피스텔·다가구주택 등은 D198 세부용도 경로로 넘긴다.
+    if extract_detail_usages(q):
+        return None
     usage = extract_usage(q)
     if not usage or "산업단지" in q:
         return None
     if not _wants_count(q):
+        return None
+    # 평균·합계 질의는 COUNT 라우트가 가로채지 않게
+    if any(k in q for k in ("평균", "합계", "총합", "최대", "최소", "중앙값")):
         return None
     if any(k in q for k in ("비율", "퍼센트", "몇%", "%씩")):
         return None

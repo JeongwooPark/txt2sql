@@ -998,6 +998,21 @@ def test_violate_negation_is_not_y() -> None:
     assert "공동주택" in sql
 
 
+def test_short_gu_name_uses_exact_admin_code_prefix() -> None:
+    from txt2sql.intent_router import try_route
+
+    routed = try_route("서구에 있는 건물은 모두 몇 채야?")
+    assert routed is not None
+    assert routed.intent == "building_place_count"
+    assert '"A3" LIKE \'26140%\'' in routed.sql
+    assert "%서구%" not in routed.sql
+
+    gangseo = try_route("강서구에 있는 건물은 모두 몇 채야?")
+    assert gangseo is not None
+    assert '"A3" LIKE \'26440%\'' in gangseo.sql
+    assert "26140%" not in gangseo.sql
+
+
 def test_special_land_not_일반_keeps_factory() -> None:
     from txt2sql.semantic_plan.compiler import compile_semantic_plan
     from txt2sql.semantic_plan.generator import try_heuristic_plan

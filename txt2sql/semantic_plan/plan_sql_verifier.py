@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+
 from txt2sql.semantic_plan.compiler import CompiledSemanticQuery
 from txt2sql.semantic_plan.models import SemanticQueryPlan
 from txt2sql.semantic_plan.predicate_utils import (
@@ -28,14 +30,22 @@ def verify_plan_to_sql(
         errors.append("BOOLEAN_OR_DROPPED")
     if pred and has_op(pred, "not") and "NOT " not in sql and "NOT IN" not in sql and "<>" not in sql:
         errors.append("BOOLEAN_NOT_DROPPED")
-    wanted_aggs = {item.function.upper() for item in plan.aggregations}
-    got_aggs = {str(fn).upper() for fn in (trace.get("aggregations") or [])}
-    if wanted_aggs and not wanted_aggs.issubset(got_aggs):
+    wanted_aggs = Counter(item.function.upper() for item in plan.aggregations)
+    got_aggs = Counter(str(fn).upper() for fn in (trace.get("aggregations") or []))
+    if wanted_aggs and any(got_aggs[fn] < count for fn, count in wanted_aggs.items()):
         for fn in wanted_aggs:
             token = "COUNT(" if fn == "COUNT" else f"{fn}("
             if token not in sql:
                 errors.append("OUTPUT_SHAPE_MISMATCH")
                 break
+        else:
+            errors.append("OUTPUT_SHAPE_MISMATCH")
+    wanted_groups = list(plan.group_by)
+    got_groups = list(trace.get("group_fields") or [])
+    if wanted_groups and (
+        not set(wanted_groups) <= set(got_groups) or "GROUP BY" not in sql
+    ):
+        errors.append("GROUP_BY_DROPPED")
     if plan.spatial_relations:
         if "ST_" not in sql:
             errors.append("SPATIAL_TARGET_DROPPED")

@@ -84,3 +84,24 @@ def test_architecture_stddev_with_avg() -> None:
     upper = sql.upper()
     assert "AVG(" in upper
     assert "STDDEV_POP(" in upper
+
+
+def test_architecture_preserves_extended_group_dimensions() -> None:
+    cases = (
+        ("구·군별 건물 수를 보여줘", "sigungu_name"),
+        ("특수지구분명별 건물 수와 평균 대지면적을 보여줘", "special_land"),
+        ("위반건축물 여부별 건물 수와 평균 높이를 보여줘", "violation_status"),
+    )
+    for question, field in cases:
+        contract, plan, sql = _compile_question(question)
+        assert field in contract.group_fields
+        assert field in plan.group_by
+        assert "GROUP BY" in sql.upper()
+
+
+def test_violation_group_does_not_become_y_only_filter() -> None:
+    _, plan, sql = _compile_question(
+        "위반건축물 여부별 건물 수와 평균 높이를 보여줘"
+    )
+    assert not any(item.field == "violation_status" for item in plan.filters)
+    assert "\"A20\" = 'Y'" not in sql

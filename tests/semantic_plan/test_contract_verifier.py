@@ -43,3 +43,26 @@ def test_complete_sum_plan_passes() -> None:
     result = verify_contract(q, plan)
     assert result.ok is True
     assert result.confidence.aggregation >= 0.85
+
+
+def test_numeric_predicate_missing_from_plan_is_hard_fail() -> None:
+    plan = SemanticQueryPlan(
+        query_kind="count",
+        entity="building",
+        scope=ScopeSpec(place=PlaceSpec(name="서구", kind="gu")),
+    )
+    result = verify_contract("서구 높이 30m 이상 건물 수", plan)
+    assert result.hard_fail is True
+    assert "missing_predicate" in result.reasons
+
+
+def test_group_contract_missing_group_by_is_hard_fail() -> None:
+    plan = SemanticQueryPlan(
+        query_kind="aggregate",
+        entity="building",
+        scope=ScopeSpec(place=PlaceSpec(name="금정구", kind="gu")),
+        aggregations=[AggregationSpec(function="count", alias="n")],
+    )
+    result = verify_contract("금정구 용도별 건물 수", plan)
+    assert result.hard_fail is True
+    assert "missing_group" in result.reasons

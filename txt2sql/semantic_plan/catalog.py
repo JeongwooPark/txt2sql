@@ -321,6 +321,22 @@ ALLOWED_COLUMNS = frozenset(
         "A34",
     }
 )
+
+
+def is_allowed_physical_identifier(name: str) -> bool:
+    """현재 카탈로그와 런타임 D198 커버리지에 등록된 식별자인지 확인한다."""
+    if name in ALLOWED_COLUMNS or name in {
+        BUILDING_TABLE,
+        ADMIN_TABLE,
+        BASIC_ZONE_TABLE,
+        INDUSTRIAL_TABLE,
+    }:
+        return True
+    # D198_TABLES는 DB 커버리지 검색 후 제자리 갱신되므로 정적 frozenset보다
+    # 런타임 목록을 기준으로 최신 테이블 버전을 검증해야 한다.
+    return name in D198_TABLES
+
+
 CANONICAL_ALIASES = frozenset(
     {
         "count",

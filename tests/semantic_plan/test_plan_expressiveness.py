@@ -63,6 +63,17 @@ def test_validator_allows_order_by_aggregation_alias() -> None:
     assert not any("unknown field: n" in e for e in result.errors)
 
 
+def test_validator_blocks_aggregate_when_contract_group_is_dropped() -> None:
+    plan = SemanticQueryPlan(
+        query_kind="aggregate",
+        entity="building",
+        aggregations=[AggregationSpec(function="count", alias="n")],
+    )
+    result = validate_semantic_plan(plan, "용도별 건수")
+    assert result.status == "fallback"
+    assert "missing_group" in result.errors
+
+
 def test_validator_requires_percentile_value() -> None:
     plan = SemanticQueryPlan(
         query_kind="aggregate",

@@ -315,11 +315,19 @@ def extract_contract(question: str, binding: Any | None = None) -> QueryContract
 def _drop_false_places(question: str, spans: list[Span]) -> list[Span]:
     """공동주택·시설 안의 '동' 조각은 장소가 아니다."""
     kept: list[Span] = []
+    semantic_phrases = tuple(ops.GROUP_HINTS) + tuple(ops.METRIC_MAP)
     for span in spans:
         after = question[span.end : span.end + 3]
         if after.startswith(("주택", "시설", "차", "력", "원", "사")):
             continue
         if span.text in {"공동", "동"}:
+            continue
+        if any(
+            span.text != phrase
+            and span.text in phrase
+            and phrase in question
+            for phrase in semantic_phrases
+        ):
             continue
         kept.append(span)
     return kept
@@ -814,6 +822,9 @@ def _categorical_metrics(question: str) -> list[Span]:
         i = question.find(hint)
         if i < 0:
             continue
+        suffix = question[i + len(hint) : i + len(hint) + 5].replace(" ", "")
+        if suffix.startswith("여부별"):
+            break
         found.append(
             Span(
                 kind="metric",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Any
 
 import sqlglot
@@ -97,16 +98,25 @@ def verify_plan_sql_equivalence(plan: SemanticQueryPlan, sql: str) -> list[str]:
                 errors.append("P05")
             if fn == "COUNT" and "COUNT(" not in upper:
                 errors.append("P05")
+    if plan.group_by and "GROUP BY" not in upper:
+        errors.append("P05")
     if plan.order_by:
         want = "ASC" if plan.order_by[0].direction == "asc" else "DESC"
         if want not in upper:
             errors.append("P06")
     if plan.limit is not None and not re.search(rf"LIMIT\s+{plan.limit}\b", upper):
         errors.append("P06")
-    plan_ops = set(_flatten_ops(plan_boolean_tree(plan)))
-    sql_ops = set(_flatten_ops(sql_boolean_tree(sql)))
+    plan_ops = Counter(_flatten_ops(plan_boolean_tree(plan)))
+    sql_ops = Counter(_flatten_ops(sql_boolean_tree(sql)))
     if "or" in plan_ops and "or" not in sql_ops:
         errors.append("P04")
     if "not" in plan_ops and "not" not in sql_ops:
         errors.append("P04")
+    boolean_ops = {"and", "or", "not"}
+    if any(
+        sql_ops[op] < count
+        for op, count in plan_ops.items()
+        if op not in boolean_ops
+    ):
+        errors.append("P03")
     return list(dict.fromkeys(errors))

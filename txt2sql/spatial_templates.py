@@ -75,15 +75,15 @@ def building_scope(
         )
         where = [admin_dong_where(place)]
         if gu:
-            where.append(f'b."A4" LIKE \'%{gu}%\'')
+            where.append(_prefix_a_cols(place_a4_predicate(gu), "b"))
         return "admin", frm, " AND ".join(where), "b."
     if place and is_legal_dong(place):
         pred = place_a4_predicate(place)
         if gu:
-            pred = f"({pred}) AND \"A4\" LIKE '%{gu}%'"
+            pred = f"({pred}) AND {place_a4_predicate(gu)}"
         return "a4", f'"{_D010}"', pred, ""
     if gu:
-        return "gu", f'"{_D010}"', f'"A4" LIKE \'%{gu}%\'', ""
+        return "gu", f'"{_D010}"', place_a4_predicate(gu), ""
     if place and is_locality(place):
         return "a4", f'"{_D010}"', place_a4_predicate(place), ""
     if place:

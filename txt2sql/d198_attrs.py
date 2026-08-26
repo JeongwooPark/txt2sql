@@ -63,6 +63,8 @@ EXCLUSIVE_HINTS = (
     "농수산용",
     "다가구주택",
     "다세대주택",
+    "아파트",
+    "오피스텔",
     "지하층",
 )
 
@@ -1114,6 +1116,34 @@ def _parse_numeric(q: str, parsed: D198Parsed, named: bool) -> None:
     for alias, col in sorted(pairs, key=lambda x: len(x[0]), reverse=True):
         if col in seen_cols:
             continue
+        # 「건폐율 40% 이상 70% 이하」→ BETWEEN (UNIT_TOKEN 캡처 중첩 회피)
+        between = re.search(
+            rf"{re.escape(alias)}\s*(?:이|가)?\s*"
+            rf"(\d+(?:\.\d+)?)\s*(%|퍼센트|㎡|m2|m²|층)?\s*이상\s*"
+            rf"(\d+(?:\.\d+)?)\s*(%|퍼센트|㎡|m2|m²|층)?\s*이하",
+            q,
+        )
+        if between:
+            lo_n, lo_u, hi_n, hi_u = (
+                between.group(1),
+                between.group(2) or "",
+                between.group(3),
+                between.group(4) or "",
+            )
+            attr = ATTR_BY_COL[col]
+            target = attr.unit or "㎡"
+            lo_c = convert_for_schema(lo_n, lo_u or target, target)
+            hi_c = convert_for_schema(hi_n, hi_u or target, target)
+            if lo_c is not None and hi_c is not None:
+                _add_filter(
+                    parsed,
+                    col,
+                    f'"{col}" BETWEEN {lo_c.sql} AND {hi_c.sql}',
+                    f"{attr.label} {lo_c.label}~{hi_c.label}",
+                )
+                parsed.order_col = parsed.order_col or col
+                seen_cols.add(col)
+                continue
         m = re.search(
             rf"{re.escape(alias)}\s*(?:이|가)?\s*(\d+(?:\.\d+)?)\s*"
             rf"{UNIT_TOKEN}\s*"
@@ -1278,10 +1308,13 @@ def _parse_values(q: str, parsed: D198Parsed, named: bool) -> None:
             continue
         used_spans.append((start, end))
         pred = _eq(attr.col, stored)
-        if attr.kind == "text" and attr.col in {"A23", "A13", "A14", "A27"}:
+        if attr.kind == "text" and attr.col in {"A23", "A13", "A14"}:
             pred = _like(attr.col, stored.rstrip("구조"))
             if attr.col == "A23":
                 pred = f"\"A23\" ILIKE '%{_sql_str(stored.rstrip('구조'))}%'"
+        # A27 세부용도 별칭은 정확 일치(골드 A27 = '아파트')
+        if attr.col == "A27":
+            pred = _eq(attr.col, stored)
         grouped.setdefault(attr.col, []).append((pred, f"{attr.label} {stored}"))
     for col, items in grouped.items():
         preds = [p for p, _ in items]

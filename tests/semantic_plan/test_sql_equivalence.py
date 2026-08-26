@@ -1,4 +1,4 @@
-from txt2sql.semantic_plan.compiler import compile_semantic_plan
+from txt2sql.semantic_plan.compiler import CompiledSemanticQuery, compile_semantic_plan
 from txt2sql.semantic_plan.models import (
     AggregationSpec,
     OperandSpec,
@@ -7,6 +7,7 @@ from txt2sql.semantic_plan.models import (
     SemanticQueryPlan,
 )
 from txt2sql.semantic_plan.result_shape import diagnose_result_shape
+from txt2sql.semantic_plan.plan_sql_verifier import verify_plan_to_sql
 from txt2sql.semantic_plan.selector import select_candidate, should_enumerate_candidates
 from txt2sql.semantic_plan.sql_equivalence import verify_plan_sql_equivalence
 
@@ -98,3 +99,28 @@ def test_detects_not_missing_and_order_limit() -> None:
     )
     avg_sql = 'SELECT AVG(b."A16") AS "avg_height_m" FROM "AL_D010_26_20250704" b;'
     assert "P05" in verify_plan_sql_equivalence(sum_plan, avg_sql)
+
+
+def test_detects_group_by_dropped_after_plan() -> None:
+    plan = SemanticQueryPlan(
+        query_kind="aggregate",
+        entity="building",
+        group_by=["usage"],
+        aggregations=[AggregationSpec(function="count", alias="n")],
+    )
+    bad_sql = 'SELECT COUNT(*) AS "n" FROM "AL_D010_26_20250704" b;'
+    compiled = CompiledSemanticQuery(
+        sql=bad_sql,
+        tables=["AL_D010_26_20250704"],
+        route="semantic_plan_aggregate",
+        semantic_plan=plan.model_dump(),
+        extra={
+            "compile_trace": {
+                "predicate_nodes": [],
+                "aggregations": ["count"],
+                "group_fields": [],
+            }
+        },
+    )
+    assert "GROUP_BY_DROPPED" in verify_plan_to_sql(plan, compiled)
+    assert "P05" in verify_plan_sql_equivalence(plan, bad_sql)

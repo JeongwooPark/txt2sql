@@ -1,0 +1,5 @@
+{
+  "_readme": "이 파일을 교체하면 테스트 문항이 바뀝니다. include 경로(골드 JSON) 또는 questions 배열을 사용하세요. 각 문항은 id, q, kind, gold 가 필요하고 session이 같으면 후속 대화로 이어집니다.",
+  "name": "평가문항_500",
+  "include": "../../docs/평가문항_500.json"
+}

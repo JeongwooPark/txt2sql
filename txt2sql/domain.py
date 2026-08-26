@@ -93,6 +93,7 @@ USAGE_ALIASES: dict[str, str] = {
 
 # D198 세부용도(A27)·용도분류(A29). unknown-term 제외용. D010 A9에 강제 바인딩하지 않는다.
 DETAIL_USAGE_ALIASES: dict[str, str] = {
+    "아파트": "아파트",
     "오피스텔": "오피스텔",
     "사무소": "사무소",
     "다가구주택": "다가구주택",
@@ -100,6 +101,31 @@ DETAIL_USAGE_ALIASES: dict[str, str] = {
     "일반음식점": "일반음식점",
     "소매점": "소매점",
     "학원": "학원",
+}
+
+# cat4(금정·동래) 법정동 → 구. D198 테이블 선택용.
+D198_DONG_TO_GU: dict[str, str] = {
+    "구서동": "금정구",
+    "금사동": "금정구",
+    "남산동": "금정구",
+    "두구동": "금정구",
+    "부곡동": "금정구",
+    "서동": "금정구",
+    "장전동": "금정구",
+    "회동동": "금정구",
+    "청룡동": "금정구",
+    "노포동": "금정구",
+    "선동": "금정구",
+    "오륜동": "금정구",
+    "낙민동": "동래구",
+    "명륜동": "동래구",
+    "명장동": "동래구",
+    "복천동": "동래구",
+    "사직동": "동래구",
+    "수안동": "동래구",
+    "안락동": "동래구",
+    "온천동": "동래구",
+    "칠산동": "동래구",
 }
 USAGE_CLASS_ALIASES: dict[str, str] = {
     "문교사회용": "문교사회용",
@@ -333,13 +359,28 @@ def extract_places(question: str) -> list[str]:
 
     전국 지명 사전이 있으면 등록된 법정동·행정동·구군만 최장일치한다.
     """
-    from txt2sql.gazetteer import extract_gazetteer_places, load_gazetteer
+    from txt2sql.gazetteer import find_places, load_gazetteer
 
     gaz = load_gazetteer()
     if gaz.legal_dong or gaz.admin_dong:
-        return extract_gazetteer_places(question)
+        found: list[str] = []
+        for hit in find_places(question):
+            suffix = question[hit.end : hit.end + 3]
+            if (
+                (hit.name.endswith("면") and suffix.startswith("적"))
+                or (hit.name.endswith("구") and suffix.startswith("분명"))
+                or (hit.name.endswith("동") and suffix.startswith(("코드", "별")))
+            ):
+                continue
+            # 「행정동」「법정동」안의 정동 부분일치 차단
+            before = question[max(0, hit.start - 1) : hit.start]
+            if hit.name == "정동" and before in {"행", "법"}:
+                continue
+            if hit.name not in found:
+                found.append(hit.name)
+        return found
 
-    found: list[str] = []
+    found = []
     for m in DONG_RE.finditer(question):
         dong = m.group(1)
         if dong in _FALSE_DONG:
@@ -367,6 +408,9 @@ def extract_gu(question: str) -> str | None:
     if gaz.sigungu:
         for hit in find_places(question):
             if hit.is_sigungu:
+                suffix = question[hit.end : hit.end + 3]
+                if suffix.startswith(("분명", "코드", "별")):
+                    continue
                 return hit.name
     for m in GU_RE.finditer(question):
         gu = m.group(1)
@@ -551,6 +595,17 @@ _NAME_STRIP_PHRASES = (
     "조회해",
     "조회하라",
     "조회해라",
+    "보여줘",
+    "보여 줘",
+    "보여주세요",
+    "보여 주세요",
+    "보여라",
+    "표시해줘",
+    "표시해 줘",
+    "집계해줘",
+    "집계해 줘",
+    "정렬해줘",
+    "정렬해 줘",
     "건물명",
     "건물이름",
     "건물 이름",
@@ -718,6 +773,14 @@ _NAME_STOP = frozenset(
         "찾아",
         "검색하라",
         "조회하라",
+        "보여줘",
+        "보여",
+        "보여주세요",
+        "보여라",
+        "표시해줘",
+        "집계해줘",
+        "정렬해줘",
+        "알려줘",
         "좀",
         "그",
         "저",
@@ -959,6 +1022,24 @@ def looks_like_building_name_lookup(question: str) -> bool:
     name = extract_building_name_candidate(q)
     if not name:
         return False
+    name_tokens = [
+        t for t in name.split() if t not in _NAME_STOP and len(t) >= 2
+    ]
+    # 「건물명과 지번」「건물명이 있는」만 있고 고유명사 후보가 없으면 목록 질의
+    column_only = re.search(r"건물명\s*(과|와|,|/)", q) or any(
+        k in q
+        for k in (
+            "건물명이 있는",
+            "건물명 있는",
+            "건물명이 없",
+            "건물명 없",
+            "건물명이 기록",
+            "이름과 지번",
+            "명칭과 지번",
+        )
+    )
+    if column_only and not name_tokens:
+        return False
     # 일반 명사만 남은 경우 제외
     if name.replace(" ", "") in {
         "산업단지",
@@ -988,7 +1069,8 @@ def looks_like_building_name_lookup(question: str) -> bool:
             return False
     explicit = any(k in q for k in _BUILDING_NAME_EXPLICIT)
     if explicit:
-        return True
+        # 「건물명」만 출력 컬럼으로 언급되고 고유명사 후보가 없으면 목록 질의
+        return bool(name_tokens) and distinctive
     has_place = bool(extract_place(q) or extract_gu(q))
     has_kind = any(k in q for k in _BUILDING_KIND_HINTS)
     has_lookup = any(k in q for k in _BUILDING_LOOKUP_HINTS)
@@ -1014,6 +1096,19 @@ def extract_usages(question: str) -> list[str]:
         q,
     ):
         found.extend(["제1종근린생활시설", "제2종근린생활시설"])
+    # 세부용도 전용 표현(다가구주택·오피스텔 등)은 USAGE 부분일치(다가구→단독)를 막는다.
+    # 아파트처럼 USAGE에도 있는 별칭은 D010 경로를 위해 남겨 둔다.
+    detail_occupied: list[tuple[int, int]] = []
+    for alias in sorted(DETAIL_USAGE_ALIASES, key=len, reverse=True):
+        if alias in USAGE_ALIASES:
+            continue
+        start = 0
+        while True:
+            i = q.find(alias, start)
+            if i < 0:
+                break
+            detail_occupied.append((i, i + len(alias)))
+            start = i + len(alias)
     # 긴 별칭 우선 매칭을 위해 위치 기반으로 스캔
     spans: list[tuple[int, int, str]] = []
     for alias in sorted(USAGE_ALIASES, key=len, reverse=True):
@@ -1026,7 +1121,7 @@ def extract_usages(question: str) -> list[str]:
             spans.append((i, i + len(alias), mapped))
             start = i + len(alias)
     spans.sort(key=lambda x: x[0])
-    occupied: list[tuple[int, int]] = []
+    occupied: list[tuple[int, int]] = list(detail_occupied)
     for s, e, mapped in spans:
         if any(not (e <= a or s >= b) for a, b in occupied):
             continue
@@ -1034,6 +1129,14 @@ def extract_usages(question: str) -> list[str]:
         if mapped not in found:
             found.append(mapped)
     return found
+
+
+def d198_gu_for_dong(dong: str | None) -> str | None:
+    """법정동명 → D198 커버 구(금정·동래)."""
+    name = (dong or "").strip()
+    if not name:
+        return None
+    return D198_DONG_TO_GU.get(name)
 
 
 def extract_detail_usages(question: str) -> list[str]:

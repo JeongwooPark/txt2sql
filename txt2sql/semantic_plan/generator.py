@@ -15,6 +15,7 @@ import psycopg
 from txt2sql.config import Settings
 from txt2sql.domain import (
     LENGTH_DIST_PATTERN,
+    d198_gu_for_dong,
     d198_table_for_gu,
     extract_gu,
     extract_industrial_name,
@@ -494,6 +495,23 @@ def try_heuristic_plan(
     structures = list(hints.get("structures") or [])
     detail_usages = list(hints.get("detail_usages") or [])
     usage_classes = list(hints.get("usage_classes") or [])
+    # D198 커버 구/동이면 세부용도(아파트 등)를 우선하고 주요용도 오맵을 제거
+    _gu_for_detail = extract_gu(q)
+    if _gu_for_detail is None and hints.get("place_kind") == "legal_dong":
+        _gu_for_detail = d198_gu_for_dong(str(hints.get("place") or ""))
+    if (
+        detail_usages
+        and _gu_for_detail
+        and d198_table_for_gu(str(_gu_for_detail)) is not None
+    ):
+        usages = []
+        if hints.get("usage") and hints["usage"] not in detail_usages:
+            hints = {**hints, "usage": None}
+    elif detail_usages and not (
+        _gu_for_detail and d198_table_for_gu(str(_gu_for_detail)) is not None
+    ):
+        # 비커버 지역: D010 주요용도만 사용 (아파트→공동주택)
+        detail_usages = []
     dual_subset_usage = _dual_count_subset_usage(q, usages)
     if dual_subset_usage:
         usages = []
@@ -733,11 +751,28 @@ def try_heuristic_plan(
 
     if query_kind == "rank":
         metric = _rank_metric(q)
-        direction = "asc" if any(k in q for k in ("낮은", "작은", "오래된")) else "desc"
+        direction = (
+            "asc"
+            if any(k in q for k in ("낮은", "작은", "오래된", "오래"))
+            and not any(k in q for k in ("최근", "신규"))
+            else "desc"
+        )
         order_by = [OrderSpec(field=metric, direction=direction, nulls="last")]
         select = ["name", "legal_dong", "lot_address", metric]
         if limit is None:
             limit = 10
+        if metric == "ground_floors" and any(k in q for k in ("많은", "많 ")) and not any(
+            item.field == "ground_floors" for item in filters
+        ):
+            filters.append(FilterSpec(field="ground_floors", operator="gt", value=0))
+        if metric in {
+            "gross_floor_area_m2",
+            "building_area_m2",
+            "height_m",
+        } and any(k in q for k in ("많은", "큰", "상위")) and not any(
+            item.field == metric for item in filters
+        ):
+            filters.append(FilterSpec(field=metric, operator="gt", value=0))
     elif query_kind == "list":
         select = _list_select(q)
         if compare is not None and compare.field not in select:
@@ -749,6 +784,48 @@ def try_heuristic_plan(
             or (predicate is not None and predicate.op in {"or", "not"})
         ) and "usage" not in select:
             select.append("usage")
+        # 「많은/큰」인데 rank로 안 잡힌 경우 → 메트릭 정렬 list
+        if any(k in q for k in ("많은", "많 ", "큰 ", "큰순", "많은 순")) and not order_by:
+            metric = _rank_metric(q)
+            if metric not in select:
+                select.append(metric)
+            order_by = [OrderSpec(field=metric, direction="desc", nulls="last")]
+            if metric == "ground_floors" and not any(
+                item.field == "ground_floors" for item in filters
+            ):
+                filters.append(
+                    FilterSpec(field="ground_floors", operator="gt", value=0)
+                )
+            if limit is None:
+                limit = 10
+        elif not order_by:
+            # 골드 list는 A0 DESC 또는 수치 조건 필드 DESC
+            metric_fields = (
+                "height_m",
+                "ground_floors",
+                "gross_floor_area_m2",
+                "building_area_m2",
+                "site_area_m2",
+                "building_coverage_ratio",
+                "floor_area_ratio",
+                "basement_floors",
+            )
+            order_field = None
+            for item in filters:
+                if item.field in metric_fields:
+                    order_field = item.field
+                    break
+            if order_field is None:
+                for field in metric_fields:
+                    if field in select:
+                        order_field = field
+                        break
+            if order_field is not None:
+                order_by = [
+                    OrderSpec(field=order_field, direction="desc", nulls="last")
+                ]
+            else:
+                order_by = [OrderSpec(field="id", direction="desc", nulls="last")]
     elif query_kind == "aggregate":
         functions = _aggregate_functions(q)
         metrics = _agg_metrics(q)
@@ -990,6 +1067,23 @@ def try_heuristic_plan(
             "용도별건물",
         )
     )
+    # cat4 용도×장소 평균·건수: D198 커버 구/동이면 ledger 강제
+    usage_or_detail = any(
+        item.field in {"usage", "detail_usage"} for item in filters
+    ) or (
+        predicate is not None
+        and _predicate_has_field(predicate, {"usage", "detail_usage"})
+    )
+    if not d198_needed and usage_or_detail:
+        gu_hint = extract_gu(q)
+        dong_hint = hints.get("place") if hints.get("place_kind") == "legal_dong" else None
+        if gu_hint is None and dong_hint:
+            gu_hint = d198_gu_for_dong(str(dong_hint))
+        if gu_hint and d198_table_for_gu(str(gu_hint)) is not None:
+            if query_kind in {"aggregate", "count"} or any(
+                k in q for k in ("평균", "합계", "몇 채", "몇채", "건수", "채수")
+            ):
+                d198_needed = True
     if d198_needed:
         assumptions.append("d198_ledger")
     clarify = False
@@ -999,6 +1093,8 @@ def try_heuristic_plan(
         dong_name = None
         if hints.get("place_kind") == "legal_dong":
             dong_name = hints.get("place")
+            if gu_name is None and dong_name:
+                gu_name = d198_gu_for_dong(str(dong_name))
         if gu_name is None or d198_table_for_gu(str(gu_name)) is None:
             clarify = True
             ambiguities.append(
@@ -1016,7 +1112,7 @@ def try_heuristic_plan(
                     )
                 )
 
-    return SemanticQueryPlan(
+    plan = SemanticQueryPlan(
         query_kind=query_kind,
         entity=entity,  # type: ignore[arg-type]
         scope=scope,
@@ -1034,6 +1130,7 @@ def try_heuristic_plan(
         model_confidence=0.7,
         assumptions=assumptions,
     )
+    return _ensure_contract_operators(plan, bound)
 
 
 def _boolean_complete(contract, plan: SemanticQueryPlan) -> bool:
@@ -1171,8 +1268,28 @@ def _ensure_contract_operators(plan: SemanticQueryPlan, contract) -> SemanticQue
         return plan
     aggregations = list(plan.aggregations)
     assumptions = list(plan.assumptions or [])
+    filters = list(plan.filters)
     group_by = list(plan.group_by)
     query_kind = plan.query_kind
+    if contract.group_fields:
+        for field in contract.group_fields:
+            if field not in group_by:
+                group_by.append(field)
+        if not aggregations:
+            for req in contract.aggregation_requests:
+                aggregations.append(
+                    AggregationSpec(
+                        function=req.function,
+                        field=req.field,
+                        alias="n" if req.function == "count" else f"{req.function}_{req.field}",
+                    )
+                )
+            if not aggregations and contract.wants_count:
+                aggregations.append(AggregationSpec(function="count", alias="n"))
+        if aggregations:
+            query_kind = "aggregate"
+        if "violation_status" in contract.group_fields:
+            filters = [item for item in filters if item.field != "violation_status"]
     for req in contract.percentile_requests:
         if not any(
             item.function == "percentile"
@@ -1228,6 +1345,7 @@ def _ensure_contract_operators(plan: SemanticQueryPlan, contract) -> SemanticQue
         update={
             "aggregations": aggregations,
             "assumptions": assumptions,
+            "filters": filters,
             "group_by": group_by,
             "query_kind": query_kind,
         }
@@ -1644,10 +1762,28 @@ def _guess_kind(question: str) -> str:
         k in stripped for k in ("건물", "주택", "시설", "아파트", "구조", "층")
     ):
         return "count"
-    if any(k in question for k in ("상위", "큰 순", "높은 순", "낮은 순", "작은 순", "랭킹", "순위")):
+    if any(k in question for k in ("상위", "큰 순", "높은 순", "낮은 순", "작은 순", "랭킹", "순위", "많은 순")):
+        return "rank"
+    if any(
+        k in question
+        for k in (
+            "최근 준공",
+            "최근준공",
+            "오래된 준공",
+            "오래된준공",
+            "가장 최근",
+            "제일 최근",
+            "가장 오래",
+            "제일 오래",
+        )
+    ) and any(k in question for k in ("준공", "사용승인", "건물", "건축물")):
         return "rank"
     if re.search(r"\d+\s*(개|곳|채|동)\b", question) and any(
-        k in question for k in ("큰", "높", "상위", "낮은", "작은", "오래")
+        k in question for k in ("큰", "높", "상위", "낮은", "작은", "오래", "최근", "많은", "많")
+    ):
+        return "rank"
+    if any(k in question for k in ("많은", "많 ")) and any(
+        k in question for k in ("층수", "지상층", "연면적", "높이", "건축면적", "건물면적")
     ):
         return "rank"
     return "list"
@@ -1656,13 +1792,15 @@ def _guess_kind(question: str) -> str:
 def _rank_metric(question: str) -> str:
     if "기초구역" in question:
         return "area_m2"
+    if any(k in question for k in ("준공", "사용승인", "건축연령", "허가일", "허가일자")):
+        return "approval_date"
     if any(k in question for k in ("높이", "고도", "낮은")):
         return "height_m"
     if "건축면적" in question or "건물면적" in question:
         return "building_area_m2"
     if "대지면적" in question:
         return "site_area_m2"
-    if any(k in question for k in ("지상층", "층수")):
+    if any(k in question for k in ("지상층", "층수", "많은 층")):
         return "ground_floors"
     return "gross_floor_area_m2"
 

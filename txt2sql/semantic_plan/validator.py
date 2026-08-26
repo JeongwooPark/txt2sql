@@ -79,11 +79,26 @@ def validate_semantic_plan(
         return _fallback(plan, str(exc), score - 0.4)
 
     if looks_like_age_question(question) or any(h in question for h in AGE_HINTS):
-        has_approval = any(item.field == "approval_date" for item in plan.filters)
+        _age_fields = frozenset({"approval_date", "permit_date", "building_age_years"})
+        has_approval = any(item.field in _age_fields for item in plan.filters)
+        has_age_order = any(item.field in _age_fields for item in plan.order_by)
+        has_age_select = any(field in _age_fields for field in plan.select)
+        has_age_agg = any(
+            (item.field in _age_fields) or (item.alias or "").startswith(("avg_age", "age"))
+            for item in plan.aggregations
+        )
+        has_age_group = any(field in _age_fields for field in plan.group_by)
         has_year_group = any(
             k in question for k in ("구간별", "년대별", "연도별", "s~", "s～")
         )
-        if not has_approval and not has_year_group:
+        if not (
+            has_approval
+            or has_age_order
+            or has_age_select
+            or has_age_agg
+            or has_age_group
+            or has_year_group
+        ):
             reason = (
                 "unsupported_coverage: 허가일은 D198만 지원"
                 if ("허가일" in question or "허가일자" in question)
@@ -316,13 +331,17 @@ def validate_semantic_plan(
         item in (plan.assumptions or [])
         for item in ("plan_followup_delta", "plan_followup_event")
     )
-    if status == "ready" and verified.hard_fail and not followup_plan:
-        if plan.ratios or plan.aggregations or plan.group_by:
-            warnings.extend(verified.reasons)
-        else:
-            status = "fallback"
-            errors.extend(verified.reasons)
-            score = min(score, verified.confidence.overall)
+    semantic_loss = any(
+        reason in {"P03", "P04", "P05", "aggregation_shape_mismatch"}
+        or reason.startswith("missing_")
+        for reason in verified.reasons
+    )
+    if status == "ready" and verified.hard_fail and (
+        not followup_plan or semantic_loss
+    ):
+        status = "fallback"
+        errors.extend(verified.reasons)
+        score = min(score, verified.confidence.overall)
     return PlanValidationResult(
         status=status,
         score=max(0.0, min(1.0, score)),

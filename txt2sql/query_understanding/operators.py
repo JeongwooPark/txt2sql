@@ -80,12 +80,31 @@ COMPARE_PATTERNS = (
     r"(?P<left>건축면적|건물면적|연면적|대지면적|높이).{0,4}(?P<right>건축면적|건물면적|연면적|대지면적|높이).{0,4}(?P<rel>보다 큰|보다 작은|보다 높은|보다 낮은)",
     r"(?P<left>건축면적|건물면적).{0,8}(?P<right>연면적|대지면적).{0,4}(보다 큰|보다 작)",
 )
-GROUP_HINTS = ("용도별", "층수별", "층별", "구별", "구조별", "법정동별")
+GROUP_HINTS = (
+    "특수지구분명별",
+    "위반건축물 여부별",
+    "위반건축물여부별",
+    "법정동코드별",
+    "구·군별",
+    "용도별",
+    "층수별",
+    "층별",
+    "구별",
+    "군별",
+    "구조별",
+    "법정동별",
+)
 GROUP_FIELD_MAP = {
+    "특수지구분명별": "special_land",
+    "위반건축물 여부별": "violation_status",
+    "위반건축물여부별": "violation_status",
+    "법정동코드별": "legal_dong",
+    "구·군별": "sigungu_name",
     "용도별": "usage",
     "층수별": "ground_floors",
     "층별": "ground_floors",
     "구별": "sigungu_name",
+    "군별": "sigungu_name",
     "구조별": "structure",
     "법정동별": "legal_dong",
 }

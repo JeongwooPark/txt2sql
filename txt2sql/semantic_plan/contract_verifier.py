@@ -73,8 +73,14 @@ def verify_contract(
         scope_score = 1.0
 
     pred = effective_predicate(plan)
+    semantic_pred_fields = predicate_fields(pred)
+    for agg in plan.aggregations:
+        semantic_pred_fields |= predicate_fields(agg.predicate)
+    for ratio in plan.ratios:
+        semantic_pred_fields |= predicate_fields(ratio.numerator_predicate)
+        semantic_pred_fields |= predicate_fields(ratio.denominator_predicate)
     pred_fields = {item.field for item in plan.filters}
-    pred_fields |= predicate_fields(pred)
+    pred_fields |= semantic_pred_fields
     pred_fields |= {item.field for item in plan.aggregations if item.field}
     pred_fields |= set(plan.select)
     pred_fields |= set(plan.group_by)
@@ -86,6 +92,23 @@ def verify_contract(
     fields_score = 1.0 if not metric_fields else field_hits / len(metric_fields)
 
     pred_score = 1.0
+    threshold_numbers = [
+        span
+        for span in contract.numbers
+        if any(
+            hint in contract.question[span.end : span.end + 10]
+            for hint in ("이상", "이하", "초과", "미만", "보다")
+        )
+    ]
+    wanted_predicate_fields = {
+        str(span.meta.get("field"))
+        for span in threshold_numbers + contract.ranges
+        if span.meta.get("field")
+    }
+    if wanted_predicate_fields and not wanted_predicate_fields <= semantic_pred_fields:
+        pred_score = 0.0
+        reasons.append("missing_predicate")
+        reasons.append("P03")
     if any(span.kind == "or" for span in contract.boolean_ops):
         if not has_op(pred, "or"):
             pred_score = 0.0
@@ -137,6 +160,14 @@ def verify_contract(
             agg_score = 0.0
             reasons.append("missing_group")
             reasons.append("P05")
+    if contract.query_kind == "group" and not plan.group_by:
+        agg_score = 0.0
+        reasons.append("missing_group")
+        reasons.append("P05")
+    if contract.query_kind == "scalar" and plan.query_kind in {"count", "list", "rank"}:
+        agg_score = 0.0
+        reasons.append("aggregation_shape_mismatch")
+        reasons.append("P05")
 
     if contract.order:
         want_dir = contract.order[0].value

@@ -62,6 +62,15 @@ _DATA_QUERY_HINTS = (
     "건수",
     "개수",
     "채수",
+    "건물 수",
+    "건물수",
+    "구역 수",
+    "구역수",
+    "레코드 수",
+    "레코드수",
+    "수를",
+    "수는",
+    "수가",
     "상위",
     "조회해",
     "세어",
@@ -227,10 +236,31 @@ def is_metadata_question(question: str) -> bool:
     q = question.strip()
     if not q:
         return False
-    from txt2sql.domain import is_busan_wide
+    from txt2sql.domain import extract_gu, extract_place, is_busan_wide
 
     if _asks_d198_where(q):
         return True
+    _schema_meta_keys = (
+        "데이터",
+        "테이블",
+        "자료",
+        "데이터셋",
+        "스키마",
+        "컬럼",
+        "칼럼",
+        "속성",
+        "필드",
+        "의미",
+        "뜻",
+    )
+    # 「연산동 건물 수를 알려줘」「금정구 기초구역 수를 알려줘」는 스키마 메타가 아님
+    if any(k in q for k in ("건물", "건축물", "기초구역", "구역")) and any(
+        k in q for k in ("몇", "수", "채", "건수", "개수", "채수")
+    ):
+        if (is_busan_wide(q) or extract_place(q) or extract_gu(q)) and not any(
+            k in q for k in _schema_meta_keys
+        ):
+            return False
     if is_busan_wide(q) and any(k in q for k in ("건물", "건축물")) and any(
         k in q for k in ("몇", "수", "채", "건수")
     ):

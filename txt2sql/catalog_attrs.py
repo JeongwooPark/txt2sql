@@ -369,13 +369,13 @@ def place_filters(ds: Dataset, q: str) -> list[str]:
 
         if place and uses_admin_boundary(place):
             if gu:
-                where.append(f'"A4" LIKE \'%{gu}%\'')
+                where.append(place_a4_predicate(gu))
         elif place and is_legal_dong(place):
             where.append(place_a4_predicate(place))
             if gu:
-                where.append(f'"A4" LIKE \'%{gu}%\'')
+                where.append(place_a4_predicate(gu))
         elif gu:
-            where.append(f'"A4" LIKE \'%{gu}%\'')
+            where.append(place_a4_predicate(gu))
         elif place:
             where.append(place_a4_predicate(place))
         return where
