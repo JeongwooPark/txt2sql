@@ -1,0 +1,137 @@
+{
+  "followup": {
+    "passed": 248,
+    "total": 500,
+    "accuracy_pct": 49.6,
+    "path": "D:\\py_workspace\\llm2sql\\tests\\map_ui_gold500\\results\\mapui_newset500_followup_20260826_152056.json"
+  },
+  "round3": {
+    "passed": 244,
+    "total": 500,
+    "accuracy_pct": 48.8
+  },
+  "delta_passed": 4,
+  "delta_accuracy_pct": 0.8000000000000043,
+  "migration": {
+    "fixed": 4,
+    "regressed": 0,
+    "still_pass": 244,
+    "still_fail": 252
+  },
+  "fixed_ids": [
+    "Q127",
+    "Q147",
+    "Q149",
+    "Q150"
+  ],
+  "regressed_ids": [],
+  "execution_sources": {
+    "total": 500,
+    "counts": {
+      "legacy_router": 193,
+      "semantic_plan": 263,
+      "semantic_v2": 44
+    },
+    "share_pct": {
+      "legacy_router": 38.6,
+      "semantic_plan": 52.6,
+      "semantic_v2": 8.8
+    },
+    "compiler_counts": {
+      "legacy_route_sql": 132,
+      "legacy_sqp_compiler": 133,
+      "deterministic_compiler_v2": 44
+    },
+    "fallback_counts": {},
+    "untracked": 0
+  },
+  "by_kind": {
+    "compare": {
+      "passed": 8,
+      "total": 18,
+      "pct": 44.4
+    },
+    "count": {
+      "passed": 98,
+      "total": 180,
+      "pct": 54.4
+    },
+    "group": {
+      "passed": 31,
+      "total": 93,
+      "pct": 33.3
+    },
+    "list": {
+      "passed": 84,
+      "total": 128,
+      "pct": 65.6
+    },
+    "meta": {
+      "passed": 16,
+      "total": 19,
+      "pct": 84.2
+    },
+    "scalar": {
+      "passed": 11,
+      "total": 62,
+      "pct": 17.7
+    }
+  },
+  "by_cat": {
+    "1. 기본 건물 조회·건수": {
+      "passed": 48,
+      "total": 70,
+      "pct": 68.6
+    },
+    "2. 수치 조건·범위·필드 비교": {
+      "passed": 61,
+      "total": 70,
+      "pct": 87.1
+    },
+    "3. 집계·분포·순위": {
+      "passed": 35,
+      "total": 60,
+      "pct": 58.3
+    },
+    "4. 금정구·동래구 건축물 용도 특화": {
+      "passed": 35,
+      "total": 100,
+      "pct": 35.0
+    },
+    "5. 금정구·동래구 사용승인·허가·건축연령": {
+      "passed": 8,
+      "total": 60,
+      "pct": 13.3
+    },
+    "6. 공간조인·행정동·기초구역·산업단지": {
+      "passed": 32,
+      "total": 80,
+      "pct": 40.0
+    },
+    "7. 조인·메타·모호성·후속질의·적대적 표현": {
+      "passed": 29,
+      "total": 60,
+      "pct": 48.3
+    }
+  },
+  "count_mismatch": {
+    "total": 50,
+    "concrete_pct": 98.0,
+    "counts": {
+      "spatial": 9,
+      "predicate": 17,
+      "grain": 3,
+      "scope": 4,
+      "dataset": 6,
+      "temporal": 10,
+      "unknown": 1
+    }
+  },
+  "gates": {
+    "overall_gt_48_8": true,
+    "scalar_pct": 17.7,
+    "group_pct": 33.3,
+    "cat5_pct": 13.3,
+    "regressed_le_fixed": true
+  }
+}
