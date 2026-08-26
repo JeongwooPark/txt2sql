@@ -36,6 +36,8 @@ _FIELD_ALIASES = {
     "building_dong_name": "building_dong_name",
     "special_land": "special_land",
     "approval_date": "approval_date",
+    "permit_date": "permit_date",
+    "building_age_years": "building_age_years",
     "detail_usage": "detail_usage",
     "usage_class": "usage_class",
     "basement_floors": "basement_floors",
@@ -210,6 +212,14 @@ BUILDING_FIELDS: dict[str, SemanticField] = {
     ),
     "permit_date": _date(
         "permit_date", "building", BUILDING_TABLE, "A13", "허가일자"
+    ),
+    "building_age_years": _num(
+        "building_age_years",
+        "building",
+        BUILDING_TABLE,
+        "A13",
+        "건축경과년수",
+        "year",
     ),
     "detail_usage": _text(
         "detail_usage", "building", BUILDING_TABLE, "A27", "세부용도"

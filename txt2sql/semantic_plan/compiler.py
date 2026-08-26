@@ -537,6 +537,23 @@ def _predicate_sql(
         )
         _field, col = _field_col(alias, entity, "approval_date", col_map)
         return _approval_date_sql(col, spec), False, []
+    if pred.left and pred.left.field == "building_age_years":
+        raw = pred.right.value if pred.right else None
+        value2 = None
+        value = raw
+        if pred.operator == "between":
+            if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+                value, value2 = raw[0], raw[1]
+            else:
+                raise SemanticCompileError("between requires [low, high] literal")
+        spec = FilterSpec(
+            field="building_age_years",
+            operator=pred.operator,
+            value=value,
+            value2=value2,
+        )
+        _field, col = _field_col(alias, entity, "building_age_years", col_map)
+        return _building_age_sql(col, spec), False, []
     if pred.operator in {"is_null", "is_not_null"}:
         left, height_used, params = _operand_sql(
             alias, entity, pred.left, col_map=col_map
@@ -595,6 +612,8 @@ def _filter_sql(
     height_used = spec.field == "height_m"
     if spec.field in {"approval_date", "permit_date"}:
         return _approval_date_sql(col, spec), height_used
+    if spec.field == "building_age_years":
+        return _building_age_sql(col, spec), height_used
     if spec.operator == "is_null":
         return f"{col} IS NULL", height_used
     if spec.operator == "is_not_null":
@@ -1040,6 +1059,28 @@ def _literal(value: object, data_type: str) -> str:
 
 def _approval_year_expr(col: str) -> str:
     return f"LEFT(regexp_replace({col}::text, '[^0-9]', '', 'g'), 4)"
+
+
+def _building_age_expr(col: str) -> str:
+    """Age in years via AGE/EXTRACT when ISO date, else year subtraction."""
+    year_expr = _approval_year_expr(col)
+    return (
+        f"(CASE WHEN {col}::text ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}' "
+        f"THEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, {col}::date))::int "
+        f"ELSE (EXTRACT(YEAR FROM CURRENT_DATE)::int - ({year_expr})::int) END)"
+    )
+
+
+def _building_age_sql(col: str, spec: FilterSpec) -> str:
+    age = _building_age_expr(col)
+    valid = f"({col}::text ~ '^[0-9]{{4}}')"
+    op = _OPS.get(spec.operator)
+    if spec.operator == "between":
+        lo, hi = spec.value, spec.value2
+        return f"{valid} AND {age} BETWEEN {int(float(lo))} AND {int(float(hi))}"
+    if op is None:
+        raise SemanticCompileError(f"unknown operator: {spec.operator}")
+    return f"{valid} AND {age} {op} {int(float(spec.value))}"
 
 
 def _approval_decade_expr(col: str) -> str:

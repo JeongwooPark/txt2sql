@@ -386,6 +386,28 @@ def query_ir_to_semantic_plan(ir: QueryIR) -> Any:
             )
         )
 
+    # TemporalIR → FilterSpec (AGE/year predicates). Prefer explicit temporal over NL.
+    if ir.temporal is not None:
+        t = ir.temporal
+        field = t.field or "approval_date"
+        if t.age_years is not None and t.operator:
+            filters.append(
+                FilterSpec(
+                    field="building_age_years",
+                    operator=t.operator,  # type: ignore[arg-type]
+                    value=t.age_years,
+                )
+            )
+        elif t.operator and t.value is not None:
+            filters.append(
+                FilterSpec(
+                    field=field,
+                    operator=t.operator,  # type: ignore[arg-type]
+                    value=t.value,
+                    value2=t.value2,
+                )
+            )
+
     aggregations = [
         AggregationSpec(
             function=a.function if a.function not in {"ratio", "derived"} else "count",  # type: ignore[arg-type]
@@ -400,21 +422,27 @@ def query_ir_to_semantic_plan(ir: QueryIR) -> Any:
     order_by = [
         OrderSpec(field=o.field or "count", direction=o.direction) for o in ir.ordering if o.field or True
     ]
-    spatial_relations = [
-        SpatialRelationSpec(
-            relation=s.relation or "within",  # type: ignore[arg-type]
-            target=SpatialTargetSpec(
-                entity=s.target_entity if s.target_entity in {"building", "admin_area", "basic_zone", "industrial_complex"} else None,  # type: ignore[arg-type]
-                place=PlaceSpec(name=s.target_place) if s.target_place else None,
-                longitude=s.longitude,
-                latitude=s.latitude,
-            ),
-            distance_m=s.distance_m,
-            min_ratio=s.min_ratio,
+    spatial_relations = []
+    for s in ir.spatial:
+        if not s.relation:
+            continue
+        target_place = s.target_place
+        if not target_place and ir.scope and ir.scope.place:
+            # SpatialFilter without explicit target inherits scope place.
+            target_place = ir.scope.place
+        spatial_relations.append(
+            SpatialRelationSpec(
+                relation=s.relation,  # type: ignore[arg-type]
+                target=SpatialTargetSpec(
+                    entity=s.target_entity if s.target_entity in {"building", "admin_area", "basic_zone", "industrial_complex"} else None,  # type: ignore[arg-type]
+                    place=PlaceSpec(name=target_place) if target_place else None,
+                    longitude=s.longitude,
+                    latitude=s.latitude,
+                ),
+                distance_m=s.distance_m,
+                min_ratio=s.min_ratio,
+            )
         )
-        for s in ir.spatial
-        if s.relation
-    ]
 
     return SemanticQueryPlan(
         query_kind=query_kind,  # type: ignore[arg-type]
