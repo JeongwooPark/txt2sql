@@ -30,6 +30,13 @@ class AskResult:
     plan_quality: float | None = None
     stage_latency_ms: dict[str, int] = field(default_factory=dict)
     selected_route: str | None = None
+    query_ir_task: str | None = None
+    logical_status: str | None = None
+    physical_strategy: str | None = None
+    execution_source: str | None = None
+    compiler_source: str | None = None
+    fallback_source: str | None = None
+    reason_codes: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -42,6 +49,13 @@ class AskResult:
             "map",
             "semantic_plan",
             "plan_quality",
+            "query_ir_task",
+            "logical_status",
+            "physical_strategy",
+            "execution_source",
+            "compiler_source",
+            "fallback_source",
+            "reason_codes",
         ):
             if data.get(key) is None:
                 data.pop(key, None)

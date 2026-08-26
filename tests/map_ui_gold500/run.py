@@ -278,6 +278,12 @@ def main(argv: list[str] | None = None) -> int:
                 ms=int(raw.get("ms") or 0),
                 ui=raw.get("ui") or {},
                 process=list(raw.get("process") or []),
+                execution_source=raw.get("execution_source"),
+                compiler_source=raw.get("compiler_source"),
+                fallback_source=raw.get("fallback_source"),
+                query_ir_task=raw.get("query_ir_task"),
+                logical_status=raw.get("logical_status"),
+                physical_strategy=raw.get("physical_strategy"),
             )
             rows.append(rec)
             _append_jsonl(args.transcript, rec)

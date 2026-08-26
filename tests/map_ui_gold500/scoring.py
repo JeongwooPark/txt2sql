@@ -38,6 +38,12 @@ def score_case(
     ms: int,
     ui: dict[str, Any],
     process: list[dict[str, Any]],
+    execution_source: str | None = None,
+    compiler_source: str | None = None,
+    fallback_source: str | None = None,
+    query_ir_task: str | None = None,
+    logical_status: str | None = None,
+    physical_strategy: str | None = None,
 ) -> dict[str, Any]:
     from txt2sql.evaluation.taxonomy import diagnose_eval_failure
 
@@ -63,6 +69,12 @@ def score_case(
         "pass": ok,
         "reason": reason,
         "route": route,
+        "execution_source": execution_source,
+        "compiler_source": compiler_source,
+        "fallback_source": fallback_source,
+        "query_ir_task": query_ir_task,
+        "logical_status": logical_status,
+        "physical_strategy": physical_strategy,
         "error": error,
         "ms": ms,
         "answer": clip(answer),

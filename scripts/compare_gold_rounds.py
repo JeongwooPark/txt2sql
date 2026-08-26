@@ -10,6 +10,7 @@ from typing import Any
 
 from txt2sql.evaluation.stage_eval import migrate_failures, taxonomy_from_reason
 from txt2sql.evaluation.case_map import case_rows, case_pass_map
+from txt2sql.evaluation.execution_sources import share_execution_sources
 
 
 def compare(before_path: Path, after_path: Path) -> dict[str, Any]:
@@ -60,6 +61,7 @@ def compare(before_path: Path, after_path: Path) -> dict[str, Any]:
             "regressed_sample": regressed[:30],
         },
         "taxonomy_after_top": dict(tax.most_common(20)),
+        "execution_sources": share_execution_sources(after),
     }
     return report
 
@@ -88,6 +90,7 @@ def main() -> int:
         f"- delta: {report['delta_passed']:+d} ({report['delta_accuracy_pct']:+.1f}%p)",
         f"- fixed: {m['fixed_n']}, regressed: {m['regressed_n']}, still_pass: {m['still_pass_n']}, still_fail: {m['still_fail_n']}",
         f"- sum check: {m['sum_n']} (matched={report['matched_cases']})",
+        f"- execution_sources: {report.get('execution_sources', {}).get('counts')}",
         "",
     ]
     md.write_text("\n".join(lines), encoding="utf-8")
