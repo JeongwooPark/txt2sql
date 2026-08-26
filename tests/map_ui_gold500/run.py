@@ -1,13 +1,18 @@
 """맵 UI 골드 테스트 실행기.
 
-맵 화면(`/map`)을 띄운 뒤 대화창에 문항을 자동 입력하고, 답·과정(SSE)을
-저장한 다음 골드 수치와 대조한다. 문항 파일은 교체 가능하다.
+맵 화면(`/map`) 또는 동일 서버 `/api/chat`로 문항을 실행하고, 답·과정(SSE)을
+저장한 다음 골드 수치와 대조한다.
 
-    uv run python -m tests.map_ui_gold500.run
-    uv run python -m tests.map_ui_gold500.run --questions tests/map_ui_gold500/questions.json
+기본은 **headless Chromium** (창을 띄우지 않음). 브라우저 창이 필요하면
+`--headed`를 명시한다. Chromium 미설치 시 자동 설치를 시도하고, 실패하면
+맵 UI 서버의 API SSE로 폴백한다 (`--require-browser`로 폴백 금지 가능).
+
+    uv run python -m tests.map_ui_gold500.run --start-server
+    uv run python -m tests.map_ui_gold500.run --headless --start-server
+    uv run python -m tests.map_ui_gold500.run --headed
+    uv run python -m tests.map_ui_gold500.run --driver api --start-server
     uv run python -m tests.map_ui_gold500.run --limit 10
     uv run python -m tests.map_ui_gold500.run --ids N001,N004
-    uv run python -m tests.map_ui_gold500.run --headless
 """
 
 from __future__ import annotations
@@ -47,13 +52,48 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=0, help="앞에서 N문항만 (0=전체)")
     p.add_argument("--url", default=DEFAULT_MAP, help="맵 UI URL")
     p.add_argument("--timeout", type=int, default=60, help="문항당 초")
-    p.add_argument("--headed", action="store_true", default=True, help="브라우저 창 표시")
-    p.add_argument("--headless", action="store_true", help="브라우저 숨김")
-    p.add_argument("--slow-mo", type=int, default=0, help="입력 지연 ms")
+    # Default: headless. Only --headed opens a visible window.
+    p.add_argument(
+        "--headed",
+        action="store_true",
+        help="브라우저 창 표시 (기본은 headless — 창을 띄우지 않음)",
+    )
+    p.add_argument(
+        "--headless",
+        action="store_true",
+        help="브라우저 숨김 (기본값, 명시용 호환 플래그)",
+    )
+    p.add_argument(
+        "--driver",
+        choices=("auto", "browser", "api"),
+        default="auto",
+        help="browser=Playwright, api=/api/chat SSE, auto=browser 실패 시 api 폴백",
+    )
+    p.add_argument(
+        "--require-browser",
+        action="store_true",
+        help="브라우저 기동 실패 시 api 폴백하지 않고 종료",
+    )
+    p.add_argument(
+        "--no-install-browsers",
+        action="store_true",
+        help="Chromium 자동 설치를 하지 않음",
+    )
+    p.add_argument("--slow-mo", type=int, default=0, help="입력 지연 ms (browser only)")
     p.add_argument("--start-server", action="store_true", help="서버가 없으면 기동")
     p.add_argument("--out", type=Path, default=RESULTS_DIR / "latest.json")
     p.add_argument("--transcript", type=Path, default=RESULTS_DIR / "transcript.jsonl")
     return p.parse_args(argv)
+
+
+def resolve_headed(args: argparse.Namespace) -> bool:
+    """Headless is default. --headed wins; bare --headless keeps headless."""
+    if args.headed and args.headless:
+        # Explicit conflict: prefer headless for automation safety.
+        return False
+    if args.headed:
+        return True
+    return False
 
 
 def _select(
@@ -142,14 +182,24 @@ def _append_jsonl(path: Path, rec: dict[str, Any]) -> None:
         fh.write(json.dumps(slim, ensure_ascii=False) + "\n")
 
 
+def _make_api_driver(base: str, timeout_s: int):
+    from tests.map_ui_gold500.driver import ApiChatDriver
+
+    return ApiChatDriver(base_url=base, timeout_ms=timeout_s * 1000)
+
+
 def main(argv: list[str] | None = None) -> int:
     _utf8_stdio()
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
 
     args = _parse_args(argv)
-    headed = not args.headless
-    from tests.map_ui_gold500.driver import MapUiDriver, launch_browser
+    headed = resolve_headed(args)
+    from tests.map_ui_gold500.driver import (
+        BrowserUnavailableError,
+        MapUiDriver,
+        launch_browser,
+    )
     from tests.map_ui_gold500.questions_loader import load_questions
     from tests.map_ui_gold500.scoring import score_case, summarize
 
@@ -165,22 +215,50 @@ def main(argv: list[str] | None = None) -> int:
     if args.transcript.exists():
         args.transcript.unlink()
 
-    print(
-        f"=== 맵 UI 골드 테스트 questions={meta.get('path')} "
-        f"n={len(questions)} url={args.url} timeout={args.timeout}s "
-        f"{'headed' if headed else 'headless'} ===\n",
-        flush=True,
-    )
-
+    driver_mode = args.driver
     pw = browser = context = page = None
-    rows: list[dict[str, Any]] = []
-    t0 = time.perf_counter()
-    prev_session: object | None = object()
+    driver: Any = None
+
     try:
-        pw, browser, context, page = launch_browser(
-            headed=headed, slow_mo_ms=args.slow_mo
+        if driver_mode in {"browser", "auto"}:
+            try:
+                pw, browser, context, page = launch_browser(
+                    headed=headed,
+                    slow_mo_ms=args.slow_mo,
+                    auto_install=not args.no_install_browsers,
+                )
+                driver = MapUiDriver(
+                    page, map_url=args.url, timeout_ms=args.timeout * 1000
+                )
+                driver_mode = "browser"
+            except BrowserUnavailableError as exc:
+                if args.driver == "browser" or args.require_browser:
+                    raise SystemExit(
+                        f"브라우저 기동 실패: {exc}\n"
+                        "uv run playwright install chromium\n"
+                        "또는 --driver api 로 맵 UI 서버 SSE만 사용하세요."
+                    ) from exc
+                print(
+                    f"[browser] 사용 불가 → API 드라이버로 폴백\n  reason: {exc}",
+                    flush=True,
+                )
+                driver = _make_api_driver(base, args.timeout)
+                driver_mode = "api"
+        else:
+            driver = _make_api_driver(base, args.timeout)
+            driver_mode = "api"
+
+        print(
+            f"=== 맵 UI 골드 테스트 questions={meta.get('path')} "
+            f"n={len(questions)} url={args.url} timeout={args.timeout}s "
+            f"driver={driver_mode} "
+            f"{'headed' if headed and driver_mode == 'browser' else 'headless/cli'} ===\n",
+            flush=True,
         )
-        driver = MapUiDriver(page, map_url=args.url, timeout_ms=args.timeout * 1000)
+
+        rows: list[dict[str, Any]] = []
+        t0 = time.perf_counter()
+        prev_session: object | None = object()
         driver.open()
         for i, case in enumerate(questions, 1):
             sid = case.get("session")
@@ -216,11 +294,12 @@ def main(argv: list[str] | None = None) -> int:
                 payload["gold_file"] = meta.get("included") or meta.get("path")
                 payload["ui"] = {
                     "url": args.url,
-                    "headed": headed,
+                    "headed": headed if driver_mode == "browser" else False,
+                    "driver": driver_mode,
                     "questions_file": meta.get("path"),
                     "questions_name": meta.get("name"),
                     "included": meta.get("included"),
-                    "mode": "map-ui-chat",
+                    "mode": "map-ui-chat" if driver_mode == "browser" else "map-ui-api",
                 }
                 _dump(args.out, payload)
                 print(
@@ -228,38 +307,57 @@ def main(argv: list[str] | None = None) -> int:
                     f"acc={payload['accuracy_pct']}% elapsed={payload['elapsed_s']}s",
                     flush=True,
                 )
-    finally:
-        if context is not None:
-            context.close()
-        if browser is not None:
-            browser.close()
-        if pw is not None:
-            pw.stop()
-        if server is not None:
-            server.terminate()
 
-    payload = summarize(rows, time.perf_counter() - t0)
-    payload["partial"] = False
-    payload["timeout_s"] = args.timeout
-    payload["gold_file"] = meta.get("included") or meta.get("path")
-    payload["ui"] = {
-        "url": args.url,
-        "headed": headed,
-        "questions_file": meta.get("path"),
-        "questions_name": meta.get("name"),
-        "included": meta.get("included"),
-        "mode": "map-ui-chat",
-        "transcript": str(args.transcript),
-    }
-    _dump(args.out, payload)
-    print(
-        f"\n=== 결과 {payload['passed']}/{payload['total']} "
-        f"({payload['accuracy_pct']}%) {payload['elapsed_s']}s ===",
-        flush=True,
-    )
-    print("wrote", args.out, flush=True)
-    print("wrote", args.transcript, flush=True)
-    return 0 if payload.get("failed", 1) == 0 else 1
+        payload = summarize(rows, time.perf_counter() - t0)
+        payload["partial"] = False
+        payload["timeout_s"] = args.timeout
+        payload["gold_file"] = meta.get("included") or meta.get("path")
+        payload["ui"] = {
+            "url": args.url,
+            "headed": headed if driver_mode == "browser" else False,
+            "driver": driver_mode,
+            "questions_file": meta.get("path"),
+            "questions_name": meta.get("name"),
+            "included": meta.get("included"),
+            "mode": "map-ui-chat" if driver_mode == "browser" else "map-ui-api",
+            "transcript": str(args.transcript),
+        }
+        _dump(args.out, payload)
+        print(
+            f"\n=== 결과 {payload['passed']}/{payload['total']} "
+            f"({payload['accuracy_pct']}%) {payload['elapsed_s']}s ===",
+            flush=True,
+        )
+        print("wrote", args.out, flush=True)
+        print("wrote", args.transcript, flush=True)
+        return 0 if payload.get("failed", 1) == 0 else 1
+    finally:
+        # Ordered Playwright teardown avoids TargetClosedError noise on Windows.
+        try:
+            if page is not None:
+                page.close()
+        except Exception:
+            pass
+        try:
+            if context is not None:
+                context.close()
+        except Exception:
+            pass
+        try:
+            if browser is not None:
+                browser.close()
+        except Exception:
+            pass
+        try:
+            if pw is not None:
+                pw.stop()
+        except Exception:
+            pass
+        if server is not None:
+            try:
+                server.terminate()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
