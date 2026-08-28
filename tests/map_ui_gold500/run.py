@@ -84,6 +84,27 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="교체 가능한 문항 JSON (include 또는 questions 배열)",
     )
     p.add_argument("--ids", default="", help="쉼표로 구분한 문항 id만 실행")
+    p.add_argument(
+        "--exclude-ids",
+        default="",
+        help="쉼표로 구분한 문항 id를 메인 실행에서 제외",
+    )
+    p.add_argument(
+        "--track-file",
+        type=Path,
+        default=None,
+        help="bench_tracks.json (tracks.<name> ID 목록)",
+    )
+    p.add_argument(
+        "--exclude-track",
+        default="",
+        help="--track-file 의 트랙명(쉼표 가능). 예: data_quality",
+    )
+    p.add_argument(
+        "--only-track",
+        default="",
+        help="--track-file 의 트랙만 실행. 예: operator_promote",
+    )
     p.add_argument("--limit", type=int, default=0, help="앞에서 N문항만 (0=전체)")
     p.add_argument("--url", default=DEFAULT_MAP, help="맵 UI URL")
     p.add_argument("--timeout", type=int, default=60, help="문항당 초")
@@ -144,8 +165,27 @@ def resolve_driver(args: argparse.Namespace) -> str:
     return args.driver
 
 
+def _load_track_ids(track_file: Path | None, names: str) -> set[str]:
+    if track_file is None or not names.strip():
+        return set()
+    payload = json.loads(track_file.read_text(encoding="utf-8"))
+    tracks = payload.get("tracks") or payload
+    out: set[str] = set()
+    for name in names.split(","):
+        key = name.strip()
+        if not key:
+            continue
+        ids = tracks.get(key) or []
+        out.update(str(i) for i in ids)
+    return out
+
+
 def _select(
-    questions: list[dict[str, Any]], ids: set[str] | None, limit: int
+    questions: list[dict[str, Any]],
+    ids: set[str] | None,
+    limit: int,
+    *,
+    exclude: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     selected = questions
     if ids:
@@ -156,6 +196,8 @@ def _select(
             for c in questions
             if c["id"] in ids or (c.get("session") and c["session"] in wanted_sessions)
         ] or [c for c in questions if c["id"] in ids]
+    if exclude:
+        selected = [c for c in selected if c["id"] not in exclude]
     if limit and limit > 0:
         selected = selected[:limit]
     return selected
@@ -261,9 +303,20 @@ def main(argv: list[str] | None = None) -> int:
 
     meta, questions = load_questions(args.questions)
     wanted = {x.strip() for x in args.ids.split(",") if x.strip()} or None
-    questions = _select(questions, wanted, args.limit)
+    only_track = _load_track_ids(args.track_file, getattr(args, "only_track", "") or "")
+    if only_track:
+        wanted = only_track if wanted is None else (wanted & only_track)
+    exclude = {x.strip() for x in (args.exclude_ids or "").split(",") if x.strip()}
+    exclude |= _load_track_ids(
+        args.track_file, getattr(args, "exclude_track", "") or ""
+    )
+    questions = _select(questions, wanted, args.limit, exclude=exclude or None)
     if not questions:
         raise SystemExit("실행할 문항이 없습니다. questions.json 을 확인하세요.")
+    if exclude:
+        _safe_print(f"[track] exclude {len(exclude)} ids → run n={len(questions)}")
+    if only_track:
+        _safe_print(f"[track] only-track n={len(only_track)} → run n={len(questions)}")
 
     base = _base_url(args.url)
     server = _ensure_server(base, args.start_server)

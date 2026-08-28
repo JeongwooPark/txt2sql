@@ -1,15 +1,29 @@
-"""canonical semantic field → 물리 테이블/컬럼 allowlist."""
+"""canonical semantic field → 물리 테이블/컬럼 allowlist.
+
+Physical column letters for D010/D198 MUST come from
+`txt2sql.canonical_physical_columns` — do not hardcode divergent maps here.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from txt2sql.canonical_physical_columns import D010_FIELD_COLUMNS, D198_FIELD_COLUMNS
+from txt2sql.dataset_tables import (
+    DEFAULT_BASIC_ZONE_TABLE,
+    DEFAULT_BUILDING_TABLE,
+    basic_zone_coverage_map,
+    building_coverage_map,
+    resolve_basic_zone_table,
+    resolve_building_table,
+)
 from txt2sql.domain import D198_TABLES
 from txt2sql.semantic_plan.models import UnknownSemanticFieldError
 
-BUILDING_TABLE = "AL_D010_26_20250704"
+# 카탈로그 필드 정의·allowlist 기본값. SQL 생성은 resolve_*() 를 쓴다.
+BUILDING_TABLE = DEFAULT_BUILDING_TABLE
 ADMIN_TABLE = "BND_ADM_DONG_PG"
-BASIC_ZONE_TABLE = "TL_KODIS_BAS_26_202507"
+BASIC_ZONE_TABLE = DEFAULT_BASIC_ZONE_TABLE
 INDUSTRIAL_TABLE = "AL_D060_00_20250804"
 
 _TEXT_OPS = ("eq", "neq", "contains", "in", "not_in", "is_null", "is_not_null")
@@ -135,6 +149,10 @@ def _num(
     )
 
 
+def _d010(key: str) -> str:
+    return D010_FIELD_COLUMNS[key]
+
+
 ENTITIES: dict[str, SemanticEntity] = {
     "building": SemanticEntity(
         key="building",
@@ -167,68 +185,130 @@ ENTITIES: dict[str, SemanticEntity] = {
 }
 
 BUILDING_FIELDS: dict[str, SemanticField] = {
-    "id": _text("id", "building", BUILDING_TABLE, "A0", "건물 식별자", groupable=False),
-    "name": _text("name", "building", BUILDING_TABLE, "A24", "건물명"),
-    "legal_dong": _text("legal_dong", "building", BUILDING_TABLE, "A4", "법정동명"),
-    "lot_address": _text("lot_address", "building", BUILDING_TABLE, "A5", "지번"),
-    "usage": _text("usage", "building", BUILDING_TABLE, "A9", "용도"),
-    "structure": _text("structure", "building", BUILDING_TABLE, "A11", "구조"),
+    "id": _text("id", "building", BUILDING_TABLE, _d010("id"), "건물 식별자", groupable=False),
+    "name": _text("name", "building", BUILDING_TABLE, _d010("name"), "건물명"),
+    "legal_dong": _text("legal_dong", "building", BUILDING_TABLE, _d010("legal_dong"), "법정동명"),
+    "lot_address": _text(
+        "lot_address", "building", BUILDING_TABLE, _d010("lot_address"), "지번"
+    ),
+    "usage": _text("usage", "building", BUILDING_TABLE, _d010("usage"), "용도"),
+    "structure": _text("structure", "building", BUILDING_TABLE, _d010("structure"), "구조"),
     "building_area_m2": _num(
-        "building_area_m2", "building", BUILDING_TABLE, "A12", "건축면적", "m2"
+        "building_area_m2",
+        "building",
+        BUILDING_TABLE,
+        _d010("building_area_m2"),
+        "건축면적",
+        "m2",
     ),
     "gross_floor_area_m2": _num(
-        "gross_floor_area_m2", "building", BUILDING_TABLE, "A14", "연면적", "m2"
+        "gross_floor_area_m2",
+        "building",
+        BUILDING_TABLE,
+        _d010("gross_floor_area_m2"),
+        "연면적",
+        "m2",
     ),
     "site_area_m2": _num(
-        "site_area_m2", "building", BUILDING_TABLE, "A15", "대지면적", "m2"
+        "site_area_m2", "building", BUILDING_TABLE, _d010("site_area_m2"), "대지면적", "m2"
     ),
-    "height_m": _num("height_m", "building", BUILDING_TABLE, "A16", "높이", "m"),
+    "height_m": _num("height_m", "building", BUILDING_TABLE, _d010("height_m"), "높이", "m"),
     "ground_floors": _num(
-        "ground_floors", "building", BUILDING_TABLE, "A26", "지상층수", "floor"
+        "ground_floors",
+        "building",
+        BUILDING_TABLE,
+        _d010("ground_floors"),
+        "지상층수",
+        "floor",
     ),
     "basement_floors": _num(
-        "basement_floors", "building", BUILDING_TABLE, "A27", "지하층수", "floor"
+        "basement_floors",
+        "building",
+        BUILDING_TABLE,
+        _d010("basement_floors"),
+        "지하층수",
+        "floor",
     ),
     "building_coverage_ratio": _num(
-        "building_coverage_ratio", "building", BUILDING_TABLE, "A17", "건폐율", "%"
+        "building_coverage_ratio",
+        "building",
+        BUILDING_TABLE,
+        _d010("building_coverage_ratio"),
+        "건폐율",
+        "%",
     ),
     "floor_area_ratio": _num(
-        "floor_area_ratio", "building", BUILDING_TABLE, "A18", "용적율", "%"
+        "floor_area_ratio",
+        "building",
+        BUILDING_TABLE,
+        _d010("floor_area_ratio"),
+        "용적율",
+        "%",
     ),
     "violation_status": _text(
-        "violation_status", "building", BUILDING_TABLE, "A20", "위반건축물여부"
+        "violation_status",
+        "building",
+        BUILDING_TABLE,
+        _d010("violation_status"),
+        "위반건축물여부",
     ),
     "building_dong_name": _text(
-        "building_dong_name", "building", BUILDING_TABLE, "A25", "건물동명"
+        "building_dong_name",
+        "building",
+        BUILDING_TABLE,
+        _d010("building_dong_name"),
+        "건물동명",
     ),
     "sigungu_name": _text(
-        "sigungu_name", "building", BUILDING_TABLE, "A3", "시군구명"
+        "sigungu_name", "building", BUILDING_TABLE, _d010("sigungu_name"), "시군구명"
     ),
     "special_land": _text(
-        "special_land", "building", BUILDING_TABLE, "A7", "특수지구분명"
+        "special_land", "building", BUILDING_TABLE, _d010("special_land"), "특수지구분명"
     ),
     "approval_date": _date(
-        "approval_date", "building", BUILDING_TABLE, "A13", "사용승인일자"
+        "approval_date",
+        "building",
+        BUILDING_TABLE,
+        _d010("approval_date"),
+        "사용승인일자",
     ),
     "permit_date": _date(
-        "permit_date", "building", BUILDING_TABLE, "A13", "허가일자"
+        "permit_date",
+        "building",
+        BUILDING_TABLE,
+        _d010("permit_date"),
+        "허가일자",
     ),
     "building_age_years": _num(
         "building_age_years",
         "building",
         BUILDING_TABLE,
-        "A13",
+        _d010("building_age_years"),
         "건축경과년수",
         "year",
     ),
+    # D198-only slots: column letters are D198's. Compiler requires D198 when used
+    # so these never resolve against D010 (A27 on D010 is basement_floors).
     "detail_usage": _text(
-        "detail_usage", "building", BUILDING_TABLE, "A27", "세부용도"
+        "detail_usage",
+        "building",
+        BUILDING_TABLE,
+        D198_FIELD_COLUMNS["detail_usage"],
+        "세부용도",
     ),
     "usage_class": _text(
-        "usage_class", "building", BUILDING_TABLE, "A29", "용도분류"
+        "usage_class",
+        "building",
+        BUILDING_TABLE,
+        D198_FIELD_COLUMNS["usage_class"],
+        "용도분류",
     ),
     "ledger_kind": _text(
-        "ledger_kind", "building", BUILDING_TABLE, "A12", "대장종류"
+        "ledger_kind",
+        "building",
+        BUILDING_TABLE,
+        D198_FIELD_COLUMNS["ledger_kind"],
+        "대장종류",
     ),
     "geometry": SemanticField(
         key="geometry",
@@ -316,8 +396,10 @@ ALLOWED_TABLES = frozenset(
 ALLOWED_COLUMNS = frozenset(
     {field.column for fields in FIELDS_BY_ENTITY.values() for field in fields.values()}
     | {
+        "A1",  # D198 GIS건물통합식별번호 (id override)
         "A3",
         "A7",
+        "A8",
         "A13",
         "A19",
         "A21",
@@ -334,13 +416,19 @@ ALLOWED_COLUMNS = frozenset(
 
 
 def is_allowed_physical_identifier(name: str) -> bool:
-    """현재 카탈로그와 런타임 D198 커버리지에 등록된 식별자인지 확인한다."""
+    """현재 카탈로그와 런타임 D198/건물·기초구역 커버리지에 등록된 식별자인지 확인한다."""
     if name in ALLOWED_COLUMNS or name in {
         BUILDING_TABLE,
         ADMIN_TABLE,
         BASIC_ZONE_TABLE,
         INDUSTRIAL_TABLE,
+        resolve_building_table(),
+        resolve_basic_zone_table(),
     }:
+        return True
+    if name in building_coverage_map().values():
+        return True
+    if name in basic_zone_coverage_map().values():
         return True
     # D198_TABLES는 DB 커버리지 검색 후 제자리 갱신되므로 정적 frozenset보다
     # 런타임 목록을 기준으로 최신 테이블 버전을 검증해야 한다.

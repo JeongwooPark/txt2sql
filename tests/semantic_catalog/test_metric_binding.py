@@ -44,10 +44,20 @@ def test_temporal_coverage_approval_date() -> None:
 def test_basement_and_admin_concepts() -> None:
     bas = bind_concept("basement_floors")
     assert bas is not None and bas.dataset == "building_gis_d010"
+    assert bas.physical_field == "A27"
+    gf = bind_concept("ground_floors")
+    assert gf is not None and gf.physical_field == "A26"
     admin = resolve_concept("legal_dong")
     assert admin is not None
     b = bind_concept("legal_dong")
     assert b is not None
+
+
+def test_detail_usage_binds_d198_only() -> None:
+    b = bind_concept("detail_usage")
+    assert b is not None
+    assert b.dataset == "building_attr_d198"
+    assert b.physical_field == "A27"
 
 
 def test_unresolved_concept() -> None:

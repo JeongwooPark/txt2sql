@@ -77,16 +77,28 @@ def verify_contract(
     for agg in plan.aggregations:
         semantic_pred_fields |= predicate_fields(agg.predicate)
     for ratio in plan.ratios:
-        semantic_pred_fields |= predicate_fields(ratio.numerator_predicate)
-        semantic_pred_fields |= predicate_fields(ratio.denominator_predicate)
+        if ratio.numerator_predicate is not None:
+            semantic_pred_fields |= predicate_fields(ratio.numerator_predicate)
+        if ratio.denominator_predicate is not None:
+            semantic_pred_fields |= predicate_fields(ratio.denominator_predicate)
+    # 허가↔승인 시차는 assumption SQL로 표현 — 슬롯 커버로 인정
+    if any(
+        a.startswith("permit_day_gap_")
+        or a.startswith("permit_year_gap:")
+        or a in {"permit_after_approval", "permit_approval_year_neq"}
+        for a in (plan.assumptions or [])
+    ):
+        semantic_pred_fields |= {"permit_date", "approval_date"}
     pred_fields = {item.field for item in plan.filters}
     pred_fields |= semantic_pred_fields
     pred_fields |= {item.field for item in plan.aggregations if item.field}
     pred_fields |= set(plan.select)
     pred_fields |= set(plan.group_by)
     for ratio in plan.ratios:
-        pred_fields |= predicate_fields(ratio.numerator_predicate)
-        pred_fields |= predicate_fields(ratio.denominator_predicate)
+        if ratio.numerator_predicate is not None:
+            pred_fields |= predicate_fields(ratio.numerator_predicate)
+        if ratio.denominator_predicate is not None:
+            pred_fields |= predicate_fields(ratio.denominator_predicate)
     metric_fields = {span.value for span in contract.metrics if span.value}
     field_hits = len(metric_fields & pred_fields)
     fields_score = 1.0 if not metric_fields else field_hits / len(metric_fields)

@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import re
 
+from txt2sql.dataset_tables import resolve_basic_zone_table, resolve_building_table
 from txt2sql.domain import extract_place, place_a4_predicate
 
-_D010 = "AL_D010_26_20250704"
+def _d010() -> str:
+    return resolve_building_table()
+
+
 _BND = "BND_ADM_DONG_PG"
-_BAS = "TL_KODIS_BAS_26_202507"
+
+
+def _bas() -> str:
+    return resolve_basic_zone_table()
+
 _LIST_COLS = (
     'b."A0", b."A4", b."A5", b."A9", b."A12", b."A14", b."A16", b."A24", b."A26"'
 )
@@ -69,7 +77,7 @@ def building_scope(
 
     if place and uses_admin_boundary(place):
         frm = (
-            f'"{_D010}" b\n'
+            f'"{_d010()}" b\n'
             f'JOIN "{_BND}" d\n'
             "  ON ST_Intersects(b.geometry, d.geometry)"
         )
@@ -81,14 +89,14 @@ def building_scope(
         pred = place_a4_predicate(place)
         if gu:
             pred = f"({pred}) AND {place_a4_predicate(gu)}"
-        return "a4", f'"{_D010}"', pred, ""
+        return "a4", f'"{_d010()}"', pred, ""
     if gu:
-        return "gu", f'"{_D010}"', place_a4_predicate(gu), ""
+        return "gu", f'"{_d010()}"', place_a4_predicate(gu), ""
     if place and is_locality(place):
-        return "a4", f'"{_D010}"', place_a4_predicate(place), ""
+        return "a4", f'"{_d010()}"', place_a4_predicate(place), ""
     if place:
-        return "a4", f'"{_D010}"', place_a4_predicate(place), ""
-    return "none", f'"{_D010}"', "TRUE", ""
+        return "a4", f'"{_d010()}"', place_a4_predicate(place), ""
+    return "none", f'"{_d010()}"', "TRUE", ""
 
 
 def scoped_count_sql(
@@ -136,7 +144,7 @@ def building_in_dong_count_sql(place: str, extra: str = "") -> str:
     extra_sql = f" AND {extra}" if extra else ""
     return (
         'SELECT COUNT(*) AS cnt\n'
-        f'FROM "{_D010}" b\n'
+        f'FROM "{_d010()}" b\n'
         f'JOIN "{_BND}" d\n'
         "  ON ST_Intersects(b.geometry, d.geometry)\n"
         f"WHERE {admin_dong_where(place)}{extra_sql};"
@@ -146,7 +154,7 @@ def building_in_dong_count_sql(place: str, extra: str = "") -> str:
 def building_in_dong_list_sql(place: str, *, limit: int = 50) -> str:
     return (
         f"SELECT {_LIST_COLS}\n"
-        f'FROM "{_D010}" b\n'
+        f'FROM "{_d010()}" b\n'
         f'JOIN "{_BND}" d\n'
         "  ON ST_Intersects(b.geometry, d.geometry)\n"
         f"WHERE {admin_dong_where(place)}\n"
@@ -176,7 +184,7 @@ def place_buffer_count_sql(
     extra = "\n  AND NOT ST_Intersects(b.geometry, z.geom)" if exterior else ""
     return (
         "SELECT COUNT(*) AS cnt\n"
-        f'FROM "{_D010}" b\n'
+        f'FROM "{_d010()}" b\n'
         f"CROSS JOIN {_place_buffer_zone(place)}\n"
         "WHERE z.geom IS NOT NULL\n"
         f"  AND b.geometry && ST_Expand(z.geom, {expand_deg})\n"
@@ -199,7 +207,7 @@ def place_buffer_list_sql(
     extra = "\n  AND NOT ST_Intersects(b.geometry, z.geom)" if exterior else ""
     return (
         f"SELECT {_LIST_COLS}\n"
-        f'FROM "{_D010}" b\n'
+        f'FROM "{_d010()}" b\n'
         f"CROSS JOIN {_place_buffer_zone(place)}\n"
         "WHERE z.geom IS NOT NULL\n"
         f"  AND b.geometry && ST_Expand(z.geom, {expand_deg})\n"
@@ -227,8 +235,8 @@ def _bas_scope(gu: str | None, bas_id: str | None, alias: str = "t") -> str:
 def building_bas_count_sql(gu: str | None = None, bas_id: str | None = None) -> str:
     return (
         'SELECT COUNT(DISTINCT b."A0") AS cnt\n'
-        f'FROM "{_D010}" b\n'
-        f'JOIN "{_BAS}" t\n'
+        f'FROM "{_d010()}" b\n'
+        f'JOIN "{_bas()}" t\n'
         "  ON b.geometry && t.geometry\n"
         " AND ST_Intersects(b.geometry, t.geometry)\n"
         f"WHERE {_bas_scope(gu, bas_id)};"
@@ -243,8 +251,8 @@ def building_bas_list_sql(
 ) -> str:
     return (
         f"SELECT DISTINCT ON (b.\"A0\") {_LIST_COLS}\n"
-        f'FROM "{_D010}" b\n'
-        f'JOIN "{_BAS}" t\n'
+        f'FROM "{_d010()}" b\n'
+        f'JOIN "{_bas()}" t\n'
         "  ON b.geometry && t.geometry\n"
         " AND ST_Intersects(b.geometry, t.geometry)\n"
         f"WHERE {_bas_scope(gu, bas_id)}\n"
@@ -272,10 +280,28 @@ def _join_op(op: str) -> str:
 def bas_dong_count_sql(place: str, op: str = "intersects") -> str:
     return (
         'SELECT COUNT(DISTINCT t."BAS_ID") AS cnt\n'
-        f'FROM "{_BAS}" t\n'
+        f'FROM "{_bas()}" t\n'
         f'JOIN "{_BND}" d\n'
         f"  ON t.geometry && d.geometry AND {_join_op(op)}\n"
         f"WHERE {admin_dong_where(place)};"
+    )
+
+
+def bas_dong_building_group_sql(place: str, op: str = "intersects") -> str:
+    """행정동 ∩ 기초구역별 건물 수 (BND-BAS-D010 3-way join)."""
+    if op == "within":
+        bas_join = "ST_Within(t.geometry, d.geometry)"
+    else:
+        bas_join = "ST_Intersects(d.geometry, t.geometry)"
+    return (
+        'SELECT t."BAS_ID", COUNT(DISTINCT b."A1")::bigint AS n\n'
+        f'FROM "{_BND}" d\n'
+        f'JOIN "{_bas()}" t ON {bas_join}\n'
+        f'JOIN "{_d010()}" b ON ST_Intersects(b.geometry, t.geometry) '
+        "AND ST_Intersects(b.geometry, d.geometry)\n"
+        f"WHERE {admin_dong_where(place)}\n"
+        "GROUP BY 1\n"
+        "ORDER BY n DESC;"
     )
 
 
@@ -283,7 +309,7 @@ def bas_dong_count_and_max_sql(place: str, op: str = "intersects") -> str:
     return (
         'SELECT COUNT(DISTINCT t."BAS_ID") AS n,\n'
         '       MAX(t."BAS_AR") AS max_ar\n'
-        f'FROM "{_BAS}" t\n'
+        f'FROM "{_bas()}" t\n'
         f'JOIN "{_BND}" d\n'
         f"  ON t.geometry && d.geometry AND {_join_op(op)}\n"
         f"WHERE {admin_dong_where(place)};"
@@ -293,7 +319,7 @@ def bas_dong_count_and_max_sql(place: str, op: str = "intersects") -> str:
 def bas_dong_list_sql(place: str, op: str = "intersects", *, limit: int = 50) -> str:
     return (
         f"SELECT DISTINCT {_BAS_COLS}\n"
-        f'FROM "{_BAS}" t\n'
+        f'FROM "{_bas()}" t\n'
         f'JOIN "{_BND}" d\n'
         f"  ON t.geometry && d.geometry AND {_join_op(op)}\n"
         f"WHERE {admin_dong_where(place)}\n"
@@ -305,7 +331,7 @@ def bas_dong_list_sql(place: str, op: str = "intersects", *, limit: int = 50) ->
 def bas_dong_buffer_count_sql(place: str, meters: str, expand_deg: str) -> str:
     return (
         'SELECT COUNT(DISTINCT t."BAS_ID") AS cnt\n'
-        f'FROM "{_BAS}" t\n'
+        f'FROM "{_bas()}" t\n'
         f"CROSS JOIN {_place_buffer_zone(place)}\n"
         "WHERE z.geom IS NOT NULL\n"
         f"  AND t.geometry && ST_Expand(z.geom, {expand_deg})\n"
@@ -321,7 +347,7 @@ def bas_dong_nearest_sql(place: str) -> str:
     return (
         f"SELECT {_BAS_COLS},\n"
         "  ST_Distance(t.geometry::geography, z.geom::geography) AS dist_m\n"
-        f'FROM "{_BAS}" t\n'
+        f'FROM "{_bas()}" t\n'
         f"CROSS JOIN {_place_buffer_zone(place)}\n"
         "WHERE z.geom IS NOT NULL\n"
         "ORDER BY t.geometry <-> z.geom\n"
@@ -358,7 +384,7 @@ def bas_gu_bnd_intersect_count_sql(gu: str) -> str:
     prefix_sql = f"\n  AND {extra}" if extra else ""
     return (
         'SELECT COUNT(DISTINCT t."BAS_ID") AS cnt\n'
-        f'FROM "{_BAS}" t\n'
+        f'FROM "{_bas()}" t\n'
         f'JOIN "{_BND}" d\n'
         "  ON t.geometry && d.geometry\n"
         " AND ST_Intersects(t.geometry, d.geometry)\n"
@@ -390,7 +416,7 @@ def legal_dong_admin_share_sql(
     return (
         "WITH bldg AS (\n"
         '  SELECT b."A0", b.geometry\n'
-        f'  FROM "{_D010}" b\n'
+        f'  FROM "{_d010()}" b\n'
         f"  WHERE {a4}{usage_sql}\n"
         "),\n"
         "assigned AS (\n"
@@ -445,6 +471,6 @@ def spatial_fewshot(place: str | None) -> str:
         f"{building_in_dong_count_sql(sample)}\n"
         "Place buffer (boundary + N meters) uses ST_DWithin geography "
         "against ST_Union of matching BND_ADM_DONG_PG polygons.\n"
-        "Building ∩ 기초구역 → join TL_KODIS_BAS_26_202507 with ST_Intersects.\n"
+        "Building ∩ 기초구역 → join resolved basic-zone table with ST_Intersects.\n"
         "Adapt table/columns only if needed; keep ST_Intersects and boundary join."
     )

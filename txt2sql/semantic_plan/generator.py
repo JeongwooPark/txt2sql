@@ -21,6 +21,7 @@ from txt2sql.domain import (
     extract_industrial_name,
     extract_industrial_names,
     extract_place,
+    extract_places,
     extract_special_land,
     extract_structure,
     extract_structures,
@@ -89,9 +90,44 @@ _UNSUPPORTED_HINTS = (
 
 def extract_plan_hints(question: str) -> dict[str, Any]:
     """LLM 이전 deterministic hint. Plan을 강제 덮어쓰지 않는다."""
+    from txt2sql.gazetteer import (
+        KIND_ADMIN,
+        KIND_LEGAL,
+        KIND_SIGUNGU,
+        classify_place,
+        resolve_place_kind,
+        uses_admin_boundary,
+    )
+
     q = question.strip()
     gu = extract_gu(q)
-    place = extract_place(q)
+    places = extract_places(q)
+    prefer_admin = "행정동" in q
+    place = None
+    kind = "unknown"
+    # 행정동(번호동·행정전용) > 법정동 > 구. 구가 먼저 나와도 동을 우선.
+    for cand in places:
+        ck = classify_place(cand)
+        if uses_admin_boundary(cand, prefer_admin=prefer_admin) or (
+            KIND_ADMIN in ck and re.fullmatch(r"[가-힣]+\d+동", cand)
+        ):
+            place, kind = cand, "admin_dong"
+            break
+    if place is None:
+        for cand in places:
+            ck = classify_place(cand)
+            if KIND_SIGUNGU in ck and cand.endswith(("구", "군")):
+                continue
+            if KIND_LEGAL in ck or cand.endswith(("동", "가", "리")):
+                place = cand
+                kind = resolve_place_kind(cand, q)
+                break
+    if place is None and gu:
+        place, kind = gu, "gu"
+    elif place is None:
+        place = extract_place(q)
+        if place:
+            kind = resolve_place_kind(place, q)
     usage = extract_usage(q)
     if "세부용도" in q:
         usage = None
@@ -246,10 +282,15 @@ def extract_plan_hints(question: str) -> dict[str, Any]:
     if is_busan_wide(q) and not gu and not (place and place.endswith(("구", "군", "동"))):
         place = place or "부산광역시"
         kind = "sido"
-    elif gu and (place == gu or not place):
-        kind = "gu"
     elif place:
-        kind = "legal_dong" if place.endswith("동") else "unknown"
+        from txt2sql.gazetteer import resolve_place_kind
+
+        kind = resolve_place_kind(place, q)
+        if kind == "unknown" and gu and (place == gu or not place):
+            kind = "gu"
+    elif gu:
+        place = gu
+        kind = "gu"
     industrial_names = extract_industrial_names(q)
     industrial_name = industrial_names[0] if industrial_names else extract_industrial_name(q)
     structures = extract_structures(q)
@@ -265,9 +306,17 @@ def extract_plan_hints(question: str) -> dict[str, Any]:
             {"field": "violation_status", "operator": violate_op, "value": "Y"}
         )
     if land:
-        land_label, land_value = land[0], "산" if land[0] == "산지" else (
-            "일반" if land[0] == "일반지번" else None
-        )
+        land_label = land[0]
+        if land_label == "산지":
+            land_value = "산"
+        elif land_label == "일반지번":
+            land_value = "일반"
+        elif land_label == "가지번":
+            land_value = "가지번"
+        elif land_label == "블럭지번":
+            land_value = "블럭지번"
+        else:
+            land_value = None
         if land_value:
             land_op = "neq" if _term_is_negated(q, land_label) else "eq"
             extra_filters.append(
@@ -320,8 +369,11 @@ def extract_plan_hints(question: str) -> dict[str, Any]:
         "numeric_expressions": numerics,
         "age_question": looks_like_age_question(q),
         "distance_m": _extract_distance_m(q),
-        "distance_outside": any(k in q for k in ("경계 밖", "바깥", "외부")),
+        "distance_outside": any(
+            k in q for k in ("경계 밖", "바깥", "외부", "밖에")
+        ),
         "boundary": any(k in q for k in ("안에", "내부", "경계 안", "경계안", "안쪽")),
+        "scope_gu": gu if place and gu and place != gu else None,
         "industrial_name": industrial_name,
         "industrial_names": industrial_names,
         "extra_filters": extra_filters,
@@ -699,6 +751,7 @@ def try_heuristic_plan(
 
     industrial_names = list(hints.get("industrial_names") or [])
     industrial_name = hints.get("industrial_name")
+
     if len(industrial_names) >= 2:
         joined = "·".join(industrial_names[:4])
         spatial_relations.append(
@@ -825,7 +878,22 @@ def try_heuristic_plan(
                     OrderSpec(field=order_field, direction="desc", nulls="last")
                 ]
             else:
-                order_by = [OrderSpec(field="id", direction="desc", nulls="last")]
+                # 연도/일자 필터가 있으면 id(A1) 대신 해당 필드로 정렬 (골드·D198 호환)
+                date_fields = [
+                    item.field
+                    for item in filters
+                    if item.field in {"approval_date", "permit_date"}
+                ]
+                if date_fields:
+                    order_by = [
+                        OrderSpec(
+                            field=date_fields[0], direction="desc", nulls="last"
+                        )
+                    ]
+                else:
+                    order_by = [OrderSpec(field="id", direction="desc", nulls="last")]
+        if limit is None and any(k in q for k in ("보여", "찾아", "목록", "나열")):
+            limit = 20
     elif query_kind == "aggregate":
         functions = _aggregate_functions(q)
         metrics = _agg_metrics(q)
@@ -882,11 +950,81 @@ def try_heuristic_plan(
 
     entity: str = "building"
     assumptions = ["heuristic_plan"]
+    if hints.get("scope_gu"):
+        assumptions.append(f"scope_gu:{hints['scope_gu']}")
     if any(k in q for k in ("중심에서", "중심으로부터", "중심 기준")):
         assumptions.append("distance_from_centroid")
     gap = re.search(r"연도 차이가\s*(\d+)\s*년", q)
     if gap and "허가" in q and "사용승인" in q:
         assumptions.append(f"permit_year_gap:{int(gap.group(1))}")
+    # 허가일 ↔ 사용승인일 day/order operators (D198 A33/A34)
+    if "허가" in q and any(k in q for k in ("사용승인", "준공")):
+        day_ge = re.search(
+            r"(?:허가일?[부터에서]*\s*)?사용승인일?[까지]*\s*(\d+)\s*년\s*이상"
+            r"|(\d+)\s*년\s*이상\s*걸린",
+            q,
+        )
+        if day_ge:
+            years = int(day_ge.group(1) or day_ge.group(2))
+            assumptions.append(f"permit_day_gap_gte:{years * 365}")
+        day_le = re.search(
+            r"허가\s*후\s*(\d+)\s*년\s*(?:이내|내)|(\d+)\s*년\s*이내\s*준공",
+            q,
+        )
+        if day_le:
+            years = int(day_le.group(1) or day_le.group(2))
+            assumptions.append(f"permit_day_gap_lte:{years * 365}")
+        if any(
+            k in q
+            for k in (
+                "허가일이 사용승인일보다 늦은",
+                "허가일이 사용승인보다 늦은",
+                "허가일보다 사용승인이 빠른",
+                "비정상 레코드",
+            )
+        ) and "허가" in q and "사용승인" in q:
+            assumptions.append("permit_after_approval")
+        if any(
+            k in q
+            for k in (
+                "허가연도와 사용승인연도가 다른",
+                "허가연도과 사용승인연도가 다른",
+                "허가연·사용승인연이 다른",
+            )
+        ) or (
+            "허가연" in q and "사용승인연" in q and "다른" in q
+        ):
+            assumptions.append("permit_approval_year_neq")
+    # 시차 assumption이 있으면 잘못된 age/rel_years 필터 제거
+    if any(
+        a.startswith("permit_day_gap_")
+        or a in {"permit_after_approval", "permit_approval_year_neq"}
+        or a.startswith("permit_year_gap:")
+        for a in assumptions
+    ):
+        filters = [
+            item
+            for item in filters
+            if not (
+                item.field in {"approval_date", "permit_date"}
+                and isinstance(item.value, str)
+                and str(item.value).startswith("rel_years:")
+            )
+        ]
+        if query_kind == "list":
+            for field in ("permit_date", "approval_date"):
+                if field not in select:
+                    select.append(field)
+            if any(a.startswith("permit_day_gap_gte:") for a in assumptions):
+                order_by = [
+                    OrderSpec(field="approval_date", direction="desc", nulls="last")
+                ]
+            elif "permit_after_approval" in assumptions:
+                order_by = [
+                    OrderSpec(field="permit_date", direction="desc", nulls="last")
+                ]
+            if limit is None:
+                limit = 20
     if decade_group:
         assumptions.append("approval_decade")
         query_kind = "aggregate"
@@ -960,21 +1098,60 @@ def try_heuristic_plan(
     ratios: list[RatioSpec] = []
     if hints.get("ratio"):
         query_kind = "aggregate"
-        ratios = _build_ratio_specs(q, filters)
-        if ratios:
-            ratio_fields: set[str] = set()
-            for item in ratios:
-                ratio_fields.update(_pred_field_names(item.numerator_predicate))
-                ratio_fields.update(_pred_field_names(item.denominator_predicate))
-            filters = [item for item in filters if item.field not in ratio_fields]
-            if predicate is not None:
-                pred_fields = set(_pred_field_names(predicate))
-                if pred_fields and pred_fields <= ratio_fields:
-                    predicate = None
-        if not any(text in q for text in AGG_MAP) and not any(
-            k in q for k in ("건수", "채수", "몇 채", "몇채")
-        ):
-            aggregations = []
+        lag_lte = next(
+            (a for a in assumptions if a.startswith("permit_day_gap_lte:")), None
+        )
+        if lag_lte:
+            years = max(1, int(lag_lte.split(":", 1)[1]) // 365)
+            ratios = [
+                RatioSpec(
+                    numerator_predicate=PredicateSpec(
+                        op="cmp",
+                        operator="lte",
+                        left=OperandSpec(kind="field", field="permit_date"),
+                        right=OperandSpec(kind="field", field="approval_date"),
+                    ),
+                    multiplier=1.0,
+                    alias=f"within_{years}y_ratio",
+                )
+            ]
+            aggregations = [AggregationSpec(function="count", field=None, alias="n")]
+            select = []
+            order_by = []
+            limit = None
+        elif "permit_approval_year_neq" in assumptions:
+            ratios = [
+                RatioSpec(
+                    numerator_predicate=PredicateSpec(
+                        op="cmp",
+                        operator="neq",
+                        left=OperandSpec(kind="field", field="permit_date"),
+                        right=OperandSpec(kind="field", field="approval_date"),
+                    ),
+                    multiplier=1.0,
+                    alias="diff_year_ratio",
+                )
+            ]
+            aggregations = [AggregationSpec(function="count", field=None, alias="n")]
+            select = []
+            order_by = []
+            limit = None
+        else:
+            ratios = _build_ratio_specs(q, filters)
+            if ratios:
+                ratio_fields: set[str] = set()
+                for item in ratios:
+                    ratio_fields.update(_pred_field_names(item.numerator_predicate))
+                    ratio_fields.update(_pred_field_names(item.denominator_predicate))
+                filters = [item for item in filters if item.field not in ratio_fields]
+                if predicate is not None:
+                    pred_fields = set(_pred_field_names(predicate))
+                    if pred_fields and pred_fields <= ratio_fields:
+                        predicate = None
+            if not any(text in q for text in AGG_MAP) and not any(
+                k in q for k in ("건수", "채수", "몇 채", "몇채")
+            ):
+                aggregations = []
     contract_extra = bound_contract if bound_contract is not None else extract_contract(q)
     seen_percentiles: set[tuple[str | None, float]] = set()
     for req in contract_extra.percentile_requests:
@@ -1052,6 +1229,11 @@ def try_heuristic_plan(
     ) or (
         predicate is not None
         and _predicate_has_field(predicate, {"detail_usage", "usage_class"})
+    ) or any(
+        a.startswith("permit_day_gap_")
+        or a.startswith("permit_year_gap:")
+        or a in {"permit_after_approval", "permit_approval_year_neq"}
+        for a in assumptions
     ) or any(
         k in q
         for k in (
@@ -1415,7 +1597,8 @@ def _extract_json_object(text: str) -> str:
 
 def _extract_distance_m(question: str) -> float | None:
     if not any(
-        k in question for k in ("이내", "주변", "근처", "버퍼", "반경", "바깥", "경계 밖")
+        k in question
+        for k in ("이내", "주변", "근처", "버퍼", "반경", "바깥", "경계 밖", "밖에")
     ) and not re.search(r"\d+(?:\.\d+)?\s*(?:m|미터|km)\s*안", question):
         return None
     match = re.search(LENGTH_DIST_PATTERN, question)
@@ -1815,6 +1998,8 @@ def _list_select(question: str) -> list[str]:
         (("대지면적",), "site_area_m2"),
         (("지상", "층수"), "ground_floors"),
         (("구조",), "structure"),
+        (("사용승인", "준공"), "approval_date"),
+        (("허가일", "허가일자", "허가연"), "permit_date"),
     )
     for keys, field in mapping:
         if any(k in question for k in keys) and field not in wanted:

@@ -17,7 +17,8 @@ LENGTH_DIST_PATTERN = (
 GU_RE = re.compile(GU_PATTERN)
 DONG_RE = re.compile(DONG_PATTERN)
 
-# 부산 구·군 → 행정표준코드(원천시도시군구코드 A4)
+# 부산 구·군 → 행정표준코드 (과도기 폴백·재export).
+# 신규 SQL 생성은 gazetteer.sigungu_a3_prefix / place_scope 만 사용.
 BUSAN_GU_CODES: dict[str, str] = {
     "중구": "26110",
     "서구": "26140",
@@ -221,8 +222,14 @@ def extract_structure(question: str) -> tuple[str, str] | None:
 def extract_structures(question: str) -> list[tuple[str, str]]:
     """질문에 등장하는 구조 표현을 긴 별칭 우선·비중첩으로 모은다."""
     q = question or ""
+    # 블럭지번(특수지)은 건축물구조 '블럭'과 구분
+    skip_structure_aliases: set[str] = set()
+    if any(k in q for k in ("블럭지번", "블록지번", "블럭 지번", "블록 지번")):
+        skip_structure_aliases.update({"블럭", "블록", "블럭구조", "블록구조"})
     spans: list[tuple[int, int, str, str]] = []
     for alias in sorted(STRUCTURE_ALIASES, key=len, reverse=True):
+        if alias in skip_structure_aliases:
+            continue
         start = 0
         while True:
             i = q.find(alias, start)
@@ -282,14 +289,16 @@ def extract_special_land(question: str) -> tuple[str, str] | None:
         return (
             "블럭지번",
             (
-                '("A6"::text IN (\'5\', \'6\', \'7\') OR COALESCE("A7", \'\') ILIKE \'%블럭%\' '
+                '("A6"::text IN (\'5\', \'6\', \'7\', \'8\') OR COALESCE("A7", \'\') ILIKE \'%블럭%\' '
                 "OR COALESCE(\"A7\", '') ILIKE '%블록%')"
             ),
         )
     return None
 
 # 구 단위 용도별건물(사용승인·허가일자 보유).
-# DB에 AL_D198_* 가 추가되면 data.coverage 가 런타임에 덮어쓴다.
+# 본선은 런타임 coverage (`set_d198_coverage` / data.coverage.refresh_dataset_coverage).
+# 아래 DEFAULT 는 DB 미연결·커버리지 공백·골드 베이스라인용 **폴백**이다
+# (금정·동래만 하드코딩한 것이 아니라, 전국 확장 시 discover 가 구별로 채운다).
 D198_BY_GU_DEFAULT: dict[str, str] = {
     "동래구": "AL_D198_26260_20250115",
     "금정구": "AL_D198_26410_20250115",
@@ -417,13 +426,6 @@ def extract_gu(question: str) -> str | None:
         if gu in BUSAN_GU_CODES:
             return gu
     return None
-
-
-def busan_gu_code(gu: str | None) -> str | None:
-    """구·군 명칭 → 부산 시군구코드."""
-    if not gu:
-        return None
-    return BUSAN_GU_CODES.get(gu)
 
 
 def extract_usage(question: str) -> str | None:
@@ -1172,19 +1174,28 @@ def _alias_hits(question: str, aliases: dict[str, str]) -> list[str]:
     return found
 
 
+def busan_gu_code(gu: str | None) -> str | None:
+    """구·군 명칭 → 시군구 법정동코드(A3 접두). gazetteer 우선."""
+    from txt2sql.gazetteer import sigungu_a3_prefix
+
+    return sigungu_a3_prefix(gu)
+
+
 def place_a4_predicate(place: str) -> str:
-    """AL_D010 위치 필터. 구·군은 법정동코드(A3) 접두를 쓴다."""
-    if place.endswith(("동", "가", "리", "로")):
-        return f'("A4" LIKE \'% {place}\' OR "A4" = \'{place}\')'
-    code = BUSAN_GU_CODES.get(place)
-    if code:
-        return f'"A3" LIKE \'{code}%\''
-    return f'"A4" LIKE \'%{place}%\''
+    """AL_D010 위치 필터. 구·군은 A3 접두, 법정동은 A4. (place_scope 위임)"""
+    from txt2sql.place_scope import building_place_predicate
+
+    return building_place_predicate(place)
 
 
 def gu_from_pnu_code(pnu_code: str) -> str | None:
-    """시군구 PNU(5자리) → 부산 구·군 이름."""
+    """시군구 PNU(5자리) → 구·군 이름 (gazetteer 역조회, 부산 폴백)."""
     code = (pnu_code or "").strip()
+    from txt2sql.gazetteer import load_gazetteer
+
+    for name, value in load_gazetteer().sigungu_pnu_prefix.items():
+        if value == code:
+            return name
     for name, value in BUSAN_GU_CODES.items():
         if value == code:
             return name
@@ -1202,15 +1213,19 @@ def gu_from_d198_table(table: str) -> str | None:
 
 
 def set_d198_coverage(by_gu: dict[str, str]) -> None:
-    """질의 엔진이 쓸 구→D198 테이블 맵을 갱신한다. 빈 dict 는 무시한다."""
+    """질의 엔진이 쓸 구→D198 테이블 맵을 갱신한다. 빈 dict 는 무시한다.
+
+    정렬 키는 gazetteer PNU(없으면 99999). BUSAN_GU_CODES 는 폴백만.
+    """
     if not by_gu:
         return
-    ordered = dict(
-        sorted(
-            by_gu.items(),
-            key=lambda item: BUSAN_GU_CODES.get(item[0], "99999"),
-        )
-    )
+    from txt2sql.gazetteer import sigungu_a3_prefix
+
+    def _sort_key(item: tuple[str, str]) -> str:
+        gu_name = item[0]
+        return sigungu_a3_prefix(gu_name) or BUSAN_GU_CODES.get(gu_name, "99999")
+
+    ordered = dict(sorted(by_gu.items(), key=_sort_key))
     D198_BY_GU.clear()
     D198_BY_GU.update(ordered)
     D198_TABLES.clear()

@@ -70,4 +70,4 @@ def test_compiler_outside_distance() -> None:
     )
     sql = compile_semantic_plan(plan).sql
     assert "ST_DWithin" in sql
-    assert "NOT ST_Intersects" in sql
+    assert "NOT ST_DWithin" in sql

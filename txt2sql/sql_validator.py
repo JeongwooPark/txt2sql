@@ -222,20 +222,20 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
                     f'"{table}"."A25" with A25 IS NOT NULL, not AL_D010 "A9".'
                 )
 
-    # 미등록 구 용도/건물 COUNT에 D198 사용
-    gu_m = re.search(r"([가-힣]{1,6}구)", q)
-    if gu_m:
-        gu_name = gu_m.group(1)
-        if (
-            d198_table_for_gu(gu_name) is None
-            and uses_d198
-            and not uses_d010
-            and not any(k in q for k in ("건축년", "준공", "사용승인", "지어진"))
-        ):
-            reasons.append(
-                f'For {gu_name} building/usage counts use "AL_D010_26_20250704" '
-                'with "A9" for 용도 (not district-only AL_D198).'
-            )
+    # 미등록 구 용도/건물 COUNT에 D198 사용 (행정구명만; 교육연구시설 등 용도어 오탐 방지)
+    from txt2sql.domain import extract_gu
+
+    gu_name = extract_gu(q) or d198_gu_mentioned(q)
+    if gu_name and (
+        d198_table_for_gu(gu_name) is None
+        and uses_d198
+        and not uses_d010
+        and not any(k in q for k in ("건축년", "준공", "사용승인", "지어진"))
+    ):
+        reasons.append(
+            f'For {gu_name} building/usage counts use "AL_D010_26_20250704" '
+            'with "A9" for 용도 (not district-only AL_D198).'
+        )
 
     # 실행은 됐지만 의심스러운 빈 결과 (구+건물 속성)
     if row_count == 0 and gu_in_q and "건물" in q and uses_d198 and not uses_d010:

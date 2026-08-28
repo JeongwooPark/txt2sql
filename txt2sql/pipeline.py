@@ -791,43 +791,142 @@ def run_ask(
         complexity=contract.complexity,
     )
 
-    listed = _try_list_attr_followup(
-        question,
-        settings,
-        progress,
-        session,
-        ollama_client=ollama_client,
-        on_token=on_token,
-    )
-    if listed is not None:
-        listed["steps"] = progress.steps
-        if session is not None and listed.get("ok"):
-            keep_full = session.last_full_question
-            session.update_from_result(question, listed)
-            if keep_full:
-                session.last_full_question = keep_full
-        return finish(listed)
+    # Build plan early so READY temporal/group/aggregate can run before meta/preferred steal.
+    plan_bundle = None
+    early_v2_result: dict[str, Any] | None = None
+    try:
+        from txt2sql.planner.executor_adapter import build_execution_plan
 
-    grained = _try_year_grain_followup(
-        question,
-        settings,
-        progress,
-        session,
-        ollama_client=ollama_client,
-        on_token=on_token,
-    )
-    if grained is not None:
-        grained["steps"] = progress.steps
-        if session is not None and grained.get("ok"):
-            keep_full = session.last_full_question
-            session.update_from_result(question, grained)
-            if keep_full:
-                session.last_full_question = keep_full
-        return finish(attach_chart_offer(grained, question=question))
+        plan_bundle = build_execution_plan(question, contract=contract)
+        progress.emit(
+            "plan",
+            f"QueryIR/Plan: task={plan_bundle.query_ir.task} "
+            f"logical={plan_bundle.logical.status} "
+            f"physical={plan_bundle.physical.strategy}",
+            query_ir_task=plan_bundle.query_ir.task,
+            logical_status=plan_bundle.logical.status,
+            physical_strategy=plan_bundle.physical.strategy,
+            reason_codes=list(plan_bundle.logical.reason_codes),
+        )
+    except Exception as plan_exc:  # noqa: BLE001
+        progress.emit("plan", f"plan build skipped: {type(plan_exc).__name__}")
 
-    chart = _try_chart_turn(question, session, progress, on_token)
-    if chart is not None:
-        return finish(chart)
+    if plan_bundle is not None and conn is not None:
+        try:
+            from txt2sql.planner.semantic_executor import (
+                should_try_semantic_v2,
+                try_execute_semantic_v2,
+            )
+
+            if should_try_semantic_v2(plan_bundle):
+                progress.emit(
+                    "route",
+                    "semantic-v2 executor 조기 시도",
+                    physical_strategy=plan_bundle.physical.strategy,
+                )
+                early_v2_result = try_execute_semantic_v2(
+                    question,
+                    plan_bundle,
+                    conn=conn,
+                    default_limit=settings.default_limit,
+                )
+                if early_v2_result is not None and early_v2_result.get("ok"):
+                    progress.emit(
+                        "route",
+                        "semantic-v2 적중",
+                        execution_source="semantic_v2",
+                        compiler_source="deterministic_compiler_v2",
+                    )
+                    llm = _llm_kw(settings, ollama_client)
+                    rows = list(early_v2_result.get("rows") or [])
+                    sql = early_v2_result.get("sql") or ""
+                    answer = format_success(
+                        question,
+                        sql=sql,
+                        rows=rows,
+                        row_count=len(rows),
+                        route="semantic_v2",
+                        on_token=on_token,
+                        **llm,
+                    )
+                    return finish(
+                        _payload(
+                            answer=answer,
+                            sql=sql,
+                            tables=early_v2_result.get("tables"),
+                            rows=rows,
+                            route="semantic_v2",
+                            query_ir_task=early_v2_result.get("query_ir_task"),
+                            logical_status=early_v2_result.get("logical_status"),
+                            physical_strategy=early_v2_result.get("physical_strategy"),
+                            execution_source="semantic_v2",
+                            compiler_source="deterministic_compiler_v2",
+                            fallback_source=None,
+                            v2_failure_code=None,
+                        )
+                    )
+                if early_v2_result is not None and not early_v2_result.get("ok"):
+                    progress.emit(
+                        "route",
+                        "semantic-v2 typed failure → 기존 경로",
+                        v2_failure_code=early_v2_result.get("v2_failure_code"),
+                        fallback_source=early_v2_result.get("fallback_source"),
+                    )
+                else:
+                    progress.emit("route", "semantic-v2 미지원/실패 → 기존 경로")
+        except Exception as v2_exc:  # noqa: BLE001
+            progress.emit("route", f"semantic-v2 early skip: {type(v2_exc).__name__}")
+
+    # Interaction early: defer list_attr/chart steal when READY+v2 candidate
+    # (non-followup). Real followups keep interaction handlers.
+    from txt2sql.planner.semantic_executor import should_try_semantic_v2 as _should_v2
+
+    defer_interaction = (
+        plan_bundle is not None
+        and _should_v2(plan_bundle)
+        and not (session is not None and is_followup_question(question, session))
+    )
+
+    if not defer_interaction:
+        listed = _try_list_attr_followup(
+            question,
+            settings,
+            progress,
+            session,
+            ollama_client=ollama_client,
+            on_token=on_token,
+        )
+        if listed is not None:
+            listed["steps"] = progress.steps
+            if session is not None and listed.get("ok"):
+                keep_full = session.last_full_question
+                session.update_from_result(question, listed)
+                if keep_full:
+                    session.last_full_question = keep_full
+            return finish(listed)
+
+        grained = _try_year_grain_followup(
+            question,
+            settings,
+            progress,
+            session,
+            ollama_client=ollama_client,
+            on_token=on_token,
+        )
+        if grained is not None:
+            grained["steps"] = progress.steps
+            if session is not None and grained.get("ok"):
+                keep_full = session.last_full_question
+                session.update_from_result(question, grained)
+                if keep_full:
+                    session.last_full_question = keep_full
+            return finish(attach_chart_offer(grained, question=question))
+
+        chart = _try_chart_turn(question, session, progress, on_token)
+        if chart is not None:
+            return finish(chart)
+    else:
+        progress.emit("route", "READY+v2 후보 → interaction early 보류")
 
     # 안내·범위 외는 의도분류 LLM보다 먼저 (지연·오분류 방지)
     guide_early = try_guide(question)
@@ -859,6 +958,8 @@ def run_ask(
                     on_token=on_token,
                     preferred_intent=preferred,
                     contract=contract,
+                    plan_bundle=plan_bundle,
+                    early_v2_result=early_v2_result,
                 )
         else:
             result = _ask_inner(
@@ -871,6 +972,8 @@ def run_ask(
                 on_token=on_token,
                 preferred_intent=preferred,
                 contract=contract,
+                plan_bundle=plan_bundle,
+                early_v2_result=early_v2_result,
             )
     except Exception as exc:
         progress.emit("error", f"처리 중 예외: {type(exc).__name__}")
@@ -1355,6 +1458,8 @@ def _ask_inner(
     on_token: TokenCallback | None = None,
     preferred_intent: IntentPrediction | None = None,
     contract=None,
+    plan_bundle=None,
+    early_v2_result=None,
 ) -> dict[str, Any]:
     if contract is None:
         contract = extract_contract(question)
@@ -1676,27 +1781,30 @@ def _ask_inner(
         return _qa_ok(clarify, ambiguous_terms=clarify.ambiguous_terms)
 
     progress.emit("route", "규칙 라우터 매칭 시도")
-    # Semantic Architecture v2: build QueryIR/Logical/Physical before router execute.
-    plan_bundle = None
-    try:
-        from txt2sql.planner.executor_adapter import build_execution_plan, route_allowed_by_plan
+    # plan_bundle already built early; rebuild only if missing.
+    if plan_bundle is None:
+        try:
+            from txt2sql.planner.executor_adapter import build_execution_plan, route_allowed_by_plan
 
-        plan_bundle = build_execution_plan(question, contract=contract)
-        progress.emit(
-            "plan",
-            f"QueryIR/Plan: task={plan_bundle.query_ir.task} "
-            f"logical={plan_bundle.logical.status} "
-            f"physical={plan_bundle.physical.strategy}",
-            query_ir_task=plan_bundle.query_ir.task,
-            logical_status=plan_bundle.logical.status,
-            physical_strategy=plan_bundle.physical.strategy,
-            reason_codes=list(plan_bundle.logical.reason_codes),
-        )
-    except Exception as plan_exc:  # noqa: BLE001 — planning must not break legacy path
-        progress.emit("plan", f"plan build skipped: {type(plan_exc).__name__}")
+            plan_bundle = build_execution_plan(question, contract=contract)
+            progress.emit(
+                "plan",
+                f"QueryIR/Plan: task={plan_bundle.query_ir.task} "
+                f"logical={plan_bundle.logical.status} "
+                f"physical={plan_bundle.physical.strategy}",
+                query_ir_task=plan_bundle.query_ir.task,
+                logical_status=plan_bundle.logical.status,
+                physical_strategy=plan_bundle.physical.strategy,
+                reason_codes=list(plan_bundle.logical.reason_codes),
+            )
+        except Exception as plan_exc:  # noqa: BLE001 — planning must not break legacy path
+            progress.emit("plan", f"plan build skipped: {type(plan_exc).__name__}")
 
-    # Phase C+/F: semantic-v2 compile+exec for READY aggregate/group/temporal before legacy.
-    if plan_bundle is not None:
+    from txt2sql.planner.executor_adapter import route_allowed_by_plan
+
+    # Late semantic-v2 retry only if early path did not already attempt (success or typed fail).
+    skip_late_v2 = early_v2_result is not None
+    if plan_bundle is not None and not skip_late_v2:
         try:
             from txt2sql.planner.semantic_executor import (
                 should_try_semantic_v2,
@@ -1706,7 +1814,7 @@ def _ask_inner(
             if should_try_semantic_v2(plan_bundle):
                 progress.emit(
                     "route",
-                    "semantic-v2 executor 시도",
+                    "semantic-v2 executor 재시도",
                     physical_strategy=plan_bundle.physical.strategy,
                 )
                 v2 = try_execute_semantic_v2(
@@ -1746,10 +1854,26 @@ def _ask_inner(
                         execution_source="semantic_v2",
                         compiler_source="deterministic_compiler_v2",
                         fallback_source=None,
+                        v2_failure_code=None,
                     )
-                progress.emit("route", "semantic-v2 미지원/실패 → legacy 경로")
+                if v2 is not None and not v2.get("ok"):
+                    progress.emit(
+                        "route",
+                        "semantic-v2 typed failure → legacy 경로",
+                        v2_failure_code=v2.get("v2_failure_code"),
+                        fallback_source=v2.get("fallback_source"),
+                    )
+                    early_v2_result = v2
+                else:
+                    progress.emit("route", "semantic-v2 미지원/실패 → legacy 경로")
         except Exception as v2_exc:  # noqa: BLE001
             progress.emit("route", f"semantic-v2 skip: {type(v2_exc).__name__}")
+    elif skip_late_v2 and early_v2_result is not None and not early_v2_result.get("ok"):
+        progress.emit(
+            "route",
+            "semantic-v2 early typed failure 재시도 생략",
+            v2_failure_code=early_v2_result.get("v2_failure_code"),
+        )
 
     routed = picked
     if routed is None:
@@ -1809,6 +1933,18 @@ def _ask_inner(
                 finished.setdefault("query_ir_task", plan_bundle.query_ir.task)
                 finished.setdefault("logical_status", plan_bundle.logical.status)
                 finished.setdefault("physical_strategy", plan_bundle.physical.strategy)
+            if (
+                early_v2_result is not None
+                and not early_v2_result.get("ok")
+                and early_v2_result.get("v2_failure_code")
+            ):
+                finished.setdefault(
+                    "v2_failure_code", early_v2_result.get("v2_failure_code")
+                )
+                finished.setdefault(
+                    "fallback_source",
+                    early_v2_result.get("fallback_source") or "legacy_after_semantic_v2",
+                )
             return finished
 
     if settings.semantic_plan_mode in {"shadow", "hybrid"}:
@@ -1861,6 +1997,18 @@ def _ask_inner(
                 finished.setdefault("query_ir_task", plan_bundle.query_ir.task)
                 finished.setdefault("logical_status", plan_bundle.logical.status)
                 finished.setdefault("physical_strategy", plan_bundle.physical.strategy)
+            if (
+                early_v2_result is not None
+                and not early_v2_result.get("ok")
+                and early_v2_result.get("v2_failure_code")
+            ):
+                finished.setdefault(
+                    "v2_failure_code", early_v2_result.get("v2_failure_code")
+                )
+                finished.setdefault(
+                    "fallback_source",
+                    early_v2_result.get("fallback_source") or "legacy_after_semantic_v2",
+                )
             return finished
         if settings.semantic_plan_mode == "hybrid" and semantic.get("fallback"):
             error = semantic.get("error") or semantic.get("fallback_reason") or "plan_fallback"

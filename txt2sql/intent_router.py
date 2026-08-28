@@ -51,6 +51,7 @@ from txt2sql.domain import (
     sane_footprint_sql,
     sane_height_sql,
 )
+from txt2sql.dataset_tables import resolve_basic_zone_table, resolve_building_table
 from txt2sql.spatial_templates import (
     place_buffer_count_sql,
     place_buffer_list_sql,
@@ -113,7 +114,13 @@ def _wants_list(q: str) -> bool:
     return any(k in q for k in _LIST_HINT)
 
 
-_D010 = "AL_D010_26_20250704"
+def _d010() -> str:
+    return resolve_building_table()
+
+
+def _bas() -> str:
+    return resolve_basic_zone_table()
+
 
 
 def _usage_kind_specs() -> list[tuple[str, str, str, str]]:
@@ -128,7 +135,7 @@ def _usage_kind_specs() -> list[tuple[str, str, str, str]]:
 
 
 def _swap_d198_for_d010(sql: str) -> str:
-    return re.sub(r"AL_D198_[0-9]+_[0-9]+", _D010, sql)
+    return re.sub(r"AL_D198_[0-9]+_[0-9]+", _d010(), sql)
 
 
 def _count_sql(intent: str, table: str, where: str) -> RoutedQuery:
@@ -573,7 +580,7 @@ def _route_map_display(q: str) -> RoutedQuery | None:
         where = [place_a4_predicate(gu), *extra]
         sql = (
             'SELECT COUNT(*) AS cnt\n'
-            'FROM "AL_D010_26_20250704"\n'
+            f'FROM "{_d010()}"\n'
             f'WHERE {" AND ".join(where)};'
         )
         return RoutedQuery("building_map_display", sql)
@@ -730,13 +737,13 @@ def _route_building_structure(q: str) -> RoutedQuery | None:
                 'SELECT "A0", "A4", "A5", "A6", "A7", "A9", "A11", "A12", '
                 '"A14", "A16", "A24", "A26",\n'
                 "       COUNT(*) OVER() AS total_n\n"
-                f'FROM "{_D010}"\n'
+                f'FROM "{_d010()}"\n'
                 f"WHERE {where_sql}\n"
                 'ORDER BY "A14" DESC NULLS LAST\n'
                 "LIMIT 100;"
             ),
         )
-    return _count_sql(count_intent, _D010, where_sql)
+    return _count_sql(count_intent, _d010(), where_sql)
 
 
 def _parse_floor_range(q: str) -> tuple[tuple[str, str], tuple[str, str]] | None:
@@ -795,6 +802,11 @@ def _route_usage_kinds(q: str) -> RoutedQuery | None:
 def _legal_dong_for_filter(
     conn: psycopg.Connection | None, place: str
 ) -> str:
+    """행정동은 법정동으로 치환하지 않는다 (BND 경로 유지)."""
+    from txt2sql.gazetteer import uses_admin_boundary
+
+    if uses_admin_boundary(place):
+        return place
     if conn is None:
         return place
     from txt2sql.clarify_qa import _lookup_admin_dong
@@ -1028,7 +1040,7 @@ def try_route(
                 "buffer_count",
                 (
                     'SELECT COUNT(*) AS cnt\n'
-                    f'FROM "{_D010}" b\n'
+                    f'FROM "{_d010()}" b\n'
                     "WHERE ST_DWithin(\n"
                     "  b.geometry::geography,\n"
                     f"  ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326)::geography,\n"
@@ -1048,7 +1060,7 @@ def try_route(
             (
                 'SELECT COUNT(DISTINCT i."A0") AS cnt\n'
                 'FROM "AL_D060_00_20250804" i\n'
-                'JOIN "TL_KODIS_BAS_26_202507" t\n'
+                f'JOIN "{_bas()}" t\n'
                 "  ON ST_Intersects(i.geometry, t.geometry)\n"
                 f'WHERE t."SIG_KOR_NM" = \'{gu}\';'
             ),
@@ -1068,7 +1080,7 @@ def try_route(
             "bas_count",
             (
                 'SELECT COUNT(*) AS cnt\n'
-                'FROM "TL_KODIS_BAS_26_202507"\n'
+                f'FROM "{_bas()}"\n'
                 f'WHERE "SIG_KOR_NM" = \'{gu}\';'
             ),
         )
@@ -1155,7 +1167,7 @@ def try_route(
                     "building_area_top1_value",
                     (
                         f"SELECT {cols}\n"
-                        'FROM "AL_D010_26_20250704"\n'
+                        f'FROM "{_d010()}"\n'
                         f'WHERE "A4" LIKE \'%{gu}%\'\n'
                         'ORDER BY "A14" DESC NULLS LAST\n'
                         "LIMIT 1;"
@@ -1165,7 +1177,7 @@ def try_route(
             "building_area_topn",
             (
                 f"SELECT {cols}\n"
-                'FROM "AL_D010_26_20250704"\n'
+                f'FROM "{_d010()}"\n'
                 f'WHERE "A4" LIKE \'%{gu}%\'\n'
                 'ORDER BY "A14" DESC NULLS LAST\n'
                 f"LIMIT {n};"
@@ -1183,7 +1195,7 @@ def try_route(
                 "bas_area_topn_value",
                 (
                     'SELECT "BAS_AR" AS v\n'
-                    'FROM "TL_KODIS_BAS_26_202507"\n'
+                    f'FROM "{_bas()}"\n'
                     f'WHERE "SIG_KOR_NM" = \'{gu}\'\n'
                     'ORDER BY "BAS_AR" DESC NULLS LAST\n'
                     f"LIMIT {n};"
@@ -1193,7 +1205,7 @@ def try_route(
             "bas_area_topn",
             (
                 'SELECT "BAS_AR", "BAS_ID", "SIG_KOR_NM"\n'
-                'FROM "TL_KODIS_BAS_26_202507"\n'
+                f'FROM "{_bas()}"\n'
                 f'WHERE "SIG_KOR_NM" = \'{gu}\'\n'
                 'ORDER BY "BAS_AR" DESC NULLS LAST\n'
                 f"LIMIT {n};"
@@ -1350,7 +1362,7 @@ def _route_place_building_count(q: str) -> RoutedQuery | None:
         if is_busan_wide(q):
             return RoutedQuery(
                 "building_place_count",
-                f'SELECT COUNT(*) AS cnt\nFROM "{_D010}";',
+                f'SELECT COUNT(*) AS cnt\nFROM "{_d010()}";',
             )
         return None
 
@@ -1359,7 +1371,7 @@ def _route_place_building_count(q: str) -> RoutedQuery | None:
         if is_busan_wide(q):
             return RoutedQuery(
                 "building_place_count",
-                f'SELECT COUNT(*) AS cnt\nFROM "{_D010}";',
+                f'SELECT COUNT(*) AS cnt\nFROM "{_d010()}";',
             )
         return None
     intent = "building_in_dong_spatial" if kind == "admin" else "building_place_count"
@@ -1535,7 +1547,7 @@ def _route_facility_list(
         "facility_usage_list",
         (
             'SELECT "A9" AS usage, "A24" AS name, "A5" AS jibeon, COUNT(*) AS n\n'
-            'FROM "AL_D010_26_20250704"\n'
+            f'FROM "{_d010()}"\n'
             f"WHERE {where_sql2}\n"
             'GROUP BY "A9", "A24", "A5"\n'
             "ORDER BY n DESC NULLS LAST\n"
@@ -1683,7 +1695,7 @@ def _route_buildings_in_industrial(q: str) -> RoutedQuery | None:
         "buildings_in_industrial",
         (
             'SELECT COUNT(*) AS cnt\n'
-            f'FROM "{_D010}" b\n'
+            f'FROM "{_d010()}" b\n'
             f"WHERE {where_sql};"
         ),
     )
@@ -1799,7 +1811,7 @@ def _route_building_name_lookup(q: str) -> RoutedQuery | None:
         '"A13"::text AS "A13", '
         '"A14"::float8 AS "A14", "A16"::float8 AS "A16", "A19"::text AS "A19", '
         '"A24"::text AS "A24", "A25"::text AS "A25", "A26"::float8 AS "A26"\n'
-        'FROM "AL_D010_26_20250704"\n'
+        f'FROM "{_d010()}"\n'
         f"WHERE {d010_sql}"
     )
     d198_selects = []
@@ -1902,7 +1914,7 @@ def _route_building_rank(q: str) -> RoutedQuery | None:
         f"building_rank_{metric_name}",
         (
             'SELECT "A0", "A4", "A5", "A9", "A12", "A14", "A15", "A16", "A19", "A24", "A25", "A26"\n'
-            f'FROM "{_D010}"'
+            f'FROM "{_d010()}"'
             f"{where_sql}\n"
             f'ORDER BY "{metric_col}" DESC NULLS LAST\n'
             f"LIMIT {limit_n};"
@@ -1937,7 +1949,7 @@ def _route_basic_zone_area_rank(q: str) -> RoutedQuery | None:
             "bas_area_topn_value",
             (
                 'SELECT "BAS_AR" AS v\n'
-                'FROM "TL_KODIS_BAS_26_202507"\n'
+                f'FROM "{_bas()}"\n'
                 f"{where}"
                 'ORDER BY "BAS_AR" DESC NULLS LAST\n'
                 f"LIMIT {limit_n};"
@@ -1947,7 +1959,7 @@ def _route_basic_zone_area_rank(q: str) -> RoutedQuery | None:
         "bas_area_topn",
         (
             'SELECT "BAS_AR", "BAS_ID", "SIG_KOR_NM"\n'
-            'FROM "TL_KODIS_BAS_26_202507"\n'
+            f'FROM "{_bas()}"\n'
             f"{where}"
             'ORDER BY "BAS_AR" DESC NULLS LAST\n'
             f"LIMIT {limit_n};"
@@ -1980,7 +1992,7 @@ def _route_building_name_set_compare(q: str) -> RoutedQuery | None:
             "SELECT\n"
             f"  COUNT(*) FILTER (WHERE \"A24\" ILIKE '%{sl}%') AS n1,\n"
             f"  COUNT(*) FILTER (WHERE \"A24\" ILIKE '%{sr}%') AS n2\n"
-            'FROM "AL_D010_26_20250704";'
+            f'FROM "{_d010()}";'
         ),
     )
 

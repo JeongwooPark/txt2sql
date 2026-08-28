@@ -44,10 +44,15 @@ METRIC_MAP = {
     "건폐율": "building_coverage_ratio",
     "산지": "special_land",
     "특수지": "special_land",
+    "일반지번": "special_land",
+    "가지번": "special_land",
+    "블럭지번": "special_land",
+    "블록지번": "special_land",
     "동명": "building_dong_name",
     "건물동명": "building_dong_name",
     "사용승인": "approval_date",
-    "허가일": "approval_date",
+    "허가일": "permit_date",
+    "허가일자": "permit_date",
 }
 OUTPUT_FIELD_MAP = {
     "이름": "name",
@@ -93,6 +98,7 @@ GROUP_HINTS = (
     "군별",
     "구조별",
     "법정동별",
+    "기초구역별",
 )
 GROUP_FIELD_MAP = {
     "특수지구분명별": "special_land",
@@ -107,6 +113,7 @@ GROUP_FIELD_MAP = {
     "군별": "sigungu_name",
     "구조별": "structure",
     "법정동별": "legal_dong",
+    "기초구역별": "basic_zone",
 }
 RATIO_HINTS = ("비율", "퍼센트", "몇%", "몇 %", "%씩", "몇 프로")
 RANK_HINTS = ("상위", "순위", "가장", "제일", "랭킹", "큰 순", "높은 순")

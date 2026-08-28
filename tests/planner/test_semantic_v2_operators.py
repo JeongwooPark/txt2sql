@@ -61,6 +61,61 @@ def test_rank_gets_limit() -> None:
     assert plan.order_by
 
 
+def test_aggregate_appends_count_n() -> None:
+    ir = QueryIR(
+        task="aggregate",
+        entity="building",
+        scope=ScopeIR(place="해운대구"),
+        aggregations=[AggregationIR(function="avg", field="height_m")],
+    )
+    plan = build_sqp(ir)
+    assert any(a.function == "count" and a.alias == "n" for a in plan.aggregations)
+
+
+def test_percentile_tail_sql() -> None:
+    from txt2sql.planner.semantic_executor import (
+        _compile_percentile_tail_sql,
+        _parse_percentile_tail,
+    )
+
+    parsed = _parse_percentile_tail("부산에서 높이 상위 1% 건물의 평균 연면적을 구해줘")
+    assert parsed == (0.99, "height_m", "gross_floor_area_m2")
+    ir = QueryIR(
+        task="aggregate",
+        entity="building",
+        scope=ScopeIR(place="부산"),
+        aggregations=[AggregationIR(function="avg", field="gross_floor_area_m2")],
+    )
+    plan = build_sqp(ir, question="부산에서 높이 상위 1% 건물의 평균 연면적을 구해줘")
+    sql = _compile_percentile_tail_sql(
+        "q", pct=0.99, rank_field="height_m", agg_field="gross_floor_area_m2", plan=plan
+    )
+    assert "PERCENTILE_CONT(0.99)" in sql
+    assert "COUNT(*)" in sql
+
+
+def test_d198_detail_usage_from_nl() -> None:
+    from txt2sql.planner.executor_adapter import build_execution_plan
+
+    bundle = build_execution_plan("구서동 아파트의 평균 높이를 알려줘")
+    plan = build_sqp(bundle.query_ir, question="구서동 아파트의 평균 높이를 알려줘")
+    assert bundle.logical.status == "READY"
+    assert "d198_ledger" in (plan.assumptions or [])
+    assert any(
+        f.field == "detail_usage" and f.value == "아파트" for f in plan.filters
+    )
+
+
+def test_count_gate_declines_list_shaped() -> None:
+    from txt2sql.planner.executor_adapter import build_execution_plan
+
+    bundle = build_execution_plan(
+        "북구에서 높이 20m 이상이지만 지상층수는 5층 이하인 건물을 찾아줘"
+    )
+    if bundle.query_ir.task == "count":
+        assert should_try_semantic_v2(bundle) is False
+
+
 def test_should_try_skips_fast_simple_count() -> None:
     bundle = build_execution_plan("해운대구 건물 몇 채야?")
     # May or may not be FAST depending on contract; if FAST, should_try is False

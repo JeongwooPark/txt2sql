@@ -9,16 +9,24 @@ from __future__ import annotations
 from typing import Any
 
 from txt2sql.planner.physical import PhysicalPlan
-from txt2sql.query_ir.adapters import query_ir_to_semantic_plan
 from txt2sql.query_ir.normalize import assert_no_physical_names
 
 
 def compile_physical_plan(physical: PhysicalPlan, *, settings: Any | None = None) -> str:
-    """Compile Logical/Physical plan to SQL via shared deterministic compiler."""
+    """Compile Logical/Physical plan to SQL via shared deterministic compiler.
+
+    Physical strategy/bindings flow into SQP assumptions (same bridge as
+    ``compile_sql_from_bundle``).
+    """
     assert_no_physical_names(physical.logical.query_ir.model_dump())
-    plan = query_ir_to_semantic_plan(physical.logical.query_ir)
+    from txt2sql.planner.semantic_executor import build_sqp
     from txt2sql.semantic_plan.compiler import compile_semantic_plan
 
+    plan = build_sqp(
+        physical.logical.query_ir,
+        physical=physical,
+        logical=physical.logical,
+    )
     return compile_semantic_plan(plan)
 
 

@@ -28,6 +28,10 @@ class ExecutionPlanBundle:
 def build_execution_plan(question: str, *, contract: Any | None = None) -> ExecutionPlanBundle:
     c = contract if contract is not None else extract_contract(question)
     ir = contract_to_query_ir(c)
+    # Enrich temporal/group slots from NL before completeness + binding.
+    from txt2sql.planner.semantic_executor import refine_query_ir_for_compile
+
+    ir = refine_query_ir_for_compile(ir, question=question)
     logical = build_logical_plan(ir)
     physical = select_physical_plan(logical)
     reject_partial_execution(physical)

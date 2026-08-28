@@ -51,6 +51,12 @@ CONCEPTS: dict[str, Concept] = {
         ("지하층수", "basement_floors", "지하"),
     ),
     "building.age": Concept("building.age", "building", "건축연령", "year", ("건축연령", "age")),
+    "building.structure": Concept(
+        "building.structure", "building", "구조", None, ("구조", "structure")
+    ),
+    "building.permit_date": Concept(
+        "building.permit_date", "building", "허가일", None, ("허가일", "permit_date")
+    ),
     "admin.sigungu": Concept("admin.sigungu", "admin_area", "시군구", None, ("구", "sigungu_name")),
     "admin.legal_dong": Concept(
         "admin.legal_dong", "admin_area", "법정동", None, ("동", "legal_dong")
@@ -63,6 +69,9 @@ FIELD_TO_CONCEPT: dict[str, str] = {
     "usage": "building.usage",
     "detail_usage": "building.detail_usage",
     "approval_date": "building.approval_date",
+    "permit_date": "building.permit_date",
+    "building_age_years": "building.age",
+    "structure": "building.structure",
     "floor_area_ratio": "building.floor_area_ratio",
     "building_coverage_ratio": "building.building_coverage_ratio",
     "gross_floor_area_m2": "building.gross_floor_area",

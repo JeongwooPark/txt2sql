@@ -6,12 +6,22 @@ import re
 from dataclasses import dataclass
 
 from txt2sql.db import assert_readonly_sql
-from txt2sql.domain import BUSAN_GU_CODES, extract_gu, extract_place, extract_places, wants_map_display
+from txt2sql.dataset_tables import resolve_basic_zone_table, resolve_building_table
+from txt2sql.domain import extract_gu, extract_place, extract_places, wants_map_display
+from txt2sql.gazetteer import sigungu_a3_prefix
 from txt2sql.spatial_templates import admin_dong_where
 
-_D010 = "AL_D010_26_20250704"
+def _d010() -> str:
+    return resolve_building_table()
+
+
 _BND = "BND_ADM_DONG_PG"
-_BAS = "TL_KODIS_BAS_26_202507"
+
+
+def _bas() -> str:
+    return resolve_basic_zone_table()
+
+
 _D060 = "AL_D060_00_20250804"
 
 _SKIP_ROUTES = frozenset(
@@ -31,12 +41,10 @@ _SKIP_ROUTES = frozenset(
     }
 )
 
-_SPATIAL_TABLES = (
-    _D010,
-    _BND,
-    _BAS,
-    _D060,
-)
+def _spatial_tables() -> tuple[str, ...]:
+    return (_d010(), _BND, _bas(), _D060)
+
+
 _NON_SPATIAL_TABLES = frozenset(
     {
         "pnu_def",
@@ -192,12 +200,12 @@ def spatial_aliases(sql: str) -> list[tuple[str, str]]:
         if alias and alias.lower() in _SQL_CLAUSE_WORDS:
             alias = None
         found.append((table, alias or table))
-    preferred = {name.lower() for name in _SPATIAL_TABLES}
+    preferred = {name.lower() for name in _spatial_tables()}
     skip = {name.lower() for name in _NON_SPATIAL_TABLES}
     spatial = [
         item
         for item in found
-        if item[0].lower() in preferred or item[0] in _SPATIAL_TABLES
+        if item[0].lower() in preferred or item[0] in _spatial_tables()
     ]
     if spatial:
         return spatial
@@ -208,7 +216,7 @@ def _geometry_alias(sql: str) -> str | None:
     aliases = spatial_aliases(sql)
     if not aliases:
         return None
-    order = (_D010, _D060, _BAS, _BND)
+    order = (_d010(), _D060, _bas(), _BND)
     by_table = {table: alias for table, alias in aliases}
     for table in order:
         if table in by_table:
@@ -220,7 +228,7 @@ def _feature_table_alias(sql: str) -> tuple[str, str] | None:
     """건물·단지·기초구역 등 '대상 피처' 테이블. 행정경계(BND)는 제외한다."""
     aliases = spatial_aliases(sql)
     by_table = {table: alias for table, alias in aliases}
-    for name in (_D010, _D060, _BAS):
+    for name in (_d010(), _D060, _bas()):
         if name in by_table:
             return name, by_table[name]
     for table, alias in aliases:
@@ -302,10 +310,10 @@ def _one_aggregate_to_features(sql: str) -> str | None:
         extra = f', {_qual_ident(bnd)}."ADM_NM" AS "ADM_NM"'
     else:
         extra = ', NULL::text AS "ADM_NM"'
-    if table == _D010 or table.startswith("AL_D010"):
+    if table == _d010() or table.startswith("AL_D010"):
         cols = ", ".join(f'{q}."{c}"' for c in _D010_FEATURE_COLS)
         injected = f"SELECT {cols}{extra},\n       {q}.geometry AS geometry\n{rest}"
-    elif table == _BAS or table.startswith("TL_KODIS"):
+    elif table == _bas() or table.startswith("TL_KODIS"):
         cols = ", ".join(f'{q}."{c}"' for c in _BAS_FEATURE_COLS)
         injected = f"SELECT {cols}{extra},\n       {q}.geometry AS geometry\n{rest}"
     else:
@@ -354,11 +362,11 @@ def _wrap_join_geometry(body: str) -> str | None:
         )
 
     has_bas = bool(re.search(r'"BAS_ID"', body))
-    if has_bas and any(name == _BAS or name.upper().startswith("TL_KODIS") for name in tables):
+    if has_bas and any(name == _bas() or name.upper().startswith("TL_KODIS") for name in tables):
         return (
             f'SELECT q.*, src.geometry AS geometry\n'
             f"FROM (\n{body}\n) q\n"
-            f'LEFT JOIN "{_BAS}" src ON src."BAS_ID" = q."BAS_ID"'
+            f'LEFT JOIN "{_bas()}" src ON src."BAS_ID" = q."BAS_ID"'
         )
     return None
 
@@ -369,7 +377,7 @@ def _d010_geom_wrap(body: str, *, has_a0: bool, has_parcel: bool) -> str:
         return (
             f'SELECT q.*, src.geometry AS geometry\n'
             f"FROM (\n{body}\n) q\n"
-            f'LEFT JOIN "{_D010}" src ON src."A0"::text = q."A0"::text'
+            f'LEFT JOIN "{_d010()}" src ON src."A0"::text = q."A0"::text'
         )
     preds: list[str] = []
     order = "1"
@@ -387,7 +395,7 @@ def _d010_geom_wrap(body: str, *, has_a0: bool, has_parcel: bool) -> str:
         f"FROM (\n{body}\n) q\n"
         f"LEFT JOIN LATERAL (\n"
         f"  SELECT s.geometry\n"
-        f'  FROM "{_D010}" s\n'
+        f'  FROM "{_d010()}" s\n'
         f"  WHERE {where}\n"
         f"  ORDER BY {order}\n"
         f"  LIMIT 1\n"
@@ -499,7 +507,7 @@ def _gu_boundary_sql(gu: str) -> str:
 
     기초구역 SIG_CD(26410)·시군구명으로 합집합을 만든다.
     """
-    code = BUSAN_GU_CODES.get(gu)
+    code = sigungu_a3_prefix(gu)
     safe = gu.replace("'", "''")
     geom = (
         "ST_Multi(ST_CollectionExtract("
@@ -514,7 +522,7 @@ def _gu_boundary_sql(gu: str) -> str:
     return (
         f"SELECT '{safe}' AS \"SIG_KOR_NM\", {sig} AS \"SIG_CD\",\n"
         f"       {geom} AS geometry\n"
-        f'FROM "{_BAS}" t\n'
+        f'FROM "{_bas()}" t\n'
         f"WHERE {where} AND t.geometry IS NOT NULL"
     )
 

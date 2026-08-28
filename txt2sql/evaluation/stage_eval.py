@@ -94,6 +94,7 @@ def evaluate_stages(
     presentation_ok: bool | None = None,
     policy_ok: bool | None = None,
     root_cause: str | None = None,
+    extras: dict[str, Any] | None = None,
 ) -> CaseStageEval:
     def _st(v: bool | None) -> StageStatus:
         if v is None:
@@ -117,7 +118,13 @@ def evaluate_stages(
                 root_cause = f"STAGE_{name.upper()}"
                 break
         root_cause = root_cause or "UNKNOWN"
-    return CaseStageEval(id=case_id, final_pass=final_pass, stages=stages, root_cause=root_cause)
+    return CaseStageEval(
+        id=case_id,
+        final_pass=final_pass,
+        stages=stages,
+        root_cause=root_cause,
+        extras=dict(extras or {}),
+    )
 
 
 def stages_from_reason(*, case_id: str, final_pass: bool, reason: str) -> CaseStageEval:
@@ -171,6 +178,116 @@ def stages_from_reason(*, case_id: str, final_pass: bool, reason: str) -> CaseSt
     return evaluate_stages(case_id=case_id, final_pass=False, root_cause=root, **flags)
 
 
+def stages_from_result(
+    *,
+    case_id: str,
+    final_pass: bool,
+    row: dict[str, Any],
+    reason: str | None = None,
+) -> CaseStageEval:
+    """Prefer observed AskResult stage fields; fall back to reason taxonomy."""
+    logical_status = str(row.get("logical_status") or "")
+    physical_strategy = str(row.get("physical_strategy") or "")
+    execution_source = str(row.get("execution_source") or "")
+    v2_code = str(row.get("v2_failure_code") or "")
+    has_obs = bool(
+        logical_status or physical_strategy or execution_source or v2_code
+    )
+    if not has_obs:
+        return stages_from_reason(
+            case_id=case_id,
+            final_pass=final_pass,
+            reason=reason or str(row.get("reason") or ""),
+        )
+
+    if final_pass:
+        return evaluate_stages(
+            case_id=case_id,
+            final_pass=True,
+            understanding_ok=True,
+            binding_ok=True,
+            logical_ok=True,
+            physical_ok=True,
+            compile_ok=True,
+            execution_ok=True,
+            root_cause=None,
+            extras={
+                "source": "result_fields",
+                "execution_source": execution_source or None,
+                "physical_strategy": physical_strategy or None,
+            },
+        )
+
+    understanding_ok: bool | None = True
+    binding_ok: bool | None = True
+    logical_ok: bool | None = True
+    physical_ok: bool | None = True
+    compile_ok: bool | None = True
+    execution_ok: bool | None = True
+    root = "UNKNOWN"
+
+    if logical_status == "CLARIFY":
+        understanding_ok = False
+        root = "LOGICAL_CLARIFY"
+    elif logical_status == "UNSUPPORTED":
+        binding_ok = False
+        root = "LOGICAL_UNSUPPORTED"
+    elif logical_status == "REPLAN":
+        logical_ok = False
+        root = "LOGICAL_REPLAN"
+
+    if v2_code == "PARTIAL":
+        physical_ok = False
+        root = "V2_PARTIAL"
+    elif v2_code == "COMPILE":
+        compile_ok = False
+        root = "V2_COMPILE"
+    elif v2_code == "VALIDATE":
+        compile_ok = False
+        root = "V2_VALIDATE"
+    elif v2_code == "EXECUTE":
+        execution_ok = False
+        root = "V2_EXECUTE"
+    elif v2_code == "GATE":
+        physical_ok = False
+        root = "V2_GATE"
+    elif execution_source == "semantic_v2" and not final_pass:
+        execution_ok = False
+        root = taxonomy_from_reason(reason or str(row.get("reason") or "")) or "EXECUTION"
+    elif not final_pass and root == "UNKNOWN":
+        # Observed fields present but no typed failure — use reason for root.
+        ev = stages_from_reason(
+            case_id=case_id,
+            final_pass=False,
+            reason=reason or str(row.get("reason") or ""),
+        )
+        ev.extras = {
+            "source": "result_fields+reason",
+            "execution_source": execution_source or None,
+            "physical_strategy": physical_strategy or None,
+            "v2_failure_code": v2_code or None,
+        }
+        return ev
+
+    return evaluate_stages(
+        case_id=case_id,
+        final_pass=final_pass,
+        understanding_ok=understanding_ok,
+        binding_ok=binding_ok,
+        logical_ok=logical_ok,
+        physical_ok=physical_ok,
+        compile_ok=compile_ok,
+        execution_ok=execution_ok,
+        root_cause=root,
+        extras={
+            "source": "result_fields",
+            "execution_source": execution_source or None,
+            "physical_strategy": physical_strategy or None,
+            "v2_failure_code": v2_code or None,
+        },
+    )
+
+
 def migrate_failures(
     before: dict[str, bool],
     after: dict[str, bool],
@@ -211,6 +328,8 @@ def annotate_doc_stages(doc: dict[str, Any]) -> list[dict[str, Any]]:
         cid = case_id(case)
         passed = bool(case_passed(case))
         reason = str(case.get("reason") or case.get("fail_reason") or case.get("error") or "")
-        ev = stages_from_reason(case_id=cid, final_pass=passed, reason=reason)
+        ev = stages_from_result(
+            case_id=cid, final_pass=passed, row=case, reason=reason
+        )
         out.append(ev.as_dict())
     return out

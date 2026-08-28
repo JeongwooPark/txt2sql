@@ -18,6 +18,7 @@ from txt2sql.domain import (
 )
 from txt2sql.spatial_templates import (
     bas_dong_buffer_count_sql,
+    bas_dong_building_group_sql,
     bas_dong_count_and_max_sql,
     bas_dong_count_sql,
     bas_dong_list_sql,
@@ -283,6 +284,14 @@ def try_spatial_route(question: str) -> RoutedQuery | None:
     has_bas = _has_bas(q)
     has_bnd = _has_bnd_layer(q) or bool(dong)
     as_list = _wants_list(q)
+
+    # 건물 × 기초구역 × 행정동 (BAS_ID별 건물 수)
+    if has_bldg and has_bas and dong and op in {"intersects", "within"}:
+        if "별" in q and any(k in q for k in ("기초구역", "구역")):
+            return RoutedQuery(
+                "spatial_bas_dong_building_group",
+                bas_dong_building_group_sql(dong, op),
+            )
 
     # 건물 × 기초구역
     if has_bldg and has_bas and op in {"intersects", "within"}:

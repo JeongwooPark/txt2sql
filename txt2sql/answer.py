@@ -1937,6 +1937,19 @@ def format_success(
             emit_text_chunks(final, on_token)
         return final
 
+    if route == "semantic_v2":
+        answer = format_success_template(
+            question,
+            sql=sql,
+            rows=rows,
+            row_count=row_count,
+            route=route,
+        )
+        final = with_coverage_preface(answer, route, question)
+        if on_token is not None:
+            emit_text_chunks(_prose_without_markdown_table(final), on_token)
+        return final
+
     answer: str
     if model and (client is not None or host):
         try:

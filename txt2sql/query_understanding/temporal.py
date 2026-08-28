@@ -27,6 +27,9 @@ _AGE = re.compile(
     r"경과|된\s*지)?\s*(\d+)\s*년\s*"
     r"(?:이\s*)?(넘|이상|이하|미만|초과|이내|된|지남|경과|전|이상된)?"
 )
+_RECENT_YEARS = re.compile(
+    r"최근\s*(\d+)\s*년\s*(?:이\s*)?(내|동안|간)?"
+)
 
 
 def parse_reference_date(raw: str | None) -> date:
@@ -49,12 +52,40 @@ def parse_temporal_filters(
     q = question or ""
     if "차이" in q and "허가" in q and "사용승인" in q:
         return []
+    # 허가↔사용승인/준공 시차는 approval age(rel_years)가 아님 — generator assumption으로 처리
+    if "허가" in q and any(k in q for k in ("사용승인", "준공")) and any(
+        k in q
+        for k in (
+            "걸린",
+            "허가 후",
+            "허가일부터",
+            "허가일이",
+            "허가연",
+            "이내 준공",
+        )
+    ):
+        return []
     ref = (
         reference_date
         if isinstance(reference_date, date)
         else parse_reference_date(str(reference_date) if reference_date else None)
     )
     found: list[FilterSpec] = []
+
+    recent = _RECENT_YEARS.search(q)
+    if recent:
+        years = int(recent.group(1))
+        if 1 <= years <= 200:
+            # Gold-compatible: full-date columns vs CURRENT_DATE - N years.
+            # Year-only rows are intentionally excluded (same as gold SQL).
+            found.append(
+                FilterSpec(
+                    field=_temporal_date_field(q),
+                    operator="gt",
+                    value=f"rel_years:{years}",
+                )
+            )
+            return found
 
     span = _YEAR_SPAN.search(q)
     if span:
@@ -117,33 +148,35 @@ def parse_temporal_filters(
         return found
 
     age = _AGE.search(q)
-    if age and not _YEAR_REL.search(age.group(0)):
+    if age and not _YEAR_REL.search(age.group(0)) and "최근" not in q:
         years = int(age.group(1))
         if 1 <= years <= 200:
-            cutoff_year = ref.year - years
             rel = age.group(2) or "이상"
+            field = _temporal_date_field(q)
+            # Match gold: full-date vs CURRENT_DATE - N years (year-only rows excluded).
             if rel in {"미만", "이내"}:
                 found.append(
                     FilterSpec(
-                        field="approval_date",
+                        field=field,
                         operator="gt",
-                        value=cutoff_year,
+                        value=f"rel_years:{years}",
                     )
                 )
             elif rel in {"이하"}:
                 found.append(
                     FilterSpec(
-                        field="approval_date",
+                        field=field,
                         operator="gte",
-                        value=cutoff_year,
+                        value=f"rel_years:{years}",
                     )
                 )
             else:
+                # 이상/넘/초과/전/경과 등 → N년 이상 된 건물
                 found.append(
                     FilterSpec(
-                        field="approval_date",
+                        field=field,
                         operator="lte",
-                        value=cutoff_year,
+                        value=f"rel_years:{years}",
                     )
                 )
     return found

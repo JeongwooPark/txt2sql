@@ -75,6 +75,8 @@ class Settings:
     llm_timeout_s: float = 20.0
     db_statement_timeout_ms: int = 15000
     reference_date: str = "2025-07-04"
+    # 동명 구(중구 등) PNU·활성 시·도 테이블 선택 기본값 (전국 확장 시 환경변수로 변경).
+    default_sido: str = "부산광역시"
 
     def planner_model(self) -> str:
         return (self.ollama_plan_model or self.ollama_model).strip()
@@ -288,6 +290,15 @@ class Settings:
                 )
             ).strip()
             or "2025-07-04",
+            default_sido=str(
+                _pick(
+                    data,
+                    "default_sido",
+                    "DEFAULT_SIDO",
+                    default="부산광역시",
+                )
+            ).strip()
+            or "부산광역시",
         )
 
 

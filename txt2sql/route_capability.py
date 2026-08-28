@@ -107,6 +107,14 @@ STRUCTURE_LIST = RouteCapability(
     supported_aggregations=_COUNT_ONLY,
     supported_fields=_PLACE_FIELDS | {"structure"},
 )
+SPECIAL_LAND_LIST = RouteCapability(
+    route="building_special_land_list",
+    supports_output_projection=True,
+    supports_rank=True,
+    supports_top_n=True,
+    supported_aggregations=_COUNT_ONLY,
+    supported_fields=_PLACE_FIELDS | {"special_land", "lot_address"},
+)
 PROFILE = RouteCapability(
     route="building_profile",
     supported_aggregations=frozenset(),
@@ -193,10 +201,13 @@ BAS = RouteCapability(
 )
 SPATIAL = RouteCapability(
     route="spatial",
+    entities=frozenset({"building", "basic_zone"}),
     supports_spatial=True,
+    supports_group_by=True,
+    supported_group_fields=frozenset({"basic_zone", "bas_id"}),
     supported_aggregations=_COUNT_ONLY,
     supports_output_projection=True,
-    supported_fields=_PLACE_FIELDS | {"usage"},
+    supported_fields=_PLACE_FIELDS | {"usage", "basic_zone", "bas_id"},
 )
 PLAN_ROUTE = RouteCapability(
     route="semantic_plan",
@@ -285,9 +296,12 @@ def capability_for(route: str) -> RouteCapability:
         return THRESHOLD_LIST
     if intent in {
         "building_structure_list",
-        "building_special_land_list",
     }:
         return STRUCTURE_LIST
+    if intent in {
+        "building_special_land_list",
+    }:
+        return SPECIAL_LAND_LIST
     return SIMPLE_COUNT
 
 
@@ -444,9 +458,14 @@ def fully_supports(capability: RouteCapability, contract: QueryContract) -> bool
 
 
 def legacy_route_eligible(route: str, contract: QueryContract) -> bool:
+    intent = (route or "").strip()
+    cap = capability_for(intent)
+    # Spatial templates are self-contained; dong-number tokens must not block them.
+    if cap.supports_spatial and intent.startswith("spatial_"):
+        return len(missing_requirements(cap, contract)) == 0
     if not contract_is_complete(contract):
         return False
-    return not missing_requirements(capability_for(route), contract)
+    return len(missing_requirements(cap, contract)) == 0
 
 
 def route_allowed(intent: str, contract: QueryContract) -> bool:

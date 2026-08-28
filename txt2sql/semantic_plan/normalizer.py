@@ -34,10 +34,9 @@ def normalize_semantic_plan(
             data["scope"]["place"]["name"] = guessed
         if place.kind == "unknown":
             token = guessed or place.name
-            if token.endswith(("구", "군")):
-                data["scope"]["place"]["kind"] = "gu"
-            elif token.endswith("동"):
-                data["scope"]["place"]["kind"] = "legal_dong"
+            from txt2sql.gazetteer import resolve_place_kind
+
+            data["scope"]["place"]["kind"] = resolve_place_kind(token, question)
 
     if plan.query_kind in {"list", "rank"} and not plan.select:
         data["select"] = list(DEFAULT_LIST_SELECT)

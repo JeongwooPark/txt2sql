@@ -13,6 +13,7 @@ from typing import Literal
 
 import psycopg
 
+from txt2sql.dataset_tables import resolve_basic_zone_table, resolve_building_table
 from txt2sql.domain import D198_TABLES, looks_like_building_name_lookup
 from txt2sql.intent_router import (
     RoutedQuery,
@@ -53,10 +54,10 @@ def tables_from_sql(sql: str | None) -> list[str]:
 
 
 def tables_for_intent(intent: str) -> list[str]:
-    d010 = ["AL_D010_26_20250704"]
+    d010 = [resolve_building_table()]
     d060 = ["AL_D060_00_20250804"]
     d198 = list(D198_TABLES)
-    bas = ["TL_KODIS_BAS_26_202507"]
+    bas = [resolve_basic_zone_table()]
     if intent == "buildings_in_industrial":
         return d010 + d060
     if intent == "industrial_bas_intersect":
@@ -100,13 +101,16 @@ def tables_for_intent(intent: str) -> list[str]:
             return d010 + ["BND_ADM_DONG_PG"]
         return d010
     if intent in {"spatial_bldg_bas_count", "spatial_bldg_bas_list"}:
-        return d010 + ["TL_KODIS_BAS_26_202507"]
+        return d010 + [resolve_basic_zone_table()]
     if intent == "legal_dong_admin_share":
         return d010 + ["BND_ADM_DONG_PG"]
     if intent == "legal_dong_admin_members":
         return ["BND_ADM_DONG_PG"]
     if intent.startswith("spatial_bas_dong") or intent == "spatial_bas_bnd_gu_count":
-        return ["TL_KODIS_BAS_26_202507", "BND_ADM_DONG_PG"]
+        tables = [resolve_basic_zone_table(), "BND_ADM_DONG_PG"]
+        if intent == "spatial_bas_dong_building_group":
+            tables.append(resolve_building_table())
+        return tables
     if intent == "spatial_dong_touch_list":
         return ["BND_ADM_DONG_PG"]
     if intent.startswith("d010_attr"):

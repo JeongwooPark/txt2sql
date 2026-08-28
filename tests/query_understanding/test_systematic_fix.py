@@ -1095,3 +1095,70 @@ def test_centroid_distance_uses_st_centroid() -> None:
     assert plan is not None
     sql = compile_semantic_plan(plan).sql.upper()
     assert "ST_CENTROID" in sql
+
+
+def test_special_land_gaji_and_block_compile() -> None:
+    from txt2sql.domain import extract_structures
+    from txt2sql.semantic_plan.compiler import compile_semantic_plan
+    from txt2sql.semantic_plan.generator import try_heuristic_plan
+
+    assert extract_structures("서구 블럭지번 건물 수를 세어줘") == []
+    for q, token in (
+        ("중구 가지번 건물은 몇 채야?", "가지"),
+        ("서구 블럭지번 건물 수를 세어줘", "블럭"),
+    ):
+        plan = try_heuristic_plan(q)
+        assert plan is not None
+        assert any(item.field == "special_land" for item in plan.filters)
+        sql = compile_semantic_plan(plan).sql
+        assert "A6" in sql
+        assert token in sql
+
+
+def test_decade_list_orders_by_approval_date() -> None:
+    from txt2sql.semantic_plan.compiler import compile_semantic_plan
+    from txt2sql.semantic_plan.generator import try_heuristic_plan
+
+    q = "구서동에서 1990년대 준공된 건물을 보여줘"
+    plan = try_heuristic_plan(q)
+    assert plan is not None
+    assert any(
+        item.field == "approval_date" and item.operator == "between"
+        for item in plan.filters
+    )
+    assert plan.order_by and plan.order_by[0].field == "approval_date"
+    sql = compile_semantic_plan(plan).sql
+    assert "1990" in sql and "1999" in sql
+    assert "A34" in sql
+    assert "LIMIT" in sql.upper()
+
+
+def test_permit_approval_lag_operators() -> None:
+    from txt2sql.semantic_plan.compiler import compile_semantic_plan
+    from txt2sql.semantic_plan.contract_verifier import verify_contract
+    from txt2sql.semantic_plan.generator import try_heuristic_plan
+
+    list_q = "금사동에서 허가일부터 사용승인일까지 1년 이상 걸린 건물을 보여줘"
+    plan = try_heuristic_plan(list_q)
+    assert plan is not None
+    assert any(a.startswith("permit_day_gap_gte:") for a in (plan.assumptions or []))
+    assert verify_contract(list_q, plan).ok is True
+    sql = compile_semantic_plan(plan).sql
+    assert "A33" in sql and "A34" in sql
+    assert ">= 365" in sql
+
+    ratio_q = "복천동에서 허가 후 2년 이내 준공된 건물 비율을 알려줘"
+    plan = try_heuristic_plan(ratio_q)
+    assert plan is not None
+    assert any(a.startswith("permit_day_gap_lte:") for a in (plan.assumptions or []))
+    sql = compile_semantic_plan(plan).sql
+    assert "<= 730" in sql
+    assert "within_2y_ratio" in sql
+
+    year_q = "금정구에서 허가연도와 사용승인연도가 다른 건물 비율을 구해줘"
+    plan = try_heuristic_plan(year_q)
+    assert plan is not None
+    assert "permit_approval_year_neq" in (plan.assumptions or [])
+    sql = compile_semantic_plan(plan).sql
+    assert "<>" in sql
+    assert "diff_year_ratio" in sql

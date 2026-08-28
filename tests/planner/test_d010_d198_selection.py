@@ -31,3 +31,29 @@ def test_d198_selection() -> None:
     ]
     physical = select_physical_plan(logical)
     assert physical.strategy == "D198_EXECUTOR"
+
+
+def test_d198_wins_over_d010_when_both_bound() -> None:
+    ir = QueryIR(task="count", aggregations=[AggregationIR(function="count")])
+    logical = build_logical_plan(ir)
+    logical.status = "READY"
+    logical.bindings = [
+        SemanticBinding(
+            concept="building.approval_date",
+            dataset="building_attr_d198",
+            physical_field="approval_date",
+            grain="building_attr",
+            confidence=0.9,
+            reason="test",
+        ),
+        SemanticBinding(
+            concept="building.height",
+            dataset="building_gis_d010",
+            physical_field="height_m",
+            grain="building_unit",
+            confidence=0.5,
+            reason="test",
+        ),
+    ]
+    physical = select_physical_plan(logical)
+    assert physical.strategy == "D198_EXECUTOR"

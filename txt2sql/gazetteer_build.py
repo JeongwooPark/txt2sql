@@ -63,7 +63,11 @@ def names_from_rows(rows: list[dict[str, Any]], key: str) -> list[str]:
     return out
 
 
-def collect_gazetteer_payload(conn: Any) -> dict[str, Any]:
+def collect_gazetteer_payload(
+    conn: Any,
+    *,
+    default_sido: str | None = None,
+) -> dict[str, Any]:
     sido = conn.execute(
         """
         SELECT DISTINCT trim("PNU_NM") AS name
@@ -94,6 +98,17 @@ def collect_gazetteer_payload(conn: Any) -> dict[str, Any]:
         WHERE "PNU" LIKE '%00000'
           AND "PNU" NOT LIKE '%00000000'
           AND trim("PNU_NM") LIKE '% %'
+        """
+    ).fetchall()
+    gu_pnu_rows = conn.execute(
+        """
+        SELECT
+          regexp_replace(trim("PNU_NM"), '.* ', '') AS gu,
+          left("PNU", 5) AS pnu_prefix
+        FROM pnu_def
+        WHERE "PNU" LIKE '%00000'
+          AND "PNU" NOT LIKE '%00000000'
+          AND trim("PNU_NM") <> ''
         """
     ).fetchall()
     legal = conn.execute(
@@ -139,6 +154,34 @@ def collect_gazetteer_payload(conn: Any) -> dict[str, Any]:
         if sido_name not in bucket:
             bucket.append(sido_name)
 
+    from txt2sql.gazetteer import choose_sigungu_pnu_code
+
+    # 동명 구(중구 등): 후보를 모두 모은 뒤 정책으로 대표 PNU를 고른다.
+    # 정책: default_sido 접두 일치 > 가장 짧은 코드 (부산 26 하드 우선 금지).
+    preferred_sido = (default_sido or "부산광역시").strip() or "부산광역시"
+    candidates: dict[str, list[str]] = {}
+    for row in gu_pnu_rows:
+        gu_name = str(row["gu"] or "").strip()
+        code = str(row["pnu_prefix"] or "").strip()
+        if not gu_name or not code.isdigit() or len(code) != 5:
+            continue
+        bucket = candidates.setdefault(gu_name, [])
+        if code not in bucket:
+            bucket.append(code)
+
+    sigungu_pnu_prefix: dict[str, str] = {}
+    sigungu_pnu_candidates: dict[str, list[str]] = {}
+    for gu_name, codes in candidates.items():
+        ordered = sorted(codes)
+        sigungu_pnu_candidates[gu_name] = ordered
+        chosen = choose_sigungu_pnu_code(
+            ordered,
+            question_sido=None,
+            default_sido=preferred_sido,
+        )
+        if chosen:
+            sigungu_pnu_prefix[gu_name] = chosen
+
     admin_dong_prefixes: dict[str, list[str]] = {}
     for row in admin_pref_rows:
         name = str(row["name"] or "").strip()
@@ -151,6 +194,8 @@ def collect_gazetteer_payload(conn: Any) -> dict[str, Any]:
         "sido_aliases": list(SIDO_ALIASES),
         "sigungu": names_from_rows(gu, "name"),
         "sigungu_sido": sigungu_sido,
+        "sigungu_pnu_prefix": sigungu_pnu_prefix,
+        "sigungu_pnu_candidates": sigungu_pnu_candidates,
         "legal_dong": names_from_rows(legal, "name"),
         "admin_dong": names_from_rows(admin, "name"),
         "admin_dong_prefixes": admin_dong_prefixes,
@@ -191,7 +236,10 @@ def rebuild_gazetteer(
     내용이 같으면 파일을 다시 쓰지 않는다.
     """
     with connect(settings.database_url) as conn:
-        payload = collect_gazetteer_payload(conn)
+        payload = collect_gazetteer_payload(
+            conn,
+            default_sido=settings.default_sido,
+        )
     out = path or DATA_PATH
     text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     counts = gazetteer_counts(payload)

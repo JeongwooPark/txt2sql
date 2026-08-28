@@ -47,6 +47,13 @@ def _candidates_for_concept(concept_key: str) -> list[SemanticBinding]:
         if not phys:
             continue
         conf = 0.9 if ds.priority <= 10 else 0.7
+        # Temporal concepts prefer D198 attribute ledger when available.
+        if concept_key in {
+            "building.approval_date",
+            "building.permit_date",
+            "building.age",
+        } and ds.dataset_id == "building_attr_d198":
+            conf = 0.97
         metric = METRICS.get(concept_key)
         reason = f"concept={concept_key}; dataset={ds.dataset_id}; priority={ds.priority}"
         if metric and metric.preferred_dataset == ds.dataset_id:
@@ -119,9 +126,33 @@ def bind_concepts(tokens: list[str], *, require_same_grain: bool = True) -> Bind
         if len(datasets) > 1:
             # D010 vs D198 conflict on overlapping concepts
             if "building_gis_d010" in datasets and "building_attr_d198" in datasets:
-                result.conflicts.append("SEMANTIC_DATASET_CONFLICT:d010_vs_d198")
-                # Prefer D010 for numeric metrics, keep conflict visible
-                result.bindings = [b for b in result.bindings if b.dataset == "building_gis_d010"] or result.bindings
+                d198_tokens = {
+                    "detail_usage",
+                    "usage_class",
+                    "permit_date",
+                    "building_age_years",
+                }
+                # usage on D198 dong scalars only — not bare usage on D010 counts/lists
+                if "usage" in tokens and "detail_usage" not in tokens:
+                    prefer_d198 = False
+                else:
+                    prefer_d198 = any(t in d198_tokens for t in tokens)
+                if prefer_d198 or ("usage" in tokens and "height_m" in tokens):
+                    result.bindings = [
+                        b for b in result.bindings if b.dataset == "building_attr_d198"
+                    ] or result.bindings
+                else:
+                    result.bindings = [
+                        b for b in result.bindings if b.dataset == "building_gis_d010"
+                    ] or result.bindings
+                if len({b.dataset for b in result.bindings}) <= 1:
+                    result.conflicts = [
+                        c
+                        for c in result.conflicts
+                        if not c.startswith("SEMANTIC_DATASET_CONFLICT")
+                    ]
+                else:
+                    result.conflicts.append("SEMANTIC_DATASET_CONFLICT:d010_vs_d198")
             elif len(grains) > 1:
                 result.conflicts.append("SEMANTIC_GRAIN_MISMATCH")
     return result

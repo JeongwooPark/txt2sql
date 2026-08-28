@@ -39,6 +39,50 @@ def _has_op(ops: list[str], name: str) -> bool:
     return name in ops
 
 
+_D198_STRONG_SLOTS = frozenset(
+    {"detail_usage", "permit_date", "approval_date", "building_age_years"}
+)
+
+
+def _has_d198_strong_slot(ir) -> bool:
+    if any(p.field in _D198_STRONG_SLOTS for p in ir.predicates):
+        return True
+    if ir.temporal is not None and (
+        ir.temporal.field in _D198_STRONG_SLOTS or ir.temporal.age_years is not None
+    ):
+        return True
+    return False
+
+
+def _prefer_d010_for_main_usage(ir) -> bool:
+    """List/rank with dong+main usage only — keep D010 (A9) path stable."""
+    if ir.task not in {"list", "rank"}:
+        return False
+    if not any(p.field == "usage" for p in ir.predicates):
+        return False
+    return not _has_d198_strong_slot(ir)
+
+
+def _d198_dong_usage_scalar(ir) -> bool:
+    """D198-covered dong/gu + usage/detail — ledger counts/scalars (A25/A27)."""
+    if ir.task not in {"aggregate", "group", "distribution", "count"}:
+        return False
+    if not any(p.field in {"usage", "detail_usage"} for p in ir.predicates):
+        return False
+    from txt2sql.domain import d198_gu_for_dong, d198_table_for_gu
+
+    place = ir.scope.place if ir.scope else None
+    if not place:
+        for p in ir.predicates:
+            if p.field == "legal_dong" and p.value:
+                place = str(p.value)
+                break
+    if not place:
+        return False
+    gu = str(place) if str(place).endswith(("구", "군")) else d198_gu_for_dong(str(place))
+    return bool(gu and d198_table_for_gu(gu))
+
+
 def select_physical_plan(logical: LogicalPlan) -> PhysicalPlan:
     """Select an executor strategy from LogicalPlan only.
 
@@ -58,6 +102,27 @@ def select_physical_plan(logical: LogicalPlan) -> PhysicalPlan:
     ops = _collect_ops(logical.root)
     ir = logical.query_ir
     datasets = {b.dataset for b in logical.bindings}
+
+    # D198 binding wins for temporal/detail/permit — not bare main-usage lists.
+    if "building_attr_d198" in datasets and not _prefer_d010_for_main_usage(ir):
+        return PhysicalPlan(
+            strategy="D198_EXECUTOR",
+            logical=logical,
+            cost=3.0,
+            reasons=("d198_binding",),
+            covered_ops=tuple(ops),
+            partial=False,
+        )
+
+    if _d198_dong_usage_scalar(ir):
+        return PhysicalPlan(
+            strategy="D198_EXECUTOR",
+            logical=logical,
+            cost=3.0,
+            reasons=("d198_dong_usage_scalar",),
+            covered_ops=tuple(ops),
+            partial=False,
+        )
 
     # Fast simple count: Scan + optional scope Filter + Aggregate(count) only
     simple_count = (
@@ -113,12 +178,15 @@ def select_physical_plan(logical: LogicalPlan) -> PhysicalPlan:
             partial=False,
         )
 
-    if "building_attr_d198" in datasets and "building_gis_d010" not in datasets:
+    # Ledger-oriented slots prefer D198; bare main usage on list/rank stays on D010.
+    if _has_d198_strong_slot(ir) or (
+        "building_attr_d198" in datasets and not _prefer_d010_for_main_usage(ir)
+    ) or _d198_dong_usage_scalar(ir):
         return PhysicalPlan(
             strategy="D198_EXECUTOR",
             logical=logical,
             cost=3.0,
-            reasons=("d198_binding",),
+            reasons=("d198_slot_or_binding",),
             covered_ops=tuple(ops),
             partial=False,
         )

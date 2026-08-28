@@ -63,3 +63,32 @@ def test_parse_sse_and_result() -> None:
     assert parsed["_session_id"] == "abc"
     assert parsed.get("ok") is True
     assert parsed.get("answer") == "안녕" or parsed.get("answer") == "안녕"
+
+
+def test_track_file_exclude_and_only() -> None:
+    import json
+    from pathlib import Path
+
+    from tests.map_ui_gold500.run import _load_track_ids, _select
+
+    track = {
+        "tracks": {
+            "data_quality": ["Q037", "Q038"],
+            "operator_promote": ["Q040", "Q319"],
+            "main": ["Q001", "Q040", "Q037"],
+        }
+    }
+    path = Path("tests/map_ui_gold500/_tmp_tracks_test.json")
+    path.write_text(json.dumps(track), encoding="utf-8")
+    try:
+        exclude = _load_track_ids(path, "data_quality")
+        only = _load_track_ids(path, "operator_promote")
+        assert exclude == {"Q037", "Q038"}
+        assert only == {"Q040", "Q319"}
+        questions = [{"id": i} for i in ("Q001", "Q037", "Q040", "Q319")]
+        main = _select(questions, None, 0, exclude=exclude)
+        assert [q["id"] for q in main] == ["Q001", "Q040", "Q319"]
+        gated = _select(questions, only, 0)
+        assert [q["id"] for q in gated] == ["Q040", "Q319"]
+    finally:
+        path.unlink(missing_ok=True)

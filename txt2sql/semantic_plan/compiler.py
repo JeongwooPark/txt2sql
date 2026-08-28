@@ -5,18 +5,23 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from txt2sql.domain import STRUCTURE_ALIASES, BUSAN_GU_CODES, d198_table_for_gu
+from txt2sql.domain import STRUCTURE_ALIASES, d198_table_for_gu
 from txt2sql.gazetteer import (
+    KIND_SIGUNGU,
     adm_cd_prefix_for_place,
     canonical_sido,
     census_adm_prefix,
+    classify_place,
+    load_gazetteer,
+    sigungu_a3_prefix,
     unique_sigungu_adm_prefix,
     uses_admin_boundary,
 )
+from txt2sql.canonical_physical_columns import D198_FIELD_COLUMNS
+from txt2sql.dataset_tables import resolve_basic_zone_table, resolve_building_table
+from txt2sql.place_scope import building_place_predicate
 from txt2sql.semantic_plan.catalog import (
     ADMIN_TABLE,
-    BASIC_ZONE_TABLE,
-    BUILDING_TABLE,
     INDUSTRIAL_TABLE,
     get_entity,
     get_field,
@@ -63,30 +68,9 @@ _ENTITY_ALIAS = {
     "industrial_complex": "i",
 }
 
-# D198 물리 컬럼. D010 A27은 지하층수, D198 A27은 세부용도.
-D198_BUILDING_COLUMNS = {
-    "id": "A1",
-    "name": "A13",
-    "legal_dong": "A4",
-    "lot_address": "A7",
-    "usage": "A25",
-    "structure": "A23",
-    "building_area_m2": "A18",
-    "gross_floor_area_m2": "A19",
-    "site_area_m2": "A17",
-    "height_m": "A30",
-    "ground_floors": "A31",
-    "basement_floors": "A32",
-    "building_coverage_ratio": "A21",
-    "floor_area_ratio": "A20",
-    "building_dong_name": "A14",
-    "special_land": "A6",
-    "approval_date": "A34",
-    "permit_date": "A33",
-    "detail_usage": "A27",
-    "usage_class": "A29",
-    "ledger_kind": "A12",
-}
+# D198 물리 컬럼 — single source: physical_columns.D198_FIELD_COLUMNS.
+# D010 A27은 지하층수, D198 A27은 세부용도 (동일 문자라도 테이블이 다름).
+D198_BUILDING_COLUMNS = dict(D198_FIELD_COLUMNS)
 
 
 def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
@@ -94,7 +78,14 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
     alias = _ENTITY_ALIAS.get(plan.entity, "t")
     col_map = _column_override(plan)
     d198_table = _d198_table_for_plan(plan)
-    default_table = d198_table or entity.default_table
+    if d198_table:
+        default_table = d198_table
+    elif plan.entity == "building":
+        default_table = resolve_building_table()
+    elif plan.entity == "basic_zone":
+        default_table = resolve_basic_zone_table()
+    else:
+        default_table = entity.default_table
     tables = [default_table]
     joins: list[str] = []
     where: list[str] = []
@@ -133,10 +124,19 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
             if extra and plan.entity == "admin_area":
                 where.append(extra)
         else:
-            want_boundary = spatial_mode == "boundary" or (
-                spatial_mode == "auto" and uses_admin_boundary(name)
+            want_boundary = (
+                place.kind == "admin_dong"
+                or spatial_mode == "boundary"
+                or (spatial_mode == "auto" and uses_admin_boundary(name))
             )
-            if want_boundary:
+            # 구·군은 BND ADM_NM이 아님 → A3 접두 (전국: sigungu_a3_prefix)
+            is_gu = place.kind == "gu" or (
+                name.endswith(("구", "군"))
+                and KIND_SIGUNGU in classify_place(name)
+            )
+            if is_gu:
+                where.append(_building_place_sql(alias, name, plan=plan))
+            elif want_boundary:
                 uses_boundary = True
                 if ADMIN_TABLE not in tables:
                     tables.append(ADMIN_TABLE)
@@ -149,7 +149,18 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
                 if extra:
                     where.append(extra)
             else:
-                where.append(_a4_place_sql(alias, name))
+                where.append(_building_place_sql(alias, name, plan=plan))
+
+    # 동 스코프 + 부가 구 필터
+    gu_scope = next(
+        (a for a in (plan.assumptions or []) if a.startswith("scope_gu:")),
+        None,
+    )
+    if gu_scope and plan.entity == "building":
+        gu_name = gu_scope.split(":", 1)[1]
+        code = sigungu_a3_prefix(gu_name)
+        if code:
+            where.append(f'{alias}."A3" LIKE {_literal(code + "%", "text")}')
 
     params: list[object] = []
     pred = effective_predicate(plan)
@@ -168,13 +179,53 @@ def compile_semantic_plan(plan: SemanticQueryPlan) -> CompiledSemanticQuery:
     )
     if gap_assump and plan.entity == "building":
         n = int(gap_assump.split(":", 1)[1])
-        a33 = _col(alias, "A33")
-        a34 = _col(alias, "A34")
+        a33 = _semantic_date_col(alias, "permit_date", col_map)
+        a34 = _semantic_date_col(alias, "approval_date", col_map)
         y33 = f"LEFT(regexp_replace({a33}::text, '[^0-9]', '', 'g'), 4)::int"
         y34 = f"LEFT(regexp_replace({a34}::text, '[^0-9]', '', 'g'), 4)::int"
         where.append(f"{a33}::text ~ '^[0-9]{{4}}'")
         where.append(f"{a34}::text ~ '^[0-9]{{4}}'")
         where.append(f"ABS({y33} - {y34}) >= {n}")
+
+    # 허가↔승인 시차: list/count는 WHERE, ratio는 SELECT FILTER(분자)에만 비교식
+    ratio_mode = bool(plan.ratios)
+    day_gte = next(
+        (a for a in (plan.assumptions or []) if a.startswith("permit_day_gap_gte:")),
+        None,
+    )
+    day_lte = next(
+        (a for a in (plan.assumptions or []) if a.startswith("permit_day_gap_lte:")),
+        None,
+    )
+    if (day_gte or day_lte) and plan.entity == "building":
+        a33 = _semantic_date_col(alias, "permit_date", col_map)
+        a34 = _semantic_date_col(alias, "approval_date", col_map)
+        where.append(f"{a33} ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'")
+        where.append(f"{a34} ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'")
+        if not ratio_mode:
+            if day_gte:
+                days = int(day_gte.split(":", 1)[1])
+                where.append(f"({a34}::date - {a33}::date) >= {days}")
+            if day_lte:
+                days = int(day_lte.split(":", 1)[1])
+                where.append(f"({a34}::date - {a33}::date) <= {days}")
+
+    if "permit_after_approval" in (plan.assumptions or []) and plan.entity == "building":
+        a33 = _semantic_date_col(alias, "permit_date", col_map)
+        a34 = _semantic_date_col(alias, "approval_date", col_map)
+        where.append(f"{a33} ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'")
+        where.append(f"{a34} ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'")
+        where.append(f"{a33}::date > {a34}::date")
+
+    if "permit_approval_year_neq" in (plan.assumptions or []) and plan.entity == "building":
+        a33 = _semantic_date_col(alias, "permit_date", col_map)
+        a34 = _semantic_date_col(alias, "approval_date", col_map)
+        y33 = f"LEFT(regexp_replace({a33}::text, '[^0-9]', '', 'g'), 4)::int"
+        y34 = f"LEFT(regexp_replace({a34}::text, '[^0-9]', '', 'g'), 4)::int"
+        where.append(f"{a33}::text ~ '^[0-9]{{4}}'")
+        where.append(f"{a34}::text ~ '^[0-9]{{4}}'")
+        if not ratio_mode:
+            where.append(f"{y33} <> {y34}")
 
     select_sql = _select_sql(alias, plan, col_map=col_map)
     from_sql = f"FROM {_ident(default_table, physical=True)} {alias}"
@@ -331,15 +382,48 @@ def _compile_expression(
     raise SemanticCompileError(f"unsupported expression kind: {expr.kind}")
 
 
+def _permit_lag_ratio_filter(
+    alias: str,
+    plan: SemanticQueryPlan,
+    col_map: dict[str, str] | None = None,
+) -> str | None:
+    """비율 질의의 FILTER(WHERE …)용 허가↔승인 시차 조건."""
+    a33 = _semantic_date_col(alias, "permit_date", col_map)
+    a34 = _semantic_date_col(alias, "approval_date", col_map)
+    day_lte = next(
+        (a for a in (plan.assumptions or []) if a.startswith("permit_day_gap_lte:")),
+        None,
+    )
+    if day_lte:
+        days = int(day_lte.split(":", 1)[1])
+        return f"({a34}::date - {a33}::date) <= {days}"
+    day_gte = next(
+        (a for a in (plan.assumptions or []) if a.startswith("permit_day_gap_gte:")),
+        None,
+    )
+    if day_gte:
+        days = int(day_gte.split(":", 1)[1])
+        return f"({a34}::date - {a33}::date) >= {days}"
+    if "permit_approval_year_neq" in (plan.assumptions or []):
+        y33 = f"LEFT(regexp_replace({a33}::text, '[^0-9]', '', 'g'), 4)::int"
+        y34 = f"LEFT(regexp_replace({a34}::text, '[^0-9]', '', 'g'), 4)::int"
+        return f"{y33} <> {y34}"
+    return None
+
+
 def _ratio_sql(
     alias: str,
     plan: SemanticQueryPlan,
     ratio,
     col_map: dict[str, str] | None = None,
 ) -> str:
-    num, _, _ = _predicate_sql(
-        alias, plan.entity, ratio.numerator_predicate, col_map=col_map
-    )
+    lag = _permit_lag_ratio_filter(alias, plan, col_map=col_map)
+    if lag is not None:
+        num = lag
+    else:
+        num, _, _ = _predicate_sql(
+            alias, plan.entity, ratio.numerator_predicate, col_map=col_map
+        )
     if ratio.denominator_predicate is not None:
         den, _, _ = _predicate_sql(
             alias, plan.entity, ratio.denominator_predicate, col_map=col_map
@@ -529,13 +613,14 @@ def _predicate_sql(
                 value, value2 = raw[0], raw[1]
             else:
                 raise SemanticCompileError("between requires [low, high] literal")
+        field_name = pred.left.field
         spec = FilterSpec(
-            field="approval_date",
+            field=field_name,
             operator=pred.operator,
             value=value,
             value2=value2,
         )
-        _field, col = _field_col(alias, entity, "approval_date", col_map)
+        _field, col = _field_col(alias, entity, field_name, col_map)
         return _approval_date_sql(col, spec), False, []
     if pred.left and pred.left.field == "building_age_years":
         raw = pred.right.value if pred.right else None
@@ -633,7 +718,20 @@ def _filter_sql(
         if raw in {"산", "산지"}:
             inner = f"({a6}::text = '2' OR TRIM(COALESCE({a7}::text, '')) = '산')"
         elif raw in {"일반", "일반지번"}:
-            inner = f"({a6}::text = '1' OR TRIM(COALESCE({a7}::text, '')) = '일반')"
+            inner = (
+                f"({a6}::text = '1' OR TRIM(COALESCE({a7}::text, '')) IN "
+                f"('일반', '일반지번'))"
+            )
+        elif raw in {"가지번", "가지"}:
+            inner = (
+                f"({a6}::text IN ('3', '4') OR COALESCE({a7}::text, '') ILIKE '%가지%')"
+            )
+        elif raw in {"블럭지번", "블록지번", "블럭", "블록"}:
+            inner = (
+                f"({a6}::text IN ('5', '6', '7', '8') OR "
+                f"COALESCE({a7}::text, '') ILIKE '%블럭%' OR "
+                f"COALESCE({a7}::text, '') ILIKE '%블록%')"
+            )
         else:
             inner = f"TRIM(COALESCE({a7}::text, '')) = {_literal(raw, 'text')}"
         if spec.operator == "neq":
@@ -748,16 +846,21 @@ def _apply_spatial_relations(
                     f") {z_alias}"
                 )
                 where.append(f"{z_alias}.geom IS NOT NULL")
-                where.append(f"{alias}.geometry && ST_Expand({z_alias}.geom, {expand})")
-                where.append(
-                    "ST_DWithin("
-                    f"{alias}.geometry::geography, "
-                    f"{_distance_origin_sql(z_alias, plan)}::geography, "
-                    f"{meters})"
-                )
                 if policy.kind == "distance_outside":
+                    # 「N m 밖에」= 경계로부터 N m 버퍼 밖 전체 (골드 NOT ST_DWithin)
                     where.append(
-                        f"NOT ST_Intersects({alias}.geometry, {z_alias}.geom)"
+                        "NOT ST_DWithin("
+                        f"{alias}.geometry::geography, "
+                        f"{_distance_origin_sql(z_alias, plan)}::geography, "
+                        f"{meters})"
+                    )
+                else:
+                    where.append(f"{alias}.geometry && ST_Expand({z_alias}.geom, {expand})")
+                    where.append(
+                        "ST_DWithin("
+                        f"{alias}.geometry::geography, "
+                        f"{_distance_origin_sql(z_alias, plan)}::geography, "
+                        f"{meters})"
                     )
                 uses_boundary = True
                 continue
@@ -847,11 +950,12 @@ def _apply_canonical_joins(
                     f"ON ST_Intersects({alias}.geometry, adm.geometry)"
                 )
         elif edge.edge_id == "building_in_basic_zone":
-            if BASIC_ZONE_TABLE not in tables:
-                tables.append(BASIC_ZONE_TABLE)
-            if not any(BASIC_ZONE_TABLE in item for item in joins):
+            bas = resolve_basic_zone_table()
+            if bas not in tables:
+                tables.append(bas)
+            if not any(bas in item for item in joins):
                 joins.append(
-                    f"JOIN {_ident(BASIC_ZONE_TABLE, physical=True)} bas "
+                    f"JOIN {_ident(bas, physical=True)} bas "
                     f"ON ST_Intersects({alias}.geometry, bas.geometry)"
                 )
         elif edge.edge_id == "building_in_industrial":
@@ -867,9 +971,16 @@ def _apply_canonical_joins(
 
 
 def _sigungu_name_sql(alias: str) -> str:
+    """A3 접두 → 시군구명. gazetteer sigungu_pnu_prefix 만 사용 (BUSAN_GU_CODES CASE 금지)."""
+    mapping = load_gazetteer().sigungu_pnu_prefix
+    if not mapping:
+        return "NULL"
+    # 긴 코드 우선(접두 충돌 방지). 동명 구는 대표 PNU 하나만 있다.
+    items = sorted(mapping.items(), key=lambda kv: (-len(kv[1]), kv[1], kv[0]))
     whens = " ".join(
         f"WHEN {alias}.\"A3\" LIKE {_literal(code + '%', 'text')} THEN {_literal(name, 'text')}"
-        for name, code in BUSAN_GU_CODES.items()
+        for name, code in items
+        if code.isdigit()
     )
     return f"(CASE {whens} ELSE NULL END)"
 
@@ -903,15 +1014,27 @@ def _admin_place_pred(alias: str, place_name: str, plan=None) -> str:
     return pred
 
 
-def _a4_place_sql(alias: str, place: str) -> str:
-    col = f'{alias}."A4"'
-    if place.endswith(("동", "가", "리", "로")):
-        return f"({col} LIKE {_literal('% ' + place, 'text')} OR {col} = {_literal(place, 'text')})"
-    code = BUSAN_GU_CODES.get(place)
-    uniq = unique_sigungu_adm_prefix(place)
-    if code and uniq in {None, "21"}:
-        return f'{alias}."A3" LIKE {_literal(code + "%", "text")}'
-    return f"{col} LIKE {_literal('%' + place + '%', 'text')}"
+def _plan_sido_context(plan=None) -> str | None:
+    if plan is None or not plan.scope or not plan.scope.place:
+        return None
+    spec = plan.scope.place
+    if spec.kind == "sido":
+        return spec.name
+    return None
+
+
+def _building_place_sql(alias: str, place: str, plan=None) -> str:
+    """구=A3 접두, 법정동=A4. place_scope 정책과 동일."""
+    return building_place_predicate(
+        place,
+        alias=alias,
+        sido=_plan_sido_context(plan),
+    )
+
+
+# 레거시 별칭
+def _a4_place_sql(alias: str, place: str, plan=None) -> str:
+    return _building_place_sql(alias, place, plan=plan)
 
 
 def _admin_name_sql(alias: str, place: str) -> str:
@@ -927,7 +1050,7 @@ def _admin_name_sql(alias: str, place: str) -> str:
     )
 
 
-def _entity_place_sql(alias: str, entity: str, place: str) -> str:
+def _entity_place_sql(alias: str, entity: str, place: str, plan=None) -> str:
     if entity == "admin_area":
         return _admin_name_sql(alias, place)
     if entity == "basic_zone":
@@ -946,23 +1069,35 @@ def _entity_place_sql(alias: str, entity: str, place: str) -> str:
             return "(" + " OR ".join(clauses) + ")"
         pat = _literal("%" + place + "%", "text")
         return f'({alias}."A8" ILIKE {pat} OR {alias}."A9" ILIKE {pat})'
-    return _a4_place_sql(alias, place)
+    return _building_place_sql(alias, place, plan=plan)
 
 
 def _spatial_target_sql(
     entity: str, alias: str, place: str, plan=None
 ) -> tuple[str, str]:
     if entity == "basic_zone":
-        return BASIC_ZONE_TABLE, _entity_place_sql(alias, entity, place)
+        return resolve_basic_zone_table(), _entity_place_sql(
+            alias, entity, place, plan=plan
+        )
     if entity == "industrial_complex":
-        return INDUSTRIAL_TABLE, _entity_place_sql(alias, entity, place)
+        return INDUSTRIAL_TABLE, _entity_place_sql(alias, entity, place, plan=plan)
     if entity == "building":
-        return BUILDING_TABLE, _a4_place_sql(alias, place)
+        return resolve_building_table(), _building_place_sql(alias, place, plan=plan)
     clause = _admin_name_sql(alias, place)
     extra = _adm_cd_sql(alias, place, plan)
     if extra:
         clause = f"{clause} AND {extra}"
     return ADMIN_TABLE, clause
+
+
+def _semantic_date_col(
+    alias: str,
+    field: str,
+    col_map: dict[str, str] | None = None,
+) -> str:
+    """permit_date / approval_date → catalog/col_map 물리 컬럼."""
+    _field, col = _field_col(alias, "building", field, col_map)
+    return col
 
 
 def _predicate_node_ids(pred: PredicateSpec) -> list[str]:
@@ -978,6 +1113,10 @@ def _predicate_node_ids(pred: PredicateSpec) -> list[str]:
 
 
 def _plan_uses_d198_slots(plan: SemanticQueryPlan) -> bool:
+    if "d010_gis" in (plan.assumptions or []):
+        return False
+    if "d198_ledger" in (plan.assumptions or []):
+        return True
     fields = {item.field for item in plan.filters}
     from txt2sql.semantic_plan.predicate_utils import walk_predicate
 
@@ -987,9 +1126,15 @@ def _plan_uses_d198_slots(plan: SemanticQueryPlan) -> bool:
             if node.op == "cmp" and node.left and node.left.field:
                 fields.add(node.left.field)
     return bool(
-        fields & {"detail_usage", "usage_class", "ledger_kind", "permit_date"}
-    ) or (
-        "d198_ledger" in (plan.assumptions or [])
+        fields
+        & {
+            "detail_usage",
+            "usage_class",
+            "ledger_kind",
+            "permit_date",
+            "approval_date",
+            "building_age_years",
+        }
     )
 
 
@@ -998,8 +1143,21 @@ def _d198_table_for_plan(plan: SemanticQueryPlan) -> str | None:
         return None
     place = plan.scope.place.name.strip() if plan.scope and plan.scope.place else ""
     gu = place if place.endswith(("구", "군")) else None
+    if gu is None and place:
+        from txt2sql.domain import d198_gu_for_dong
+
+        gu = d198_gu_for_dong(place)
     table = d198_table_for_gu(gu) if gu else None
     if table is None:
+        # Temporal on uncovered district: fall back to D010 date column (no raise).
+        if any(
+            f.field in {"approval_date", "building_age_years"}
+            for f in plan.filters
+        ) and not any(
+            f.field in {"detail_usage", "usage_class", "ledger_kind", "permit_date"}
+            for f in plan.filters
+        ):
+            return None
         raise SemanticCompileError(
             "detail_usage/usage_class require a D198-covered district"
         )
@@ -1114,6 +1272,17 @@ def _approval_date_sql(col: str, spec: FilterSpec) -> str:
         lo, hi = spec.value, spec.value2
         return f"{valid} AND {year_expr}::int BETWEEN {int(lo)} AND {int(hi)}"
     raw = spec.value
+    if isinstance(raw, str) and raw.startswith("rel_years:"):
+        years = int(raw.split(":", 1)[1])
+        if years < 1 or years > 200:
+            raise SemanticCompileError(f"invalid rel_years: {raw}")
+        if op is None:
+            raise SemanticCompileError(f"unknown operator: {spec.operator}")
+        date_ok = f"{col}::text ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'"
+        return (
+            f"{date_ok} AND {col}::date {op} "
+            f"(CURRENT_DATE - INTERVAL '{years} years')"
+        )
     if isinstance(raw, str) and re.match(r"^\d{4}-\d{2}-\d{2}", raw):
         year = int(raw[:4])
         iso = raw[:10]

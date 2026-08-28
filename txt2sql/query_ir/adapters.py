@@ -100,6 +100,23 @@ def contract_to_query_ir(contract: Any) -> QueryIR:
         concept = str(getattr(span, "value", None) or getattr(span, "text", "") or "")
         if concept:
             measures.append(MeasureIR(concept=concept, provenance=_span_prov(span)))
+        # Categorical metric labels (e.g. 단독주택→usage) become equality predicates.
+        text = str(getattr(span, "text", "") or "").strip()
+        field = str(getattr(span, "value", "") or "").strip()
+        if (
+            text
+            and field in {"usage", "detail_usage", "structure", "violation_status"}
+            and text not in {"용도", "구조", "세부용도", "높이", "연면적", "건폐율", "용적률"}
+        ):
+            if not any(p.field == field and p.value == text for p in predicates):
+                predicates.append(
+                    PredicateIR(
+                        field=field,
+                        operator="eq",
+                        value=text,
+                        provenance=_span_prov(span),
+                    )
+                )
 
     aggregations: list[AggregationIR] = []
     for req in getattr(contract, "aggregation_requests", None) or []:
@@ -386,27 +403,39 @@ def query_ir_to_semantic_plan(ir: QueryIR) -> Any:
             )
         )
 
-    # TemporalIR → FilterSpec (AGE/year predicates). Prefer explicit temporal over NL.
+    # TemporalIR → FilterSpec when not already present as a predicate.
     if ir.temporal is not None:
         t = ir.temporal
         field = t.field or "approval_date"
         if t.age_years is not None and t.operator:
-            filters.append(
-                FilterSpec(
-                    field="building_age_years",
-                    operator=t.operator,  # type: ignore[arg-type]
-                    value=t.age_years,
-                )
+            already = any(
+                f.field == "building_age_years"
+                and f.operator == t.operator
+                and f.value == t.age_years
+                for f in filters
             )
+            if not already:
+                filters.append(
+                    FilterSpec(
+                        field="building_age_years",
+                        operator=t.operator,  # type: ignore[arg-type]
+                        value=t.age_years,
+                    )
+                )
         elif t.operator and t.value is not None:
-            filters.append(
-                FilterSpec(
-                    field=field,
-                    operator=t.operator,  # type: ignore[arg-type]
-                    value=t.value,
-                    value2=t.value2,
-                )
+            already = any(
+                f.field == field and f.operator == t.operator and f.value == t.value
+                for f in filters
             )
+            if not already:
+                filters.append(
+                    FilterSpec(
+                        field=field,
+                        operator=t.operator,  # type: ignore[arg-type]
+                        value=t.value,
+                        value2=t.value2,
+                    )
+                )
 
     aggregations = [
         AggregationSpec(

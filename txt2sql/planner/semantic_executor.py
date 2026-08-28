@@ -2,18 +2,36 @@
 
 from __future__ import annotations
 
-from typing import Any
+import re
+from dataclasses import asdict, dataclass
+from typing import Any, Literal
 
 import psycopg
 
+from txt2sql.canonical_physical_columns import D010_FIELD_COLUMNS, D198_FIELD_COLUMNS
 from txt2sql.compiler.safety import validate_compiled_sql
 from txt2sql.db import execute_query
 from txt2sql.planner.executor_adapter import ExecutionPlanBundle
-from txt2sql.planner.physical import reject_partial_execution
+from txt2sql.planner.logical import LogicalPlan
+from txt2sql.planner.physical import PhysicalPlan, reject_partial_execution
 from txt2sql.query_ir.adapters import query_ir_to_semantic_plan
-from txt2sql.query_ir.models import PredicateIR, QueryIR, TemporalIR
+from txt2sql.query_ir.models import PredicateIR, QueryIR, ScopeIR, TemporalIR
+from txt2sql.semantic_plan.catalog import get_entity
 from txt2sql.semantic_plan.compiler import compile_semantic_plan
-from txt2sql.semantic_plan.models import OrderSpec, SemanticQueryPlan
+from txt2sql.semantic_plan.models import AggregationSpec, OrderSpec, SemanticQueryPlan
+
+V2FailureCode = Literal["GATE", "COMPILE", "VALIDATE", "EXECUTE", "PARTIAL"]
+
+
+@dataclass(frozen=True)
+class SemanticV2Failure:
+    code: V2FailureCode
+    message: str
+    physical_strategy: str | None = None
+    logical_status: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 def refine_query_ir_for_compile(ir: QueryIR, *, question: str | None = None) -> QueryIR:
@@ -76,38 +94,199 @@ def refine_query_ir_for_compile(ir: QueryIR, *, question: str | None = None) -> 
         if m.concept in concept_to_field:
             m.concept = concept_to_field[m.concept]
 
-    # Enrich temporal from NL when contract only flagged wants_temporal.
+    # Enrich temporal from NL; replace conflicting date predicates from contract/operators.
     if question and (data.temporal is not None or _looks_temporal(question)):
         from txt2sql.query_understanding.temporal import parse_temporal_filters
 
         tfilters = parse_temporal_filters(question)
-        if tfilters and data.temporal is None:
-            data.temporal = TemporalIR()
-        for tf in tfilters:
-            if any(
-                p.field == tf.field and p.operator == tf.operator and p.value == tf.value
-                for p in data.predicates
-            ):
-                continue
-            data.predicates.append(
-                PredicateIR(
-                    field=tf.field,
-                    operator=tf.operator,
-                    value=tf.value,
-                    value2=tf.value2,
-                    unit=tf.unit,
-                )
+        if tfilters:
+            date_fields = {"approval_date", "permit_date", "building_age_years"}
+            data.predicates = [p for p in data.predicates if p.field not in date_fields]
+            data.temporal = TemporalIR(
+                field=tfilters[0].field,
+                operator=tfilters[0].operator,
+                value=tfilters[0].value,
+                value2=tfilters[0].value2,
             )
-            if data.temporal is not None and data.temporal.field is None:
-                data.temporal.field = tf.field
-                data.temporal.operator = tf.operator
-                data.temporal.value = tf.value
-                data.temporal.value2 = tf.value2
+            for tf in tfilters:
+                data.predicates.append(
+                    PredicateIR(
+                        field=tf.field,
+                        operator=tf.operator,
+                        value=tf.value,
+                        value2=tf.value2,
+                        unit=tf.unit,
+                    )
+                )
 
-    # Grain: prefer building-level D010 concepts; avoid forcing D198 unless permit/approval needed.
-    if data.temporal and data.temporal.field in {None, "approval_date", "permit_date"}:
-        pass  # catalog binder decides D198 when date fields bind
+    _enrich_d198_from_nl(data, question)
+
     return data
+
+
+# D198 A27 (detail_usage) vs A25 (main usage) — gold-aligned
+D198_A27_TERMS = frozenset(
+    {
+        "아파트",
+        "오피스텔",
+        "다세대주택",
+        "다가구주택",
+        "단독주택",
+        "연립주택",
+        "일반음식점",
+        "근린생활시설",
+    }
+)
+
+
+def _enrich_d198_from_nl(data: QueryIR, question: str | None) -> None:
+    """Map NL usage terms to D198 filters (aggregate scalars only)."""
+    if not question or data.task != "aggregate":
+        return
+    from txt2sql.domain import extract_detail_usages, extract_place
+
+    details = extract_detail_usages(question)
+    if details:
+        detail_set = set(details)
+        data.predicates = [
+            p
+            for p in data.predicates
+            if not (
+                p.field in {"usage", "detail_usage"}
+                and str(p.value) in detail_set
+            )
+        ]
+        for term in details:
+            field = "detail_usage" if term in D198_A27_TERMS else "usage"
+            if not any(
+                p.field == field and str(p.value) == term for p in data.predicates
+            ):
+                data.predicates.append(
+                    PredicateIR(field=field, operator="eq", value=term)
+                )
+
+    place = extract_place(question) or (data.scope.place if data.scope else None)
+    if place and str(place).endswith(("동", "가", "리")):
+        data.predicates = [p for p in data.predicates if p.field != "legal_dong"]
+        if data.scope is None:
+            data.scope = ScopeIR(place=str(place))
+        elif not data.scope.place:
+            data.scope = data.scope.model_copy(update={"place": str(place)})
+
+
+def _parse_percentile_tail(question: str) -> tuple[float, str, str] | None:
+    """상위 N% … 평균 X 패턴 → (percentile_cont, rank_field, agg_field)."""
+    q = question or ""
+    m = re.search(r"상위\s*(\d+(?:\.\d+)?)\s*%\s*", q)
+    if not m or "평균" not in q:
+        return None
+    top_pct = float(m.group(1))
+    if top_pct <= 0 or top_pct >= 100:
+        return None
+    pct = round(1.0 - top_pct / 100.0, 6)
+
+    rank_field = (
+        "height_m"
+        if "높이" in q and "연면적" not in q.split("평균")[0]
+        else "gross_floor_area_m2"
+        if "연면적" in q.split("평균")[0]
+        else None
+    )
+    if "높이" in q and "연면적" in q and "상위" in q:
+        before_avg = q.split("평균", 1)[0]
+        rank_field = "height_m" if "높이" in before_avg else "gross_floor_area_m2"
+        if "높이" in before_avg and "연면적" in before_avg:
+            rank_field = (
+                "height_m"
+                if before_avg.index("높이") < before_avg.index("연면적")
+                else "gross_floor_area_m2"
+            )
+
+    agg_field = None
+    if "평균 연면적" in q or "평균 건축면적" in q:
+        agg_field = "gross_floor_area_m2"
+    elif "평균 지상층" in q or "평균 층" in q:
+        agg_field = "ground_floors"
+    elif "평균 높이" in q:
+        agg_field = "height_m"
+
+    if rank_field is None or agg_field is None or rank_field == agg_field:
+        return None
+    return pct, rank_field, agg_field
+
+
+def _compile_percentile_tail_sql(
+    question: str,
+    *,
+    pct: float,
+    rank_field: str,
+    agg_field: str,
+    plan: SemanticQueryPlan,
+) -> str:
+    """Percentile-threshold tail aggregate (Q191/Q192/Q298-class)."""
+    use_d198 = "d198_ledger" in (plan.assumptions or []) or any(
+        f.field in {"detail_usage", "usage", "usage_class"} for f in plan.filters
+    )
+    col_map = D198_FIELD_COLUMNS if use_d198 else D010_FIELD_COLUMNS
+    rank_col = col_map[rank_field]
+    agg_col = col_map[agg_field]
+
+    if use_d198:
+        from txt2sql.semantic_plan.compiler import _d198_table_for_plan
+
+        table = _d198_table_for_plan(plan) or get_entity("building").default_table
+    else:
+        table = get_entity("building").default_table
+
+    rank_expr = f'NULLIF(TRIM(b."{rank_col}"::text), \'\')::float8'
+    agg_expr = f'NULLIF(TRIM(b."{agg_col}"::text), \'\')::float8'
+    pct_sql = f"{pct:g}"
+
+    where_parts = [
+        f"{rank_expr} IS NOT NULL",
+        f"{agg_expr} IS NOT NULL",
+    ]
+    if rank_field == "height_m" and not use_d198:
+        where_parts.insert(0, f"{rank_expr} > 0")
+        where_parts.append(f"{rank_expr} <= 500")
+    elif rank_field == "gross_floor_area_m2" and not use_d198:
+        where_parts.insert(0, f"{rank_expr} > 0")
+
+    for filt in plan.filters:
+        if filt.field == "usage" and filt.operator == "eq":
+            where_parts.append(f'b."A25" = {_sql_lit(filt.value)}')
+        elif filt.field == "detail_usage" and filt.operator == "eq":
+            where_parts.append(f'b."A27" = {_sql_lit(filt.value)}')
+
+    where_sql = " AND ".join(where_parts)
+    rank_alias = "gfa" if rank_field == "gross_floor_area_m2" else "h"
+    agg_alias = "fl" if agg_field == "ground_floors" else "v"
+    avg_alias = f"avg_{agg_field}"
+
+    return f"""WITH base AS (
+  SELECT {rank_expr} AS {rank_alias}, {agg_expr} AS {agg_alias}
+  FROM "{table}" b
+  WHERE {where_sql}
+), p AS (
+  SELECT PERCENTILE_CONT({pct_sql}) WITHIN GROUP (ORDER BY {rank_alias}) AS cut FROM base
+)
+SELECT AVG({agg_alias}) AS "{avg_alias}", COUNT(*)::bigint AS "n", (SELECT cut FROM p) AS "cut"
+FROM base, p WHERE {rank_alias} >= p.cut"""
+
+
+def _sql_lit(value: object) -> str:
+    if value is None:
+        return "NULL"
+    text = str(value).replace("'", "''")
+    return f"'{text}'"
+
+
+def _append_aggregate_count(plan: SemanticQueryPlan) -> None:
+    if plan.query_kind != "aggregate" or not plan.aggregations:
+        return
+    if any(a.function == "count" for a in plan.aggregations):
+        return
+    plan.aggregations.append(AggregationSpec(function="count", alias="n"))
 
 
 def _looks_temporal(question: str) -> bool:
@@ -116,23 +295,110 @@ def _looks_temporal(question: str) -> bool:
     return any(n in q for n in needles)
 
 
-def build_sqp(ir: QueryIR, *, question: str | None = None) -> SemanticQueryPlan:
+def physical_to_dataset_assumptions(
+    physical: PhysicalPlan | None,
+    logical: LogicalPlan | None = None,
+) -> list[str]:
+    """Map PhysicalPlan strategy/bindings to SQP assumptions (compiler input)."""
+    if physical is None:
+        return []
+    datasets = set()
+    if logical is not None:
+        datasets = {b.dataset for b in logical.bindings}
+    elif physical.logical is not None:
+        datasets = {b.dataset for b in physical.logical.bindings}
+
+    if physical.strategy == "D198_EXECUTOR" or "building_attr_d198" in datasets:
+        return ["d198_ledger"]
+    if physical.strategy == "D010_EXECUTOR":
+        return ["d010_gis"]
+    return []
+
+
+def _apply_dataset_assumptions(
+    plan: SemanticQueryPlan,
+    *,
+    physical: PhysicalPlan | None,
+    logical: LogicalPlan | None,
+    refined: QueryIR,
+) -> None:
+    """PhysicalPlan wins over NL heuristics for dataset selection."""
+    notes = list(plan.assumptions or [])
+    phys_notes = physical_to_dataset_assumptions(physical, logical)
+
+    if "d010_gis" in phys_notes:
+        # Explicit D010: strip ledger force from NL heuristics.
+        notes = [n for n in notes if n != "d198_ledger"]
+        if "d010_gis" not in notes:
+            notes.append("d010_gis")
+        plan.assumptions = notes
+        return
+
+    if "d198_ledger" in phys_notes:
+        if "d198_ledger" not in notes:
+            notes.append("d198_ledger")
+        plan.assumptions = notes
+        return
+
+    # No decisive physical dataset: keep NL temporal/usage heuristics.
+    if any(
+        p.field in {"approval_date", "permit_date", "building_age_years"}
+        for p in refined.predicates
+    ) or (
+        refined.temporal
+        and refined.temporal.field in {"approval_date", "permit_date", "building_age_years"}
+    ):
+        if "d198_ledger" not in notes:
+            notes.append("d198_ledger")
+    usage_fields = {p.field for p in refined.predicates} & {"usage", "detail_usage"}
+    if usage_fields:
+        bare_main_usage = "usage" in usage_fields and "detail_usage" not in usage_fields
+        if refined.task in {"list", "rank", "count"} and bare_main_usage:
+            notes = [n for n in notes if n != "d198_ledger"]
+        elif "d198_ledger" not in notes:
+            notes.append("d198_ledger")
+    plan.assumptions = notes
+
+
+def build_sqp(
+    ir: QueryIR,
+    *,
+    question: str | None = None,
+    physical: PhysicalPlan | None = None,
+    logical: LogicalPlan | None = None,
+) -> SemanticQueryPlan:
     refined = refine_query_ir_for_compile(ir, question=question)
     plan = query_ir_to_semantic_plan(refined)
+    _apply_dataset_assumptions(
+        plan, physical=physical, logical=logical or (physical.logical if physical else None), refined=refined
+    )
     # Ensure group dimensions present
     if refined.dimensions and not plan.group_by:
         plan.group_by = [d.field for d in refined.dimensions]
     # Stable secondary order for group/rank
     if plan.query_kind in {"distribution", "rank"} and plan.group_by:
+        primary = "count"
+        if plan.aggregations:
+            a0 = plan.aggregations[0]
+            if a0.alias:
+                primary = a0.alias
+            elif a0.function == "count":
+                primary = "count"
+            elif a0.function and a0.field:
+                primary = f"{a0.function}_{a0.field}"
+                a0.alias = primary
         if not plan.order_by:
             plan.order_by = [
-                OrderSpec(field="count", direction="desc"),
+                OrderSpec(field=primary, direction="desc"),
                 OrderSpec(field=plan.group_by[0], direction="asc"),
             ]
         elif len(plan.order_by) == 1 and plan.group_by:
             key = plan.group_by[0]
             if all(o.field != key for o in plan.order_by):
                 plan.order_by = list(plan.order_by) + [OrderSpec(field=key, direction="asc")]
+            # Replace bogus ORDER BY count when no count agg exists
+            if plan.order_by[0].field == "count" and primary != "count":
+                plan.order_by[0] = OrderSpec(field=primary, direction="desc")
     # Rank/list-top: unify Sort+Limit defaults
     if plan.query_kind == "rank":
         if not plan.order_by and plan.aggregations:
@@ -144,6 +410,7 @@ def build_sqp(ir: QueryIR, *, question: str | None = None) -> SemanticQueryPlan:
             plan.select = list(refined.outputs)
     if plan.query_kind == "list" and plan.limit is None and refined.limit:
         plan.limit = refined.limit
+    _append_aggregate_count(plan)
     return plan
 
 
@@ -151,13 +418,43 @@ def compile_sql_from_bundle(
     bundle: ExecutionPlanBundle, *, question: str | None = None
 ) -> tuple[str, dict[str, Any]]:
     reject_partial_execution(bundle.physical)
-    plan = build_sqp(bundle.query_ir, question=question)
+    plan = build_sqp(
+        bundle.query_ir,
+        question=question,
+        physical=bundle.physical,
+        logical=bundle.logical,
+    )
+    if question:
+        tail = _parse_percentile_tail(question)
+        if tail is not None and bundle.query_ir.task == "aggregate":
+            pct, rank_field, agg_field = tail
+            sql = _compile_percentile_tail_sql(
+                question,
+                pct=pct,
+                rank_field=rank_field,
+                agg_field=agg_field,
+                plan=plan,
+            )
+            table = get_entity("building").default_table
+            if "d198_ledger" in (plan.assumptions or []):
+                from txt2sql.semantic_plan.compiler import _d198_table_for_plan
+
+                table = _d198_table_for_plan(plan) or table
+            return sql, {
+                "tables": [table],
+                "route": "semantic_v2",
+                "semantic_plan": plan.model_dump(),
+                "assumptions": list(plan.assumptions or []) + ["percentile_tail"],
+                "physical_strategy": bundle.physical.strategy,
+            }
     compiled = compile_semantic_plan(plan)
     sql = compiled.sql if hasattr(compiled, "sql") else str(compiled)
     meta = {
         "tables": getattr(compiled, "tables", []),
         "route": getattr(compiled, "route", "semantic_v2"),
         "semantic_plan": getattr(compiled, "semantic_plan", plan.model_dump()),
+        "assumptions": list(plan.assumptions or []),
+        "physical_strategy": bundle.physical.strategy,
     }
     return sql, meta
 
@@ -199,6 +496,14 @@ def should_try_semantic_v2(bundle: ExecutionPlanBundle) -> bool:
     hints = ir.provenance.legacy_hints or {}
     source = ir.provenance.source_text or ""
 
+    has_temporal = ir.temporal is not None and (
+        ir.temporal.field is not None or ir.temporal.age_years is not None
+    )
+    has_temporal = has_temporal or any(
+        p.field in {"approval_date", "permit_date", "building_age_years"}
+        for p in ir.predicates
+    )
+
     if ir.task == "aggregate":
         # Bare "면적 평균" is often clarify/meta — do not force AVG(gross_floor_area).
         if "면적" in source and not any(
@@ -207,20 +512,56 @@ def should_try_semantic_v2(bundle: ExecutionPlanBundle) -> bool:
             return False
         return bool(ir.aggregations)
     if ir.task in {"group", "distribution"}:
-        return bool(ir.dimensions)
+        # Simple group+count/avg with explicit dimensions (no spatial).
+        if not ir.dimensions:
+            return False
+        if any(a.function == "ratio" for a in ir.aggregations):
+            return False
+        return bool(ir.aggregations) or hints.get("wants_count") is True
     if ir.task == "ratio":
-        return True
+        return False  # ratio still unstable on v2
     if ir.task == "count":
-        # Avoid list-shaped questions mis-tagged as count (e.g. "보여줘").
+        # Avoid list-shaped questions mis-tagged as count (e.g. "보여줘", "찾아줘").
         if not hints.get("wants_count"):
             return False
-        if ir.temporal is not None:
+        list_shaped = any(k in source for k in ("보여", "찾아", "목록", "리스트"))
+        count_shaped = any(
+            k in source for k in ("몇", "개수", "건수", "채", "수를", "수가", "개야")
+        )
+        if list_shaped and not count_shaped:
+            return False
+        if has_temporal:
             return True
         # Multi-predicate attribute counts (e.g. coverage + FAR thresholds).
         if len(ir.predicates) >= 2:
             return True
         return False
     return False
+
+
+def _v2_fail(
+    bundle: ExecutionPlanBundle,
+    code: V2FailureCode,
+    message: str,
+) -> dict[str, Any]:
+    failure = SemanticV2Failure(
+        code=code,
+        message=message,
+        physical_strategy=bundle.physical.strategy,
+        logical_status=bundle.logical.status,
+    )
+    return {
+        "ok": False,
+        "v2_failure": failure.as_dict(),
+        "v2_failure_code": failure.code,
+        "fallback_source": "legacy_after_semantic_v2",
+        **execution_trace(
+            bundle,
+            execution_source="semantic_v2",
+            compiler_source="deterministic_compiler_v2",
+            fallback_source="legacy_after_semantic_v2",
+        ),
+    }
 
 
 def try_execute_semantic_v2(
@@ -230,15 +571,29 @@ def try_execute_semantic_v2(
     conn: psycopg.Connection,
     default_limit: int = 100,
 ) -> dict[str, Any] | None:
-    """Compile+execute via semantic-v2. Return None to fall back to legacy."""
+    """Compile+execute via semantic-v2.
+
+    Returns:
+      - success dict with ok=True
+      - failure dict with ok=False + v2_failure_code (typed)
+      - None only when the gate declines (caller should not treat as hard fail)
+    """
     if not should_try_semantic_v2(bundle):
         return None
+    if bundle.physical.partial:
+        return _v2_fail(bundle, "PARTIAL", "partial coverage forbidden")
     try:
         sql, meta = compile_sql_from_bundle(bundle, question=question)
+    except Exception as exc:  # noqa: BLE001
+        return _v2_fail(bundle, "COMPILE", f"{type(exc).__name__}: {exc}")
+    try:
         validate_compiled_sql(sql, question=question, conn=None)
+    except Exception as exc:  # noqa: BLE001
+        return _v2_fail(bundle, "VALIDATE", f"{type(exc).__name__}: {exc}")
+    try:
         rows = execute_query(conn, sql, default_limit=default_limit)
-    except Exception:
-        return None
+    except Exception as exc:  # noqa: BLE001
+        return _v2_fail(bundle, "EXECUTE", f"{type(exc).__name__}: {exc}")
     return {
         "ok": True,
         "sql": sql,
@@ -247,6 +602,8 @@ def try_execute_semantic_v2(
         "tables": meta.get("tables"),
         "route": "semantic_v2",
         "answer": None,
+        "v2_failure_code": None,
+        "fallback_source": None,
         **execution_trace(
             bundle,
             execution_source="semantic_v2",
