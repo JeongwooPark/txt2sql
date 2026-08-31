@@ -44,6 +44,7 @@ def score_case(
     query_ir_task: str | None = None,
     logical_status: str | None = None,
     physical_strategy: str | None = None,
+    execution_trace: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from txt2sql.evaluation.taxonomy import diagnose_eval_failure
 
@@ -54,7 +55,14 @@ def score_case(
     elif error and not answer:
         reason = error
     else:
-        ok, reason = score(case.get("kind") or "fallback", case.get("gold") or "", answer, pred_rows)
+        ok, reason = score(
+            case.get("kind") or "fallback",
+            case.get("gold") or "",
+            answer,
+            pred_rows,
+            question=case.get("q") or "",
+            sql=sql,
+        )
         if error and not ok:
             reason = f"engine-fail:{error}"
     rec = {
@@ -97,4 +105,15 @@ def score_case(
         "ui": ui,
         "process": process,
     }
+    # Phase 2: preserve execution_trace from API if present
+    if execution_trace:
+        rec["execution_trace"] = execution_trace
+    for step in process or []:
+        if isinstance(step, dict):
+            detail = step.get("detail") or {}
+            if isinstance(detail, dict) and detail.get("execution_trace"):
+                rec["execution_trace"] = detail["execution_trace"]
+                break
+    if ui.get("execution_trace"):
+        rec["execution_trace"] = ui["execution_trace"]
     return rec

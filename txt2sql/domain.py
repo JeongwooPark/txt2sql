@@ -104,30 +104,6 @@ DETAIL_USAGE_ALIASES: dict[str, str] = {
     "학원": "학원",
 }
 
-# cat4(금정·동래) 법정동 → 구. D198 테이블 선택용.
-D198_DONG_TO_GU: dict[str, str] = {
-    "구서동": "금정구",
-    "금사동": "금정구",
-    "남산동": "금정구",
-    "두구동": "금정구",
-    "부곡동": "금정구",
-    "서동": "금정구",
-    "장전동": "금정구",
-    "회동동": "금정구",
-    "청룡동": "금정구",
-    "노포동": "금정구",
-    "선동": "금정구",
-    "오륜동": "금정구",
-    "낙민동": "동래구",
-    "명륜동": "동래구",
-    "명장동": "동래구",
-    "복천동": "동래구",
-    "사직동": "동래구",
-    "수안동": "동래구",
-    "안락동": "동래구",
-    "온천동": "동래구",
-    "칠산동": "동래구",
-}
 USAGE_CLASS_ALIASES: dict[str, str] = {
     "문교사회용": "문교사회용",
     "공공용": "공공용",
@@ -297,13 +273,8 @@ def extract_special_land(question: str) -> tuple[str, str] | None:
 
 # 구 단위 용도별건물(사용승인·허가일자 보유).
 # 본선은 런타임 coverage (`set_d198_coverage` / data.coverage.refresh_dataset_coverage).
-# 아래 DEFAULT 는 DB 미연결·커버리지 공백·골드 베이스라인용 **폴백**이다
-# (금정·동래만 하드코딩한 것이 아니라, 전국 확장 시 discover 가 구별로 채운다).
-D198_BY_GU_DEFAULT: dict[str, str] = {
-    "동래구": "AL_D198_26260_20250115",
-    "금정구": "AL_D198_26410_20250115",
-}
-D198_BY_GU: dict[str, str] = dict(D198_BY_GU_DEFAULT)
+# discover_d198_coverage() 가 DB 업로드 테이블로 D198_BY_GU 를 채운다.
+D198_BY_GU: dict[str, str] = {}
 
 # 건축 경과년수 / 준공·사용승인 관련 표현
 AGE_HINTS = (
@@ -332,7 +303,7 @@ AGE_HINTS = (
 )
 
 # 모듈이 `from txt2sql.domain import D198_TABLES` 해도 갱신이 보이게 리스트를 제자리 수정한다.
-D198_TABLES: list[str] = list(D198_BY_GU_DEFAULT.values())
+D198_TABLES: list[str] = []
 
 
 # '공동주택'의 '공동' 등 지명이 아닌 ~동 오탐
@@ -1133,12 +1104,21 @@ def extract_usages(question: str) -> list[str]:
     return found
 
 
-def d198_gu_for_dong(dong: str | None) -> str | None:
-    """법정동명 → D198 커버 구(금정·동래)."""
+def d198_gu_for_dong(dong: str | None, *, question: str = "") -> str | None:
+    """법정동명 → D198 커버리지에 등록된 시군구."""
+    from txt2sql.gazetteer import sigungu_for_legal_dong
+
     name = (dong or "").strip()
     if not name:
         return None
-    return D198_DONG_TO_GU.get(name)
+    if name.endswith(("구", "군")):
+        return name if name in D198_BY_GU else None
+    if name in MULTI_GU_DONGS and not extract_gu(question):
+        return None
+    gu = sigungu_for_legal_dong(name, question=question)
+    if gu and gu in D198_BY_GU:
+        return gu
+    return None
 
 
 def extract_detail_usages(question: str) -> list[str]:
@@ -1237,14 +1217,26 @@ def set_d198_coverage(by_gu: dict[str, str]) -> None:
 
 
 def reset_d198_coverage() -> None:
-    set_d198_coverage(dict(D198_BY_GU_DEFAULT))
+    D198_BY_GU.clear()
+    D198_TABLES.clear()
 
 
 def d198_coverage_label(*, joiner: str = "·") -> str:
     names = list(D198_BY_GU.keys())
     if not names:
-        return "등록된 구"
+        return "등록된 구·군"
     return joiner.join(names)
+
+
+def d198_unavailable_reason(feature: str = "해당 속성") -> str:
+    """D198 미커버 시 사용자·플랜 안내 문구."""
+    label = d198_coverage_label()
+    if not D198_BY_GU:
+        return f"{feature}은 용도별건물(D198) 데이터가 등록된 구·군에서만 조회할 수 있습니다"
+    return (
+        f"{feature}은 용도별건물(D198) 데이터가 등록된 구·군"
+        f"({label})에서 조회할 수 있습니다"
+    )
 
 
 def d198_gu_matches(question: str, gu: str) -> bool:
@@ -1272,7 +1264,14 @@ def d198_table_for_gu(gu: str | None) -> str | None:
 
 
 def looks_like_age_question(question: str) -> bool:
-    return any(k in question for k in AGE_HINTS)
+    q = question or ""
+    if any(k in q for k in ("NULL", "null", "없는", "비어", "결측", "누락")):
+        if any(k in q for k in ("사용승인일", "허가일", "준공일")) and not any(
+            k in q
+            for k in ("년", "오래", "최근", "이상", "이내", "미만", "넘", "경과", "된 지")
+        ):
+            return False
+    return any(k in q for k in AGE_HINTS)
 
 
 def is_vague_age_threshold(question: str) -> bool:
@@ -1479,9 +1478,11 @@ def sane_floor_area_sql(
 
 def age_date_predicate(date_col: str, years: int, compare: str) -> str:
     """사용승인/허가일자(text) 경과년수 조건 SQL 조각."""
+    from txt2sql.query_understanding.temporal import reference_date_sql
+
     valid = f"\"{date_col}\" ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'"
     casted = f"\"{date_col}\"::date"
-    boundary = f"(CURRENT_DATE - INTERVAL '{years} years')"
+    boundary = f"({reference_date_sql()} - INTERVAL '{years} years')"
     if compare == "lt":
         op = f"{casted} > {boundary}"
     elif compare == "lte":

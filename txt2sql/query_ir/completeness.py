@@ -66,6 +66,10 @@ def assess_completeness(ir: QueryIR) -> CompletenessReport:
                     report.aggregation_binding = "FAIL"
                     report.reasons.append("SEMANTIC_UNBOUND_METRIC")
                     break
+            if agg.function == "count" and agg.distinct and agg.grain is None:
+                report.aggregation_binding = "FAIL"
+                report.reasons.append("SEMANTIC_INCOMPLETE_GRAIN")
+                break
 
     if ir.task in {"list", "rank"} and not ir.outputs and not ir.measures:
         # list without projection is still often valid (default columns)

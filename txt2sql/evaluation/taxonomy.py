@@ -62,6 +62,17 @@ ROOT_CAUSES = (
     "EXECUTION_TIMEOUT",
 )
 
+# Phase 3: evaluation status for Gold/Policy separation
+EvalStatus = Literal[
+    "ENGINE_ERROR",
+    "GOLD_ERROR",
+    "DATA_ERROR",
+    "EVALUATOR_ERROR",
+    "POLICY_GOLD_MISMATCH",
+    "DATA_QUALITY",
+    "PASS",
+]
+
 _CODE_TO_ROOT = {
     "P04": "BOOLEAN_OR_DROPPED",
     "P03": "RANGE_BOUND_DROPPED",
@@ -151,3 +162,24 @@ def diagnose_eval_failure(
 
 def label(code: str) -> str:
     return ERROR_LABELS.get(code, "unknown")
+
+
+def classify_eval_status(
+    *,
+    passed: bool,
+    question_id: str | None = None,
+    data_quality_ids: set[str] | None = None,
+    policy_mismatch_ids: set[str] | None = None,
+    reason: str | None = None,
+) -> EvalStatus:
+    """Classify evaluation outcome status."""
+    if passed:
+        return "PASS"
+    qid = question_id or ""
+    if data_quality_ids and qid in data_quality_ids:
+        return "DATA_QUALITY"
+    if policy_mismatch_ids and qid in policy_mismatch_ids:
+        return "POLICY_GOLD_MISMATCH"
+    if reason and "gold" in reason.lower():
+        return "GOLD_ERROR"
+    return "ENGINE_ERROR"

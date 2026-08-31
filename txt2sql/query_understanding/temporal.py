@@ -33,11 +33,21 @@ _RECENT_YEARS = re.compile(
 
 
 def parse_reference_date(raw: str | None) -> date:
-    text = (raw or "2025-07-04").strip()
+    text = (raw or "2026-08-27").strip()
     try:
         return date.fromisoformat(text[:10])
     except ValueError:
         return date(2025, 7, 4)
+
+
+def reference_date_sql(reference_date: str | date | None = None) -> str:
+    """Frozen benchmark anchor for rel_years SQL (replaces CURRENT_DATE)."""
+    ref = (
+        reference_date
+        if isinstance(reference_date, date)
+        else parse_reference_date(str(reference_date) if reference_date else None)
+    )
+    return f"DATE '{ref.isoformat()}'"
 
 
 def parse_temporal_filters(

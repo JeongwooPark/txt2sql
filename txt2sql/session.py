@@ -169,11 +169,31 @@ class SessionContext:
                 if route not in {"chart_render", "chart_help"}:
                     self.last_chart = None
         # 순위/단일 건물 결과만 focus로 유지 (카탈로그·설명 제외)
-        from txt2sql.followup_qa import _normalize_building_row
+        from txt2sql.building_row import normalize_building_row
 
-        norm_rows = [_normalize_building_row(r) for r in rows] if rows else []
+        tables = result.get("tables") or []
+        source_table = next(
+            (t for t in tables if str(t).startswith(("AL_D198", "AL_D010"))),
+            None,
+        )
+        norm_rows = [
+            normalize_building_row(r, table=source_table, route=route) for r in rows
+        ] if rows else []
+        building_keys = (
+            "A0",
+            "A1",
+            "A4",
+            "A5",
+            "A7",
+            "A12",
+            "A13",
+            "A14",
+            "A19",
+            "A24",
+        )
         keep_focus = bool(norm_rows) and (
             route.startswith("building_rank_")
+            or route.startswith("d198_attr_")
             or route in {"building_name_lookup"}
             or (
                 result.get("ok")
@@ -181,20 +201,23 @@ class SessionContext:
                 and len(norm_rows) == 1
                 and any(
                     k in norm_rows[0] and norm_rows[0].get(k) is not None
-                    for k in ("A0", "A1", "A14", "A12", "A4", "A24", "A5")
+                    for k in building_keys
                 )
-                and "AL_D010" in str(result.get("sql") or "")
+                and (
+                    "AL_D010" in str(result.get("sql") or "")
+                    or "AL_D198" in str(result.get("sql") or "")
+                )
             )
         )
         if keep_focus and route != "building_profile":
             self.focus_row = dict(norm_rows[0])
             self.focus_index = 0
-            tables = result.get("tables") or []
+            d198 = next((t for t in tables if str(t).startswith("AL_D198")), None)
             d010 = next(
                 (t for t in tables if str(t).startswith("AL_D010")),
                 "AL_D010_26_20250704",
             )
-            self.table = d010
+            self.table = d198 or d010
         elif keep_focus and route == "building_profile":
             # 프로필은 집계라 focus 건물 없음
             self.focus_row = None
@@ -207,11 +230,12 @@ class SessionContext:
             pass
         else:
             if norm_rows and len(norm_rows) == 1 and any(
-                k in norm_rows[0] for k in ("A0", "A24", "A14", "A4", "A5")
+                k in norm_rows[0] for k in building_keys
             ):
                 self.focus_row = dict(norm_rows[0])
                 self.focus_index = 0
-                self.table = (result.get("tables") or ["AL_D010_26_20250704"])[0]
+                d198 = next((t for t in tables if str(t).startswith("AL_D198")), None)
+                self.table = d198 or (tables[0] if tables else "AL_D010_26_20250704")
             elif not rows:
                 self.focus_row = None
             elif route and not route.startswith(("followup_", "clarify_")):

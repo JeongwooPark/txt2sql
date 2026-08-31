@@ -240,6 +240,13 @@ PLAN_ROUTE = RouteCapability(
 
 def capability_for(route: str) -> RouteCapability:
     intent = (route or "").strip()
+    from txt2sql.count_routes import PRIORITY_COUNT_INTENTS
+
+    if intent in PRIORITY_COUNT_INTENTS or intent in {
+        "building_industrial_bas_overlap",
+        "followup_count_display",
+    }:
+        return PLAN_ROUTE
     if intent == "semantic_plan" or intent.startswith("semantic_plan"):
         return PLAN_ROUTE
     if intent == "building_profile" or intent == "building_profile_compare":
@@ -464,7 +471,9 @@ def legacy_route_eligible(route: str, contract: QueryContract) -> bool:
     if cap.supports_spatial and intent.startswith("spatial_"):
         return len(missing_requirements(cap, contract)) == 0
     if not contract_is_complete(contract):
-        return False
+        missing = missing_requirements(cap, contract)
+        if not (contract.wants_count and not missing):
+            return False
     return len(missing_requirements(cap, contract)) == 0
 
 

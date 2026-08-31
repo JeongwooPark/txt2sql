@@ -177,6 +177,8 @@ def _pack_ask_result(
 ) -> dict[str, Any]:
     parsed = sse_result(events)
     ui = ui or {}
+    if parsed.get("execution_trace"):
+        ui = {**ui, "execution_trace": parsed.get("execution_trace")}
     if parsed.get("_error") and not error:
         error = parsed["_error"]
     if parsed.get("ok") is False and not error:
@@ -198,6 +200,7 @@ def _pack_ask_result(
         "query_ir_task": parsed.get("query_ir_task"),
         "logical_status": parsed.get("logical_status"),
         "physical_strategy": parsed.get("physical_strategy"),
+        "execution_trace": parsed.get("execution_trace"),
         "ui": ui,
         "process": parsed.get("_process") or events,
         "sse_ok": parsed.get("ok"),

@@ -70,14 +70,14 @@ def test_아파트_is_detail_usage_not_공동주택() -> None:
     assert plan.scope and plan.scope.place and plan.scope.place.name == "금정구"
 
 
-def test_해운대_아파트_stays_usage_on_d010() -> None:
+def test_해운대_아파트_uses_d198_detail_when_covered() -> None:
     q = "해운대구 아파트 중 높이 70m 이상인 건물 이름과 높이"
     plan = try_heuristic_plan(q)
     assert plan is not None
     fields = {item.field for item in plan.filters}
-    assert "usage" in fields
-    assert "detail_usage" not in fields
+    assert "detail_usage" in fields
     assert "height_m" in fields
+    assert "d198_ledger" in (plan.assumptions or [])
 
 
 def test_오피스텔_detail_and_dong_gu() -> None:
@@ -102,6 +102,14 @@ def test_d198_between_건폐율() -> None:
     joined = " ".join(parsed.filters)
     assert "BETWEEN" in joined.upper()
     assert "40" in joined and "70" in joined
+
+
+def test_d198_rank_building_area_top1() -> None:
+    q = "구서동에서 건물면적이 가장 큰 아파트는?"
+    parsed = parse_d198_question(q)
+    assert parsed is not None
+    assert parsed.rank is True
+    assert parsed.order_col == "A18"
 
 
 def test_제2종_평균_uses_d198_in_covered_dong() -> None:

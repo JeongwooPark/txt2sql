@@ -74,7 +74,7 @@ class Settings:
     ollama_embed_digest: str = ""
     llm_timeout_s: float = 20.0
     db_statement_timeout_ms: int = 15000
-    reference_date: str = "2025-07-04"
+    reference_date: str = "2026-08-27"
     # 동명 구(중구 등) PNU·활성 시·도 테이블 선택 기본값 (전국 확장 시 환경변수로 변경).
     default_sido: str = "부산광역시"
 
@@ -286,10 +286,10 @@ class Settings:
                     data,
                     "reference_date",
                     "REFERENCE_DATE",
-                    default="2025-07-04",
+                    default="2026-08-27",
                 )
             ).strip()
-            or "2025-07-04",
+            or "2026-08-27",
             default_sido=str(
                 _pick(
                     data,

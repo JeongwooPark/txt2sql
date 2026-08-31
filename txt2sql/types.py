@@ -37,6 +37,7 @@ class AskResult:
     compiler_source: str | None = None
     fallback_source: str | None = None
     reason_codes: list[str] | None = None
+    execution_trace: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -56,6 +57,7 @@ class AskResult:
             "compiler_source",
             "fallback_source",
             "reason_codes",
+            "execution_trace",
         ):
             if data.get(key) is None:
                 data.pop(key, None)

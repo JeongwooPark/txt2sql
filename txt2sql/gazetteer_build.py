@@ -125,6 +125,22 @@ def collect_gazetteer_payload(
         ORDER BY 1
         """
     ).fetchall()
+    legal_dong_sigungu_rows = conn.execute(
+        """
+        SELECT DISTINCT
+          regexp_replace(trim("PNU_NM"), '.* ', '') AS dong,
+          split_part(trim("PNU_NM"), ' ', 2) AS gu
+        FROM pnu_def
+        WHERE "PNU" NOT LIKE '%00000'
+          AND trim("PNU_NM") LIKE '% %'
+          AND split_part(trim("PNU_NM"), ' ', 2) ~ '[구군]$'
+          AND (
+                regexp_replace(trim("PNU_NM"), '.* ', '') ~ '[동가면읍리]$'
+             OR regexp_replace(trim("PNU_NM"), '.* ', '') ~ '동[0-9]+가$'
+          )
+        ORDER BY 1, 2
+        """
+    ).fetchall()
     admin = conn.execute(
         """
         SELECT DISTINCT trim("ADM_NM") AS name
@@ -189,6 +205,16 @@ def collect_gazetteer_payload(
         if name and prefixes:
             admin_dong_prefixes[name] = prefixes
 
+    legal_dong_sigungu: dict[str, list[str]] = {}
+    for row in legal_dong_sigungu_rows:
+        dong = str(row["dong"] or "").strip()
+        gu_name = str(row["gu"] or "").strip()
+        if not dong or not gu_name:
+            continue
+        bucket = legal_dong_sigungu.setdefault(dong, [])
+        if gu_name not in bucket:
+            bucket.append(gu_name)
+
     return {
         "sido": names_from_rows(sido, "name"),
         "sido_aliases": list(SIDO_ALIASES),
@@ -197,6 +223,7 @@ def collect_gazetteer_payload(
         "sigungu_pnu_prefix": sigungu_pnu_prefix,
         "sigungu_pnu_candidates": sigungu_pnu_candidates,
         "legal_dong": names_from_rows(legal, "name"),
+        "legal_dong_sigungu": legal_dong_sigungu,
         "admin_dong": names_from_rows(admin, "name"),
         "admin_dong_prefixes": admin_dong_prefixes,
     }

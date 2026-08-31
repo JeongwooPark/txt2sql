@@ -143,7 +143,7 @@ def scoped_list_sql(
 def building_in_dong_count_sql(place: str, extra: str = "") -> str:
     extra_sql = f" AND {extra}" if extra else ""
     return (
-        'SELECT COUNT(*) AS cnt\n'
+        'SELECT COUNT(DISTINCT b."A1") AS cnt\n'
         f'FROM "{_d010()}" b\n'
         f'JOIN "{_BND}" d\n'
         "  ON ST_Intersects(b.geometry, d.geometry)\n"

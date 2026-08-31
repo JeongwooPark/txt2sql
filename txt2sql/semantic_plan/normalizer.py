@@ -61,7 +61,7 @@ def normalize_semantic_plan(
         data["limit"] = 100
 
     if plan.query_kind == "rank" and data.get("limit") is None:
-        data["limit"] = 10
+        data["limit"] = 1
 
     return SemanticQueryPlan.model_validate(data)
 

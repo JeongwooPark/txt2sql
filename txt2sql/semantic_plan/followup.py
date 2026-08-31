@@ -19,7 +19,7 @@ from txt2sql.domain import (
 )
 from txt2sql.query_understanding.contract import extract_contract
 from txt2sql.semantic_plan.generator import _agg_metrics, extract_plan_hints
-from txt2sql.semantic_plan.migrate import filter_to_predicate
+from txt2sql.semantic_plan.migrate import filter_to_predicate, filters_to_and
 from txt2sql.semantic_plan.models import (
     AggregationSpec,
     FilterSpec,
@@ -64,6 +64,10 @@ def is_semantic_plan_followup(question: str, session: SessionContext | None) -> 
         return False
     if route.startswith(("clarify", "chart_help", "guide")):
         return False
+    from txt2sql.followup_qa import is_count_only_display_followup
+
+    if is_count_only_display_followup(q) and str(session.last_sql or ""):
+        return True
     if has_anaphora(q) or any(
         k in q for k in ("그중", "그 중", "이 중", "이중에", "이 중에", "그중에")
     ):
@@ -86,7 +90,19 @@ def is_semantic_plan_followup(question: str, session: SessionContext | None) -> 
             ]
         )
         if token and token not in parent_blob:
-            return False
+            if not any(
+                k in q
+                for k in (
+                    "만",
+                    "이번에는",
+                    "도 보여",
+                    "도 알려",
+                    "같은 조건",
+                    "바꿔",
+                    "아까",
+                )
+            ):
+                return False
     if looks_like_standalone_question(q) and len(q) >= 28:
         return False
     return True
@@ -153,7 +169,14 @@ def parse_followup_delta(question: str) -> PlanDelta | None:
             bound_fields.add(field)
 
     change_sort: list[OrderSpec] | None = None
-    if any(k in q for k in ("높이 순", "높은 순", "높이순", "높이로")):
+    if re.search(r"(낮은|작은|적은)\s*순", q) or "오름차순" in q:
+        field = "height_m"
+        if "연면적" in q or ("면적" in q and "높이" not in q):
+            field = "gross_floor_area_m2"
+        elif "층" in q:
+            field = "ground_floors"
+        change_sort = [OrderSpec(field=field, direction="asc", nulls="last")]
+    elif any(k in q for k in ("높이 순", "높은 순", "높이순", "높이로")):
         change_sort = [OrderSpec(field="height_m", direction="desc", nulls="last")]
     elif any(k in q for k in ("연면적 순", "큰 순", "면적 순", "연면적으로")):
         change_sort = [
@@ -187,8 +210,26 @@ def parse_followup_delta(question: str) -> PlanDelta | None:
     if "높이도" in q or "높이와" in q:
         add_select.append("height_m")
 
+    change_scope: ScopeSpec | None = None
+    gu = extract_gu(q)
+    place = extract_place(q)
+    scope_token = gu or place
+    if scope_token and any(
+        k in q
+        for k in ("만", "이번에는", "도 보여", "도 알려", "같은 조건", "으로", "바꿔")
+    ):
+        change_scope = ScopeSpec(
+            place=PlaceSpec(name=scope_token, kind="gu" if gu else "dong"),
+        )
+
     change_kind: QueryKind | None = None
-    if any(k in q for k in ("몇 채", "몇채", "건수", "채수", "얼마나")):
+    if re.search(r"개수\s*만|건수\s*만|채수\s*만", q):
+        change_kind = "count"
+    elif any(k in q for k in ("표 말고", "목록 말고", "리스트 말고")) and any(
+        k in q for k in ("개수", "건수", "채수", "몇")
+    ):
+        change_kind = "count"
+    elif any(k in q for k in ("몇 채", "몇채", "건수", "채수", "얼마나")):
         change_kind = "count"
 
     change_aggregations: list[AggregationSpec] | None = None
@@ -280,6 +321,7 @@ def parse_followup_delta(question: str) -> PlanDelta | None:
         and change_kind is None
         and change_aggregations is None
         and not add_spatial
+        and change_scope is None
     ):
         return None
     return PlanDelta(
@@ -290,6 +332,7 @@ def parse_followup_delta(question: str) -> PlanDelta | None:
         change_kind=change_kind,
         change_aggregations=change_aggregations,
         add_spatial=add_spatial,
+        change_scope=change_scope,
     )
 
 
@@ -457,6 +500,16 @@ def parse_followup_events(question: str) -> list[PlanEvent]:
         field = "usage" if "용도" in q else None
         if field:
             events.append(PlanEvent(op="remove_filter", field=field))
+    for hint, field in (
+        ("연면적", "gross_floor_area_m2"),
+        ("대지면적", "site_area_m2"),
+        ("건축물면적", "building_area_m2"),
+        ("건축면적", "building_area_m2"),
+        ("높이", "height_m"),
+        ("지상층", "ground_floors"),
+    ):
+        if hint in q and any(k in q for k in ("빼", "제외", "제거")):
+            events.append(PlanEvent(op="remove_filter", field=field))
     return events
 
 
@@ -485,9 +538,12 @@ def _apply_one_event(plan: SemanticQueryPlan, event: PlanEvent) -> SemanticQuery
     if event.op == "remove_filter":
         field = event.field or (event.filter.field if event.filter else None)
         data = plan.model_dump()
-        data["filters"] = [
-            item.model_dump() for item in plan.filters if field and item.field != field
+        new_filters = [
+            item for item in plan.filters if field and item.field != field
         ]
+        data["filters"] = [item.model_dump() for item in new_filters]
+        pred = filters_to_and(new_filters)
+        data["predicate"] = pred.model_dump() if pred is not None else None
         return SemanticQueryPlan.model_validate(data)
     if event.op == "negate_filter" and event.filter is not None:
         data = plan.model_dump()

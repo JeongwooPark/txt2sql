@@ -104,7 +104,7 @@ GROUP_FIELD_MAP = {
     "특수지구분명별": "special_land",
     "위반건축물 여부별": "violation_status",
     "위반건축물여부별": "violation_status",
-    "법정동코드별": "legal_dong",
+    "법정동코드별": "bjd_cd",
     "구·군별": "sigungu_name",
     "용도별": "usage",
     "층수별": "ground_floors",

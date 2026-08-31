@@ -43,6 +43,7 @@ _FIELD_ALIASES = {
     "site_area_m2": "site_area_m2",
     "ground_floors": "ground_floors",
     "legal_dong": "legal_dong",
+    "bjd_cd": "bjd_cd",
     "lot_address": "lot_address",
     "building_coverage_ratio": "building_coverage_ratio",
     "floor_area_ratio": "floor_area_ratio",
@@ -187,6 +188,7 @@ ENTITIES: dict[str, SemanticEntity] = {
 BUILDING_FIELDS: dict[str, SemanticField] = {
     "id": _text("id", "building", BUILDING_TABLE, _d010("id"), "건물 식별자", groupable=False),
     "name": _text("name", "building", BUILDING_TABLE, _d010("name"), "건물명"),
+    "bjd_cd": _text("bjd_cd", "building", BUILDING_TABLE, _d010("bjd_cd"), "법정동코드"),
     "legal_dong": _text("legal_dong", "building", BUILDING_TABLE, _d010("legal_dong"), "법정동명"),
     "lot_address": _text(
         "lot_address", "building", BUILDING_TABLE, _d010("lot_address"), "지번"

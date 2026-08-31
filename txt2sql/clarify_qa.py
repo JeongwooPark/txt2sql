@@ -472,7 +472,7 @@ def check_ambiguity(
     place = extract_place(q)
     gu_name = extract_gu(q)
 
-    # 건축 경과년수인데 동래/금정(D198)이 아니면 데이터 한계 안내
+    # 건축 경과년수인데 D198 미커버 구이면 데이터 한계 안내
     from txt2sql.domain import (
         d198_coverage_label,
         d198_table_for_gu,
@@ -568,7 +568,7 @@ def check_ambiguity(
                 options=[],
                 answer=(
                     f"컬럼 {', '.join(cols)}은(는) 테이블마다 의미가 다를 수 있습니다.\n"
-                    "어느 데이터(예: 부산 건물 AL_D010, 산업단지, 동래/금정 용도별건물)를 "
+                    "어느 데이터(예: 부산 건물 AL_D010, 산업단지, 용도별건물 AL_D198)를 "
                     "기준으로 할지 알려 주세요.\n"
                     f"또는 「{cols[0]} 컬럼 의미가 뭐야?」처럼 설명부터 요청할 수 있습니다."
                 ),
@@ -819,8 +819,7 @@ def _has_table_hint(q: str) -> bool:
         "D010",
         "산업단지",
         "D060",
-        "동래",
-        "금정",
+        "용도별건물",
         "D198",
         "기초구역",
         "행정동",

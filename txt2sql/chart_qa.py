@@ -179,6 +179,12 @@ def is_chart_series_filter_question(question: str) -> bool:
     q = question.strip()
     if not q:
         return False
+    if re.search(r"(?:있|없)지만", q):
+        return False
+    from txt2sql.query_understanding.contract import extract_contract
+
+    if extract_contract(q).wants_count:
+        return False
     has_metric = any(any(k in q for k in keys) for keys, _ in _SERIES_FILTERS)
     if not has_metric:
         return False

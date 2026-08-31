@@ -16,6 +16,7 @@ from __future__ import annotations
 # Keyed by SQP semantic field name (compiler allowlist keys).
 D010_FIELD_COLUMNS: dict[str, str] = {
     "id": "A0",
+    "bjd_cd": "A3",
     "sigungu_name": "A3",
     "legal_dong": "A4",
     "lot_address": "A5",

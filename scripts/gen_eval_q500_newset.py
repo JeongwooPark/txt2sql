@@ -156,12 +156,14 @@ def payload(cases, ok: int, fail: int, t0: float) -> dict:
     }
 
 
-def _cached_ok(old: dict | None) -> bool:
+def _cached_ok(old: dict | None, case) -> bool:
     if not old:
         return False
     gold = old.get("gold") or ""
     if old.get("error") or str(gold).startswith("쿼리 실패"):
         return False
+    if case.sql is None and case.gold_text:
+        return old.get("gold") == case.gold_text
     if old.get("sql") is None and gold:
         return True
     return bool(gold)
@@ -195,7 +197,7 @@ def main() -> int:
         cur = conn.cursor()
         for i, case in enumerate(cases, 1):
             old = prev.get(case.id)
-            if resume and _cached_ok(old) and (not case.sql or old.get("sql") == case.sql):
+            if resume and _cached_ok(old, case) and (not case.sql or old.get("sql") == case.sql):
                 case.result = {
                     "gold": old.get("gold"),
                     "row_count": old.get("row_count") or 0,

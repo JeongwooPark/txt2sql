@@ -67,13 +67,7 @@ def parse_bas_table_name(table: str) -> dict[str, str] | None:
 
 
 def discover_d198_coverage(settings: Settings) -> dict[str, str]:
-    """public 스키마의 AL_D198_* 테이블을 구별로 고른다.
-
-    런타임 커버리지가 본선이다. D198_BY_GU_DEFAULT 는 골드/베이스라인
-    스냅샷이 DB에 남아 있을 때만 그 구를 고정하는 **폴백**이다.
-    """
-    from txt2sql.domain import D198_BY_GU_DEFAULT
-
+    """public 스키마의 AL_D198_* 테이블을 구별로 고른다 (최신 스냅샷 우선)."""
     schema = settings.map_schema or "public"
     with connect(settings.database_url) as conn:
         with conn.cursor() as cur:
@@ -88,7 +82,6 @@ def discover_d198_coverage(settings: Settings) -> dict[str, str]:
                 (schema,),
             )
             names = [str(row["table_name"]) for row in cur.fetchall()]
-    name_set = set(names)
     best: dict[str, tuple[str, str]] = {}
     for name in names:
         parsed = parse_al_table_name(name)
@@ -101,12 +94,6 @@ def discover_d198_coverage(settings: Settings) -> dict[str, str]:
         prev = best.get(gu)
         if prev is None or date > prev[0]:
             best[gu] = (date, name)
-    # 폴백: 기본 스냅샷이 아직 DB에 있으면 해당 구는 그 테이블을 유지 (골드 호환).
-    for gu, default_table in D198_BY_GU_DEFAULT.items():
-        if default_table in name_set:
-            parsed = parse_al_table_name(default_table)
-            date = parsed["update_date"] if parsed else "00000000"
-            best[gu] = (date, default_table)
     return {gu: table for gu, (_date, table) in best.items()}
 
 

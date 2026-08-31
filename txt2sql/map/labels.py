@@ -5,13 +5,34 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from txt2sql.building_row import infer_building_schema_from_columns
 from txt2sql.config import Settings
+from txt2sql.d198_attrs import COLUMN_LABELS as D198_COLUMN_LABELS
 from txt2sql.db import connect
 from txt2sql.map.sql import pad_lonlat_extent
 
 _DATE_SUFFIX = re.compile(r"_\d{8}$")
 _REGION_DATE = re.compile(r"_\d{2}_\d{8}$")
 _SKIP_COLS = {"geometry", "geom", "the_geom", "geography", "boundedby", "bbox"}
+_FALLBACK_FIELDS_D198: dict[str, str] = dict(D198_COLUMN_LABELS)
+_FALLBACK_FIELDS_D198.update(
+    {
+        "A0": "도형ID",
+        "A4": "법정동명",
+        "A5": "특수지구분코드",
+        "A6": "특수지구분명",
+        "A7": "지번",
+        "A13": "건물명",
+        "A18": "건물건축면적",
+        "A19": "건물연면적",
+        "A25": "주요용도명",
+        "A30": "건물높이",
+        "A31": "지상층",
+        "A32": "지하층",
+        "A33": "허가일자",
+        "A34": "사용승인일자",
+    }
+)
 _PREFERRED_PREFIXES = (
     "AL_D010",
     "BND_ADM",
@@ -216,9 +237,13 @@ class MetaIndex:
         if ranked:
             ranked.sort()
             return ranked[0][1]
+        if table and str(table).upper().startswith("AL_D198"):
+            fallback = _FALLBACK_FIELDS_D198
+        else:
+            fallback = _FALLBACK_FIELDS
         return (
-            _FALLBACK_FIELDS.get(column)
-            or _FALLBACK_FIELDS.get(column.upper())
+            fallback.get(column)
+            or fallback.get(column.upper())
             or column
         )
 
@@ -263,6 +288,11 @@ class MetaIndex:
 
     def fields_for(self, layer: str, columns: list[str] | None = None) -> dict[str, str]:
         table = self.resolve_table(layer)
+        schema = infer_building_schema_from_columns(columns)
+        if not table and schema == "d198":
+            table = "AL_D198"
+        elif not table and schema == "d010":
+            table = "AL_D010_26_20250704"
         known = dict(self.columns.get(table or "", {}))
         if columns is None:
             columns = list(known.keys())
@@ -274,6 +304,18 @@ class MetaIndex:
                 if table
                 else self.field_label(logical)
             )
+            if not table and schema == "d198":
+                label = (
+                    _FALLBACK_FIELDS_D198.get(logical)
+                    or _FALLBACK_FIELDS_D198.get(logical.upper())
+                    or label
+                )
+            elif not table and schema == "d010":
+                label = (
+                    _FALLBACK_FIELDS.get(logical)
+                    or _FALLBACK_FIELDS.get(logical.upper())
+                    or label
+                )
             out[col] = label
             if logical != col:
                 out[logical] = label

@@ -120,12 +120,29 @@ class MeasureIR(BaseModel):
     provenance: ProvenanceSpan | None = None
 
 
+class GrainIR(BaseModel):
+    """Aggregation grain — what entity/unit is being counted or grouped."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    entity: str | None = None
+    distinct_key: str | None = None
+    level: str | None = None
+
+
 class AggregationIR(BaseModel):
+    """Semantic aggregation contract — extends v2 without duplicating measures."""
+
     model_config = ConfigDict(extra="forbid")
 
     function: AggFunction
     field: str | None = None
     alias: str | None = None
+    distinct: bool = False
+    grain: GrainIR | None = None
+    null_policy: Literal["EXCLUDE_NULL", "INCLUDE_NULL"] = "EXCLUDE_NULL"
+    unit: str | None = None
+    rounding: int | None = None
     percentile: float | None = None
     derived_kind: str | None = None
     left: str | None = None

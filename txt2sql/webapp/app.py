@@ -53,7 +53,7 @@ def create_app() -> FastAPI:
             if engine is not None:
                 engine.close()
 
-    app = FastAPI(title="txt2sql Chat", version="0.3.1", lifespan=lifespan)
+    app = FastAPI(title="txt2sql Chat", version="0.3.2", lifespan=lifespan)
 
     def get_engine() -> Txt2SqlEngine:
         engine = engine_holder.get("engine")

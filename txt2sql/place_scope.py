@@ -7,11 +7,13 @@
 | 행정동 | BND_ADM_DONG_PG ∩ geometry (호출측 JOIN) |
 
 이 모듈은 A3/A4 predicate 만 만든다. 행정동 BND JOIN 은 compiler/templates 가 담당.
+PlaceScopePolicy v1.0: resolve_place_scope() in semantic_catalog/place_scope.py
 """
 
 from __future__ import annotations
 
 from txt2sql.gazetteer import resolve_place_kind, sigungu_a3_prefix, uses_admin_boundary
+from txt2sql.semantic_catalog.place_scope import PlaceScopeContext, resolve_place_scope
 
 
 def _quote_ident(alias: str, column: str) -> str:
@@ -50,16 +52,33 @@ def building_place_predicate(
     *,
     alias: str = "",
     sido: str | None = None,
+    question: str = "",
 ) -> str:
     """건물 테이블용 장소 필터 (구=A3, 법정동=A4).
 
     행정동은 BND 경로가 본선이므로 여기선 A4 최후 폴백만 둔다.
+    PlaceScopePolicy v1.0 binding을 통해 결정한다.
     """
     text = (place or "").strip()
     if not text:
         return "TRUE"
-    kind = resolve_place_kind(text)
-    if kind == "admin_dong" or uses_admin_boundary(text):
+
+    ctx = PlaceScopeContext(default_sido=sido or "부산광역시", question=question)
+    if uses_admin_boundary(text, question=question):
+        ctx.prefer_admin = True
+    binding = resolve_place_scope(text, context=ctx)
+
+    if binding.physical_scope == "A3" and binding.code:
+        col = _quote_ident(alias, "A3")
+        return f"{col} LIKE {_sql_str(binding.code + '%')}"
+    if binding.physical_scope == "A4" or binding.semantic_type == "LEGAL_DONG":
+        return legal_dong_a4_predicate(text, alias=alias)
+    if binding.physical_scope == "BND":
+        return legal_dong_a4_predicate(text, alias=alias)
+
+    # fallback legacy path
+    kind = resolve_place_kind(text, question)
+    if kind == "admin_dong" or uses_admin_boundary(text, question=question):
         return legal_dong_a4_predicate(text, alias=alias)
     if text.endswith(("동", "가", "리", "로")) or kind == "legal_dong":
         return legal_dong_a4_predicate(text, alias=alias)

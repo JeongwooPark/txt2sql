@@ -108,6 +108,10 @@ def is_usage_overview_question(question: str) -> bool:
     q = question.strip()
     if not q or "용도" not in q:
         return False
+    from txt2sql.query_understanding.contract import extract_contract
+
+    if extract_contract(q).wants_count:
+        return False
     if any(k in q for k in ("컬럼", "칼럼", "속성", "필드", "스키마", "테이블명")):
         return False
     # 종류/건수 카운트는 intent_router 경로
@@ -166,7 +170,7 @@ def answer_usage_overview_question(
         return None
 
     gu = extract_gu(q)
-    # 동래/금정 + 주요 용도 → D198 A25, 그 외 → D010 A9
+    # D198 커버 구 + 주요 용도 → D198 A25, 그 외 → D010 A9
     use_major = any(k in q for k in ("주요용도", "주요 용도", "주요용도명"))
     d198 = d198_table_for_gu(gu) if use_major else None
 

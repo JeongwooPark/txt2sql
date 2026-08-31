@@ -12,6 +12,8 @@ from functools import lru_cache
 from importlib.resources import files
 from typing import Iterable
 
+_ADMIN_DONG_INSIDE = re.compile(r"\d동\s*안(?:의|에서|에|쪽|\s|$)")
+
 
 class _TrieNode:
     """지명 최장일치용 트라이 노드."""
@@ -156,6 +158,8 @@ class Gazetteer:
     sigungu_pnu_prefix: dict[str, str]
     # 동명 구 등 후보 전부. 질의 시·도 컨텍스트로 재선택한다.
     sigungu_pnu_candidates: dict[str, tuple[str, ...]]
+    # 법정동명 → 소속 시군구(전국, pnu_def 기반). 동명이의는 복수 후보.
+    legal_dong_sigungu: dict[str, tuple[str, ...]]
 
 
 def _kinds_map(
@@ -232,6 +236,14 @@ def load_gazetteer() -> Gazetteer:
     # 구 JSON에 candidates가 없으면 대표값만 후보로 둔다.
     for name, code in sigungu_pnu_prefix.items():
         sigungu_pnu_candidates.setdefault(name, (code,))
+    legal_dong_sigungu: dict[str, tuple[str, ...]] = {}
+    for dong, gus in (raw.get("legal_dong_sigungu") or {}).items():
+        name = str(dong).strip()
+        if not name:
+            continue
+        items = tuple(str(g).strip() for g in (gus or ()) if str(g).strip())
+        if items:
+            legal_dong_sigungu[name] = items
     return Gazetteer(
         sido=frozenset(sido),
         sigungu=frozenset(sigungu),
@@ -244,7 +256,109 @@ def load_gazetteer() -> Gazetteer:
         admin_dong_prefixes=admin_dong_prefixes,
         sigungu_pnu_prefix=sigungu_pnu_prefix,
         sigungu_pnu_candidates=sigungu_pnu_candidates,
+        legal_dong_sigungu=legal_dong_sigungu,
     )
+
+
+@lru_cache(maxsize=4096)
+def _legal_dong_sigungu_from_db(dong: str) -> tuple[str, ...]:
+    """pnu_def 에서 법정동 → 시군구 후보를 조회한다(DB 연결 시)."""
+    name = (dong or "").strip()
+    if not name:
+        return ()
+    try:
+        from txt2sql.config import load_settings
+        from txt2sql.db import connect
+
+        settings = load_settings()
+        with connect(settings.database_url) as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT split_part(trim("PNU_NM"), ' ', 2) AS gu
+                FROM pnu_def
+                WHERE trim("PNU_NM") LIKE %s
+                  AND split_part(trim("PNU_NM"), ' ', 2) ~ '[구군]$'
+                ORDER BY 1
+                """,
+                (f"% {name}",),
+            ).fetchall()
+        return tuple(str(row["gu"]).strip() for row in rows if row.get("gu"))
+    except Exception:
+        return ()
+
+
+def sigungu_candidates_for_legal_dong(dong: str) -> tuple[str, ...]:
+    """법정동명에 대응하는 시군구 후보(전국)."""
+    name = (dong or "").strip()
+    if not name:
+        return ()
+    cached = load_gazetteer().legal_dong_sigungu.get(name)
+    if cached:
+        return cached
+    from_db = _legal_dong_sigungu_from_db(name)
+    if from_db:
+        return from_db
+    return ()
+
+
+def sigungu_for_legal_dong(
+    dong: str,
+    *,
+    sido: str | None = None,
+    question: str = "",
+) -> str | None:
+    """법정동명 → 대표 시군구(동명이의는 시·도·질문 맥락으로 축소)."""
+    name = (dong or "").strip()
+    if not name:
+        return None
+    candidates = list(sigungu_candidates_for_legal_dong(name))
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+
+    preferred_sido = (sido or "").strip() or None
+    if not preferred_sido and question:
+        for token in load_gazetteer().sido:
+            if token in question:
+                preferred_sido = token
+                break
+        if not preferred_sido:
+            for alias, canonical in SIDO_ALIAS_CANONICAL.items():
+                if alias in question:
+                    preferred_sido = canonical
+                    break
+    if not preferred_sido:
+        try:
+            from txt2sql.dataset_tables import primary_sido_pnu
+
+            primary = primary_sido_pnu()
+            for sido_name, prefix in SIDO_PNU_PREFIX.items():
+                if prefix == primary:
+                    preferred_sido = sido_name
+                    break
+        except Exception:
+            preferred_sido = None
+
+    g = load_gazetteer()
+    if preferred_sido:
+        narrowed = [
+            gu
+            for gu in candidates
+            if preferred_sido in (g.sigungu_sido.get(gu) or ())
+        ]
+        if len(narrowed) == 1:
+            return narrowed[0]
+        if narrowed:
+            candidates = narrowed
+
+    from txt2sql.domain import extract_gu
+
+    explicit_gu = extract_gu(question)
+    if explicit_gu and explicit_gu in candidates:
+        return explicit_gu
+
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def classify_place(name: str) -> frozenset[str]:
@@ -265,21 +379,54 @@ def is_legal_dong(name: str | None) -> bool:
     return bool(name) and KIND_LEGAL in classify_place(str(name))
 
 
-def uses_admin_boundary(name: str | None, *, prefer_admin: bool = False) -> bool:
-    """번호 행정동·행정전용 동은 경계 교차, 법정동은 A4.
+def question_needs_admin_boundary(question: str | None) -> bool:
+    """질문에 행정동 경계(BND) 집계가 필요한 표현이 있는지."""
+    q = (question or "").strip()
+    if not q:
+        return False
+    if "행정동" in q:
+        return True
+    spatial_cues = (
+        "경계",
+        "안에",
+        "안에서",
+        "안쪽",
+        "내부",
+        "이내",
+        "반경",
+        "밖에",
+        "바깥",
+        "외부",
+        "겹치",
+        "포함",
+        "들어있",
+        "들어 있는",
+    )
+    if any(cue in q for cue in spatial_cues):
+        return True
+    # 「연산1동 안」「괴정1동 안의」— 번호 행정동 + 공간 안 (Q366/Q367)
+    return _ADMIN_DONG_INSIDE.search(q) is not None
 
-    prefer_admin=True(질문에 「행정동」)이면 legal∩admin 이중 등록도 BND.
+
+def uses_admin_boundary(
+    name: str | None,
+    *,
+    prefer_admin: bool = False,
+    question: str = "",
+) -> bool:
+    """BND 행정동 경계 집계가 필요한지.
+
+    단순 「X동 건물 수」(법정동 COUNT) → A4. gold: Q017–Q030, Q020/Q021.
+    「안에」「경계」「행정동」 등 공간·행정 맥락 → BND.
     """
     if not name:
         return False
     text = str(name).strip()
     kinds = classify_place(text)
-    if KIND_ADMIN in kinds and KIND_LEGAL not in kinds:
-        return True
-    if prefer_admin and KIND_ADMIN in kinds:
-        return True
-    # 구서1동 형태: 행정동으로만 쓰는 번호동
-    if re.fullmatch(r"[가-힣]+\d+동", text) and KIND_ADMIN in kinds:
+    needs_bnd = prefer_admin or question_needs_admin_boundary(question)
+    if not needs_bnd:
+        return False
+    if KIND_ADMIN in kinds:
         return True
     return False
 
@@ -378,14 +525,14 @@ def resolve_place_kind(name: str | None, question: str = "") -> str:
         return "sido"
     if KIND_SIGUNGU in kinds and text.endswith(("구", "군")):
         return "gu"
-    if uses_admin_boundary(text, prefer_admin=prefer_admin):
+    if uses_admin_boundary(text, prefer_admin=prefer_admin, question=question):
         return "admin_dong"
     if KIND_LEGAL in kinds:
         return "legal_dong"
     if text.endswith(("구", "군")):
         return "gu"
     if text.endswith("동"):
-        return "admin_dong" if prefer_admin or re.fullmatch(r"[가-힣]+\d+동", text) else "legal_dong"
+        return "legal_dong"
     return "unknown"
 
 

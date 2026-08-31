@@ -360,6 +360,22 @@ def _apply_dataset_assumptions(
     plan.assumptions = notes
 
 
+def _enrich_place_scope(plan: SemanticQueryPlan, question: str | None) -> None:
+    """QueryIR scope often lacks place_kind; restore BND policy from question cues."""
+    if not question or not plan.scope or not plan.scope.place:
+        return
+    from txt2sql.gazetteer import resolve_place_kind, uses_admin_boundary
+
+    name = plan.scope.place.name.strip()
+    if not name:
+        return
+    if uses_admin_boundary(name, question=question):
+        kind = resolve_place_kind(name, question)
+        if kind == "admin_dong":
+            plan.scope.place.kind = "admin_dong"
+            plan.scope.spatial_mode = "boundary"
+
+
 def build_sqp(
     ir: QueryIR,
     *,
@@ -369,6 +385,7 @@ def build_sqp(
 ) -> SemanticQueryPlan:
     refined = refine_query_ir_for_compile(ir, question=question)
     plan = query_ir_to_semantic_plan(refined)
+    _enrich_place_scope(plan, question)
     _apply_dataset_assumptions(
         plan, physical=physical, logical=logical or (physical.logical if physical else None), refined=refined
     )
@@ -481,6 +498,15 @@ def should_try_semantic_v2(bundle: ExecutionPlanBundle) -> bool:
     if bundle.logical.status != "READY":
         return False
     if bundle.physical.partial:
+        return False
+    source = bundle.query_ir.provenance.source_text or ""
+    from txt2sql.count_routes import PRIORITY_COUNT_INTENTS, match_priority_count_route
+    from txt2sql.intent_router import try_route
+
+    if match_priority_count_route(source) is not None:
+        return False
+    legacy = try_route(source)
+    if legacy is not None and legacy.intent in PRIORITY_COUNT_INTENTS:
         return False
     # Keep Fast Path simple count/list on legacy router.
     if bundle.physical.strategy in {"FAST_SIMPLE_COUNT", "FAST_THRESHOLD"}:

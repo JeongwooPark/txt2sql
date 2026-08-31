@@ -145,7 +145,7 @@ class QueryContract(BaseModel):
 
 
 # BIN_HINTS(구간별)에 없는 그룹 표현. extract의 fixed_bins와 별도로 kind만 맞춘다.
-_GROUP_KIND_RE = re.compile(r"(연도별|단위로\s*묶)")
+_GROUP_KIND_RE = re.compile(r"(연도별|단위로\s*묶|준공연대별|년대별)")
 
 
 _COUNTISH = (
@@ -161,10 +161,20 @@ _COUNTISH = (
     "몇개",
     "수는",
     "개가",
+    "레코드 수",
+    "개수만",
+    "있는지",
+    "찾아",
 )
 
 
 def _explicit_count(question: str) -> bool:
+    if any(k in question for k in ("중복", "차이", "평균", "비교")):
+        return False
+    if "별" in question and any(
+        k in question for k in ("보여", "집계", "나눠", "구분", "각각")
+    ):
+        return False
     if any(k in question for k in _COUNTISH):
         return True
     return bool(re.search(r"몇\s*(채|동|개)(?!%)", question))
@@ -648,6 +658,19 @@ def _extract_derived(question: str) -> list[DerivedMetricRequest]:
     return []
 
 
+def _is_grouped_count_question(question: str, group_fields: list[str]) -> bool:
+    """GROUP BY + 건수 질의 — 스칼라 count가 아니다."""
+    if not group_fields:
+        return False
+    if any(k in question for k in ("집계", "보여", "나눠", "구분", "각각", "분포")):
+        return True
+    if "별" in question and any(
+        k in question for k in ("건물 수", "건수", "채수", "몇", "수를")
+    ):
+        return True
+    return False
+
+
 def _finalize_requests(contract: QueryContract) -> None:
     q = contract.question
     contract.group_fields = [
@@ -663,6 +686,12 @@ def _finalize_requests(contract: QueryContract) -> None:
                 AggregationRequest(function=fn, field=str(field) if field else None)
             )
     if contract.wants_count and "count" not in seen_fn:
+        contract.aggregation_requests.append(AggregationRequest(function="count"))
+    if (
+        _is_grouped_count_question(q, contract.group_fields)
+        and "count" not in seen_fn
+        and not seen_fn
+    ):
         contract.aggregation_requests.append(AggregationRequest(function="count"))
     for item in contract.percentile_requests:
         contract.aggregation_requests.append(
@@ -699,6 +728,8 @@ def _finalize_requests(contract: QueryContract) -> None:
         contract.operation = "rank"
     elif contract.aggregation_requests:
         contract.operation = "aggregate"
+    elif _is_grouped_count_question(q, contract.group_fields):
+        contract.operation = "aggregate"
     elif contract.output_fields:
         contract.operation = "list"
     else:
@@ -712,6 +743,10 @@ def _looks_like_group(contract: QueryContract) -> bool:
     if contract.fixed_bins or contract.operation == "group_rank":
         return True
     if contract.group_fields and contract.aggregation_requests:
+        return True
+    if _is_grouped_count_question(
+        contract.question or "", contract.group_fields
+    ):
         return True
     return bool(_GROUP_KIND_RE.search(contract.question or ""))
 

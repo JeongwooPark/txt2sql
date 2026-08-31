@@ -55,6 +55,7 @@ from txt2sql.followup_qa import (
     answer_followup,
     is_followup_question,
     is_list_attr_followup,
+    try_count_only_display_followup,
     try_subset_followup,
 )
 from txt2sql.guide_qa import _coverage_text, _is_coverage_question, try_guide
@@ -63,7 +64,7 @@ from txt2sql.intent_classifier import (
     classify_intent_hybrid,
     classify_intent_llm,
 )
-from txt2sql.intent_router import try_route
+from txt2sql.intent_router import RoutedQuery, try_route
 from txt2sql.meta_qa import answer_metadata_question, is_metadata_question
 from txt2sql.profile_qa import (
     answer_profile_question,
@@ -549,6 +550,13 @@ def _try_chart_turn(
     progress: ProgressTracker,
     on_token: TokenCallback | None,
 ) -> dict[str, Any] | None:
+    from txt2sql.query_understanding.contract import extract_contract
+    from txt2sql.followup_qa import is_count_only_display_followup
+
+    if is_count_only_display_followup(question):
+        return None
+    if extract_contract(question).wants_count:
+        return None
     metric_draw = is_chart_metric_draw_question(question)
     has_spec = session is not None and (session.pending_chart or session.last_chart)
     can_rebuild = (
@@ -753,7 +761,15 @@ def run_ask(
     progress.emit("start", f"질문 수신: {question.strip()}")
 
     def finish(payload: dict[str, Any], q: str | None = None) -> dict[str, Any]:
+        from txt2sql.evaluation.execution_trace import attach_execution_trace
+
         payload = dict(payload)
+        payload = attach_execution_trace(
+            payload,
+            question=q or question,
+            contract=contract,
+            plan_bundle=plan_bundle,
+        )
         payload["steps"] = progress.steps
         payload["stage_latency_ms"] = progress.stage_latency_ms()
         payload["selected_route"] = payload.get("route")
@@ -812,6 +828,18 @@ def run_ask(
         progress.emit("plan", f"plan build skipped: {type(plan_exc).__name__}")
 
     if plan_bundle is not None and conn is not None:
+        finished = _try_priority_count_route(
+            question,
+            settings,
+            progress,
+            conn=conn,
+            ollama_client=ollama_client,
+            on_token=on_token,
+            contract=contract,
+        )
+        if finished is not None:
+            return finish(finished)
+
         try:
             from txt2sql.planner.semantic_executor import (
                 should_try_semantic_v2,
@@ -1134,6 +1162,10 @@ def _try_preferred_intent(
         return None if ranked is None else _qa_ok(ranked)
 
     if intent == "usage_overview":
+        from txt2sql.query_understanding.contract import extract_contract
+
+        if extract_contract(question).wants_count:
+            return None
         progress.emit("route", "선호 의도: 용도 구성 설명")
         usage_ov = answer_usage_overview_question(
             conn, question, on_token=on_token, force=True, **llm
@@ -1447,6 +1479,36 @@ def _try_semantic_result(
     return None
 
 
+def _try_priority_count_route(
+    question: str,
+    settings: Settings,
+    progress: ProgressTracker,
+    *,
+    conn: psycopg.Connection,
+    ollama_client: Any | None,
+    on_token: TokenCallback | None,
+    contract,
+) -> dict[str, Any] | None:
+    from txt2sql.count_routes import match_priority_count_route
+
+    priority = match_priority_count_route(question)
+    if priority is None:
+        return None
+    routed = RoutedQuery(priority.intent, priority.sql)
+    progress.emit("route", f"우선 count 라우트: {priority.intent}")
+    return _maybe_finish_routed(
+        question,
+        settings,
+        progress,
+        conn=conn,
+        ollama_client=ollama_client,
+        on_token=on_token,
+        routed=routed,
+        route_label=f"우선 count 라우트: {priority.intent}",
+        contract=contract,
+    )
+
+
 def _ask_inner(
     question: str,
     settings: Settings,
@@ -1469,6 +1531,35 @@ def _ask_inner(
             operation=contract.operation,
             complexity=contract.complexity,
         )
+
+    finished = _try_priority_count_route(
+        question,
+        settings,
+        progress,
+        conn=conn,
+        ollama_client=ollama_client,
+        on_token=on_token,
+        contract=contract,
+    )
+    if finished is not None:
+        return finished
+
+    if session is not None:
+        count_only = try_count_only_display_followup(question, session)
+        if count_only is not None:
+            finished = _maybe_finish_routed(
+                question,
+                settings,
+                progress,
+                conn=conn,
+                ollama_client=ollama_client,
+                on_token=on_token,
+                routed=count_only,
+                route_label="직전 조건 COUNT 전환",
+                contract=contract,
+            )
+            if finished is not None:
+                return finished
 
     if (
         session is not None
@@ -1707,24 +1798,27 @@ def _ask_inner(
         progress.emit("route", "최고 건물 비교 매칭 실패 → 계속 진행")
 
     if is_usage_overview_question(question) and route_allowed("building_usage_count", contract):
-        progress.emit("route", "건물 용도 구성 설명 질의로 판단")
-        progress.emit("answer", "용도 분포 자연어 생성")
-        usage_ov = answer_usage_overview_question(
-            conn, question, on_token=on_token, **llm
-        )
-        if usage_ov is not None:
-            progress.emit(
-                "profile",
-                "용도 상위 집계 완료",
-                tables=usage_ov.tables,
-                sql=usage_ov.sql,
+        from txt2sql.query_understanding.contract import extract_contract as _extract_contract
+
+        if not _extract_contract(question).wants_count:
+            progress.emit("route", "건물 용도 구성 설명 질의로 판단")
+            progress.emit("answer", "용도 분포 자연어 생성")
+            usage_ov = answer_usage_overview_question(
+                conn, question, on_token=on_token, **llm
             )
-            progress.emit("answer", "한국어 용도 설명 완료")
-            _emit_contract_routing(
-                progress, contract, candidates, missing=[], decision="ROUTER"
-            )
-            return _qa_ok(usage_ov)
-        progress.emit("route", "용도 구성 설명 매칭 실패 → 계속 진행")
+            if usage_ov is not None:
+                progress.emit(
+                    "profile",
+                    "용도 상위 집계 완료",
+                    tables=usage_ov.tables,
+                    sql=usage_ov.sql,
+                )
+                progress.emit("answer", "한국어 용도 설명 완료")
+                _emit_contract_routing(
+                    progress, contract, candidates, missing=[], decision="ROUTER"
+                )
+                return _qa_ok(usage_ov)
+            progress.emit("route", "용도 구성 설명 매칭 실패 → 계속 진행")
 
     if is_profile_question(question) and route_allowed("building_profile", contract):
         progress.emit("route", "건물 특징 요약 질의로 판단")
@@ -1908,9 +2002,11 @@ def _ask_inner(
             compiler_source="legacy_route_sql",
         )
         if routed.intent == "building_age_count_d198_partial":
+            from txt2sql.domain import d198_coverage_label
+
             progress.emit(
                 "clarify",
-                "건축년수는 동래·금정만 지원 → 해당 범위로 조회",
+                f"건축년수는 용도별건물(D198) 등록 구·군({d198_coverage_label()}) 범위로 조회",
             )
         _emit_contract_routing(
             progress, contract, candidates, missing=[], decision="ROUTER"

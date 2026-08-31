@@ -41,6 +41,15 @@ def test_heuristic_ambiguous_area() -> None:
     assert plan.requires_clarification is True
 
 
+def test_heuristic_rank_building_area_top1() -> None:
+    plan = try_heuristic_plan("구서동에서 건물면적이 가장 큰 아파트는?")
+    assert plan is not None
+    assert plan.query_kind == "rank"
+    assert plan.limit == 1
+    assert plan.order_by
+    assert plan.order_by[0].field == "building_area_m2"
+
+
 def test_heuristic_boundary_and_distance() -> None:
     inside = try_heuristic_plan("연산동 안에 있는 공동주택")
     assert inside is not None

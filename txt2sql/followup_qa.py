@@ -10,6 +10,21 @@ import psycopg
 from psycopg.rows import dict_row
 
 from txt2sql.answer import fmt_value
+from txt2sql.building_row import (
+    field_columns_for_table,
+    infer_row_dataset,
+    is_d198_table,
+    normalize_building_row,
+    row_building_area,
+    row_building_name,
+    row_full_address,
+    row_ground_floors,
+    row_gross_floor_area,
+    row_height,
+    row_lot_address,
+    row_structure,
+    row_usage,
+)
 from txt2sql.domain import (
     calendar_year_predicate_sql,
     extract_calendar_year,
@@ -58,20 +73,20 @@ _ATTR_ONLY = (
 )
 
 _ATTR_MAP: list[tuple[tuple[str, ...], str, str]] = [
-    (("이름", "건물명", "명칭", "뭐라는"), "A24", "건물명"),
-    (("동명", "건물동", "동 이름"), "A25", "건물동명"),
+    (("이름", "건물명", "명칭", "뭐라는"), "name", "건물명"),
+    (("동명", "건물동", "동 이름"), "building_dong_name", "건물동명"),
     (("주소", "어디"), "_ADDR", "주소"),
-    (("지번",), "A5", "지번"),
-    (("법정동",), "A4", "법정동명"),
-    (("용도",), "A9", "용도"),
-    (("건물면적", "건축물면적", "건축면적"), "A12", "건물면적"),
-    (("연면적",), "A14", "연면적"),
-    (("대지면적",), "A15", "대지면적"),
-    (("높이",), "A16", "높이"),
-    (("지상층", "몇 층", "몇층", "층수"), "A26", "지상층"),
-    (("지하",), "A27", "지하층"),
-    (("구조",), "A11", "건축물구조명"),
-    (("아이디", "id", "ID", "식별"), "A19", "건축물ID"),
+    (("지번",), "lot_address", "지번"),
+    (("법정동",), "legal_dong", "법정동명"),
+    (("용도",), "usage", "용도"),
+    (("건물면적", "건축물면적", "건축면적"), "building_area_m2", "건물면적"),
+    (("연면적",), "gross_floor_area_m2", "연면적"),
+    (("대지면적",), "site_area_m2", "대지면적"),
+    (("높이",), "height_m", "높이"),
+    (("지상층", "몇 층", "몇층", "층수"), "ground_floors", "지상층"),
+    (("지하",), "basement_floors", "지하층"),
+    (("구조",), "structure", "건축물구조명"),
+    (("아이디", "id", "ID", "식별"), "id", "건물식별번호"),
 ]
 
 
@@ -133,56 +148,37 @@ def _recover_focus_from_last_rows(session: SessionContext) -> None:
     if len(rows) != 1:
         return
     route = str(session.last_route or "")
-    row = _normalize_building_row(rows[0])
+    row = _normalize_building_row(rows[0], table=session.table, route=session.last_route)
     building_like = any(
         k in row and row.get(k) is not None
-        for k in ("A0", "A5", "A14", "A24", "A4")
+        for k in ("A0", "A1", "A5", "A7", "A14", "A19", "A24", "A13", "A4")
     )
     if not building_like:
         return
     if (
         route.startswith("building_rank_")
+        or route.startswith("d198_attr_")
         or route in {"building_name_lookup", "llm", "sql", "None", ""}
-        or (session.last_sql and "AL_D010" in str(session.last_sql))
+        or (session.last_sql and ("AL_D010" in str(session.last_sql) or "AL_D198" in str(session.last_sql)))
     ):
         session.focus_row = row
         if not session.table:
-            session.table = "AL_D010_26_20250704"
+            if session.last_sql and "AL_D198" in str(session.last_sql):
+                import re as _re
+
+                m = _re.search(r'"(AL_D198_[^"]+)"', str(session.last_sql))
+                session.table = m.group(1) if m else None
+            if not session.table:
+                session.table = "AL_D010_26_20250704"
 
 
-_ROW_ALIAS_TO_COL = {
-    "연면적": "A14",
-    "건물면적": "A12",
-    "건축물면적": "A12",
-    "대지면적": "A15",
-    "높이": "A16",
-    "지상층": "A26",
-    "지상층수": "A26",
-    "법정동명": "A4",
-    "법정동": "A4",
-    "지번": "A5",
-    "용도": "A9",
-    "건축물용도명": "A9",
-    "건물명": "A24",
-    "건축물ID": "A19",
-    "건축물id": "A19",
-    "건물통합식별번호": "A1",
-    "gis건물통합식별번호": "A1",
-}
-
-
-def _normalize_building_row(row: dict[str, Any]) -> dict[str, Any]:
-    out = dict(row)
-    for key, val in list(row.items()):
-        col = _ROW_ALIAS_TO_COL.get(str(key))
-        if col and col not in out:
-            out[col] = val
-        # 소문자/공백 변형
-        compact = str(key).replace(" ", "").lower()
-        for alias, mapped in _ROW_ALIAS_TO_COL.items():
-            if compact == alias.replace(" ", "").lower() and mapped not in out:
-                out[mapped] = val
-    return out
+def _normalize_building_row(
+    row: dict[str, Any],
+    *,
+    table: str | None = None,
+    route: str | None = None,
+) -> dict[str, Any]:
+    return normalize_building_row(row, table=table, route=route)
 
 
 def answer_followup(
@@ -206,6 +202,8 @@ def answer_followup(
         )
 
     row = _ensure_detail_row(conn, session)
+    table = session.table
+    route = session.last_route
     attrs = _requested_attrs(q)
     area_q = " ".join(
         p
@@ -224,41 +222,76 @@ def answer_followup(
                 row,
                 title="직전에 조회한 건물 정보입니다.",
                 question=area_q,
+                table=session.table,
+                route=session.last_route,
             ),
             sql=None,
             rows=[row],
             tables=[session.table] if session.table else [],
         )
 
-    lines = ["직전 건물 기준으로 답합니다."]
-    for col, label in attrs:
-        if col == "_ADDR":
-            addr = " ".join(
-                str(x).strip()
-                for x in (row.get("A4"), row.get("A5"))
-                if x not in (None, "") and str(x).lower() != "nan"
-            )
+    lines: list[str] = []
+    for field_key, label in attrs:
+        if field_key == "_ADDR":
+            addr = row_full_address(row, table=table, route=route)
             lines.append(f"- 주소: {addr or '—'}")
             continue
+        if field_key == "lot_address":
+            val = row_lot_address(row, table=table, route=route)
+            lines.append(f"- {label}: {fmt_value(val)}")
+            continue
+        if field_key == "name":
+            val = row_building_name(row, table=table, route=route)
+            lines.append(f"- {label}: {fmt_value(val)}")
+            continue
+        if field_key == "usage":
+            val = row_usage(row, table=table, route=route)
+            lines.append(f"- {label}: {fmt_value(val)}")
+            continue
+        if field_key == "structure":
+            val = row_structure(row, table=table, route=route)
+            lines.append(f"- {label}: {fmt_value(val)}")
+            continue
+        if field_key == "height_m":
+            lines.append(f"- {label}: {fmt_value(row_height(row, table=table, route=route))}m")
+            continue
+        if field_key == "ground_floors":
+            lines.append(
+                f"- {label}: {fmt_value(row_ground_floors(row, table=table, route=route))}층"
+            )
+            continue
+        cols = field_columns_for_table(table)
+        col = cols.get(field_key, field_key)
         val = row.get(col)
-        if col in {"A12", "A14", "A15"}:
+        if field_key in {"building_area_m2", "gross_floor_area_m2", "site_area_m2"}:
             lines.append(
                 f"- {label}: {with_pyeong(f'{fmt_value(val)}㎡', val, question=area_q)}"
             )
-        elif col == "A16":
-            lines.append(f"- {label}: {fmt_value(val)}m")
-        elif col == "A26":
+        elif field_key == "basement_floors":
             lines.append(f"- {label}: {fmt_value(val)}층")
         else:
             lines.append(f"- {label}: {fmt_value(val)}")
-    if not row.get("A24"):
+    if not row_building_name(row, table=table, route=route):
         lines.append(
-            f"(참고: 건물명이 비어 있어 지번 {row.get('A5') or '—'} / "
-            f"건축물ID {row.get('A19') or '—'} 로 식별합니다.)"
+            f"(참고: 건물명이 비어 있어 지번 {row_lot_address(row, table=table, route=route) or '—'} / "
+            f"식별번호 {row.get('A1') or row.get('A19') or '—'} 로 식별합니다.)"
         )
+    if len(attrs) == 1 and attrs[0][0] in {"_ADDR", "lot_address", "name"}:
+        field_key, label = attrs[0]
+        if field_key == "_ADDR":
+            text = row_full_address(row, table=table, route=route) or "—"
+            answer = f"주소는 {text}입니다."
+        elif field_key == "lot_address":
+            text = row_lot_address(row, table=table, route=route) or "—"
+            answer = f"지번은 {text}입니다."
+        else:
+            text = row_building_name(row, table=table, route=route) or "—"
+            answer = f"건물명은 {text}입니다."
+    else:
+        answer = "직전 건물 기준으로 답합니다.\n" + "\n".join(lines)
     return FollowupAnswer(
         intent="followup_attr",
-        answer="\n".join(lines),
+        answer=answer,
         sql=None,
         rows=[row],
         tables=[session.table] if session.table else [],
@@ -277,81 +310,89 @@ def _ensure_detail_row(
     conn: psycopg.Connection,
     session: SessionContext,
 ) -> dict[str, Any]:
-    row = _normalize_building_row(dict(session.focus_row or {}))
-    need = ["A24", "A25", "A5", "A19", "A0", "A11", "A15", "A27"]
-    if all(k in row and row.get(k) is not None for k in ("A5", "A4")) and (
-        row.get("A0") is not None or row.get("A19") is not None or row.get("A24") is not None
-    ):
-        # 핵심 식별·주소가 있으면 그대로 사용 (상세 보강은 부족할 때만)
-        if row.get("A0") is not None or row.get("A14") is not None:
-            session.focus_row = row
-            if row.get("A5") is not None:
-                return row
+    table = session.table or "AL_D010_26_20250704"
+    route = session.last_route
+    row = _normalize_building_row(dict(session.focus_row or {}), table=table, route=route)
+    dataset = infer_row_dataset(row, table=table, route=route)
+    lot_col = "A7" if dataset == "d198" else "A5"
+    has_core = row.get("A4") and row_lot_address(row, table=table, route=route)
+    has_id = any(row.get(k) is not None for k in ("A0", "A1", "A19", "A13", "A24"))
+    if has_core and has_id:
+        session.focus_row = row
+        return row
 
     where = None
     params: tuple[Any, ...] = ()
     if row.get("A0") is not None:
         where = '"A0" = %s'
         params = (row["A0"],)
-    elif row.get("A19"):
-        where = '"A19" = %s'
-        params = (row["A19"],)
     elif row.get("A1"):
         where = '"A1" = %s'
         params = (row["A1"],)
-    elif row.get("A4") and row.get("A14") is not None:
-        where = '"A4" = %s AND "A14" = %s'
-        params = (row["A4"], row["A14"])
+    elif row.get("A19"):
+        where = '"A19" = %s'
+        params = (row["A19"],)
+    elif row.get("A4") and row_gross_floor_area(row, table=table, route=route) is not None:
+        area_col = "A19" if dataset == "d198" else "A14"
+        where = f'"A4" = %s AND "{area_col}" = %s'
+        params = (row["A4"], row_gross_floor_area(row, table=table, route=route))
     if not where:
         session.focus_row = row
         return row
 
-    table = session.table or "AL_D010_26_20250704"
-    cols = (
-        '"A0", "A1", "A4", "A5", "A9", "A11", "A12", "A14", "A15", '
-        '"A16", "A19", "A24", "A25", "A26", "A27"'
-    )
+    if is_d198_table(table):
+        from txt2sql.d198_attrs import D198_SELECT_COLS
+
+        quoted = ", ".join(f'"{c}"' for c in D198_SELECT_COLS)
+    else:
+        quoted = (
+            '"A0", "A1", "A4", "A5", "A9", "A11", "A12", "A14", "A15", '
+            '"A16", "A19", "A24", "A25", "A26", "A27"'
+        )
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
-            f'SELECT {cols} FROM "{table}" WHERE {where} LIMIT 1',
+            f'SELECT {quoted} FROM "{table}" WHERE {where} LIMIT 1',
             params,
         )
         fetched = cur.fetchone()
         if fetched:
             row.update(fetched)
             session.focus_row = dict(row)
-    _ = need
     return row
 
 
 def _format_building_card(
-    row: dict[str, Any], *, title: str, question: str = ""
+    row: dict[str, Any],
+    *,
+    title: str,
+    question: str = "",
+    table: str | None = None,
+    route: str | None = None,
 ) -> str:
-    name = row.get("A24")
-    name_s = (
-        str(name)
-        if name not in (None, "") and str(name).lower() != "nan"
-        else None
-    )
+    name_s = row_building_name(row, table=table, route=route)
     lines = [title]
     if name_s:
         lines.append(f"- 건물명: {name_s}")
     bldg_area = with_pyeong(
-        f"{fmt_value(row.get('A12'))}㎡", row.get("A12"), question=question
+        f"{fmt_value(row_building_area(row, table=table, route=route))}㎡",
+        row_building_area(row, table=table, route=route),
+        question=question,
     )
     floor_area = with_pyeong(
-        f"{fmt_value(row.get('A14'))}㎡", row.get("A14"), question=question
+        f"{fmt_value(row_gross_floor_area(row, table=table, route=route))}㎡",
+        row_gross_floor_area(row, table=table, route=route),
+        question=question,
     )
     lines.extend(
         [
-            f"- 법정동: {row.get('A4') or '—'}",
-            f"- 지번: {row.get('A5') or '—'}",
-            f"- 용도: {row.get('A9') or '—'}",
+            f"- 주소: {row_full_address(row, table=table, route=route) or '—'}",
+            f"- 지번: {row_lot_address(row, table=table, route=route) or '—'}",
+            f"- 용도: {row_usage(row, table=table, route=route) or '—'}",
             f"- 건물면적: {bldg_area}",
             f"- 연면적: {floor_area}",
-            f"- 높이: {fmt_value(row.get('A16'))}m",
-            f"- 지상층: {fmt_value(row.get('A26'))}층",
-            f"- 건축물ID: {row.get('A19') or '—'}",
+            f"- 높이: {fmt_value(row_height(row, table=table, route=route))}m",
+            f"- 지상층: {fmt_value(row_ground_floors(row, table=table, route=route))}층",
+            f"- 식별번호: {row.get('A1') or row.get('A19') or '—'}",
         ]
     )
     return "\n".join(lines)
@@ -568,7 +609,7 @@ def _rewrite_subset_built_date(
     question: str,
     session: SessionContext,
 ) -> tuple[str, str, bool]:
-    """금정·동래 건축일은 D198 사용승인일자(A34)로 옮긴다."""
+    """건축일은 D198 사용승인일자(A34)로 옮긴다."""
     from txt2sql.domain import d198_table_for_gu
 
     gu = _gu_from_subset_context(question, session, where)
@@ -653,6 +694,57 @@ def _subset_with_calendar_year(sql: str, question: str) -> str | None:
     if _is_scalar_count_sql(injected):
         return injected
     return _ensure_select_col(injected, col, prefix)
+
+
+def is_count_only_display_followup(question: str) -> bool:
+    q = question.strip()
+    if re.search(r"개수\s*만|건수\s*만|채수\s*만", q):
+        return True
+    if any(k in q for k in ("표 말고", "목록 말고", "리스트 말고")):
+        return True
+    if "표" in q and any(k in q for k in ("개수", "건수", "채수")):
+        return True
+    return False
+
+
+def try_count_only_display_followup(
+    question: str,
+    session: SessionContext,
+) -> Any | None:
+    """직전 목록 SQL 또는 Semantic Plan을 COUNT(*)로 변환."""
+    from txt2sql.intent_router import RoutedQuery
+
+    if not is_count_only_display_followup(question):
+        return None
+    sql = str(session.last_sql or "")
+    if sql and not _is_scalar_count_sql(sql):
+        parsed = _sql_table_where(sql)
+        if parsed is not None:
+            table, where = parsed
+            count_sql = f'SELECT COUNT(*) AS cnt\nFROM "{table}"\nWHERE {where};'
+            return RoutedQuery("followup_count_display", count_sql)
+    plan_dump = session.last_semantic_plan
+    if not plan_dump:
+        return None
+    try:
+        from txt2sql.semantic_plan.compiler import compile_semantic_plan
+        from txt2sql.semantic_plan.models import SemanticQueryPlan
+
+        base = SemanticQueryPlan.model_validate(plan_dump)
+        if base.query_kind not in {"list", "rank", "aggregate", "count"}:
+            return None
+        data = base.model_dump()
+        data["query_kind"] = "count"
+        data["select"] = []
+        data["limit"] = None
+        data["order_by"] = []
+        coerced = SemanticQueryPlan.model_validate(data)
+        compiled = compile_semantic_plan(coerced)
+        if compiled.sql:
+            return RoutedQuery("followup_count_display", compiled.sql)
+    except Exception:
+        return None
+    return None
 
 
 def try_subset_followup(

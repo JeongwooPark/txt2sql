@@ -29,6 +29,8 @@ class DatasetCapability:
     supports_sort: bool = True
     supports_spatial: bool = False
     temporal_coverage: str | None = None
+    coverage_sido: frozenset[str] = frozenset()
+    coverage_sigungu: frozenset[str] = frozenset()
     caveats: tuple[str, ...] = ()
 
 
@@ -83,6 +85,8 @@ DATASETS: dict[str, DatasetCapability] = {
         ),
         supports_spatial=False,
         temporal_coverage="year_stats",
+        coverage_sido=frozenset(),
+        coverage_sigungu=frozenset(),
         caveats=("attribute/year-grain oriented; column numbers differ from D010",),
     ),
     "admin_boundary": DatasetCapability(

@@ -17,6 +17,7 @@ from txt2sql.domain import (
     LENGTH_DIST_PATTERN,
     d198_gu_for_dong,
     d198_table_for_gu,
+    d198_unavailable_reason,
     extract_gu,
     extract_industrial_name,
     extract_industrial_names,
@@ -108,9 +109,7 @@ def extract_plan_hints(question: str) -> dict[str, Any]:
     # 행정동(번호동·행정전용) > 법정동 > 구. 구가 먼저 나와도 동을 우선.
     for cand in places:
         ck = classify_place(cand)
-        if uses_admin_boundary(cand, prefer_admin=prefer_admin) or (
-            KIND_ADMIN in ck and re.fullmatch(r"[가-힣]+\d+동", cand)
-        ):
+        if uses_admin_boundary(cand, prefer_admin=prefer_admin, question=q):
             place, kind = cand, "admin_dong"
             break
     if place is None:
@@ -450,7 +449,7 @@ def try_heuristic_plan(
     if (
         "면적" in q
         and "기초구역" not in q
-        and not any(k in q for k in ("연면적", "건축면적", "건물면적", "대지면적"))
+        and not any(k in q for k in ("연면적", "건축면적", "건물면적", "건축물면적", "대지면적"))
         and not any(
             item.get("field") in {
                 "gross_floor_area_m2",
@@ -472,7 +471,7 @@ def try_heuristic_plan(
             return SemanticQueryPlan(
                 query_kind="count",
                 entity="building",
-                unsupported_reason="허가일은 동래·금정 용도별건물(D198)에서만 조회할 수 있습니다",
+                unsupported_reason=d198_unavailable_reason("허가일"),
             )
     hints = hints or extract_plan_hints(q)
     bound = bound_contract if bound_contract is not None else extract_contract(q)
@@ -550,7 +549,7 @@ def try_heuristic_plan(
     # D198 커버 구/동이면 세부용도(아파트 등)를 우선하고 주요용도 오맵을 제거
     _gu_for_detail = extract_gu(q)
     if _gu_for_detail is None and hints.get("place_kind") == "legal_dong":
-        _gu_for_detail = d198_gu_for_dong(str(hints.get("place") or ""))
+        _gu_for_detail = d198_gu_for_dong(str(hints.get("place") or ""), question=q)
     if (
         detail_usages
         and _gu_for_detail
@@ -646,10 +645,6 @@ def try_heuristic_plan(
                 else _usage_eq(pos_usages[0]),
                 predicate,
             )
-            if len(pos_usages) == 1:
-                filters.append(
-                    FilterSpec(field="usage", operator="eq", value=pos_usages[0])
-                )
     elif hints.get("usage") and not dual_subset_usage:
         filters.append(FilterSpec(field="usage", operator="eq", value=hints["usage"]))
     if (
@@ -813,7 +808,14 @@ def try_heuristic_plan(
         order_by = [OrderSpec(field=metric, direction=direction, nulls="last")]
         select = ["name", "legal_dong", "lot_address", metric]
         if limit is None:
-            limit = 10
+            from txt2sql.intent_router import _extract_top_n
+
+            limit = _extract_top_n(
+                q,
+                default=1
+                if any(k in q for k in ("가장", "제일", "최대", "1등", "최고"))
+                else 10,
+            )
         if metric == "ground_floors" and any(k in q for k in ("많은", "많 ")) and not any(
             item.field == "ground_floors" for item in filters
         ):
@@ -1083,18 +1085,60 @@ def try_heuristic_plan(
     if "구별" in q and entity == "building":
         query_kind = "aggregate"
         group_by = ["sigungu_name"]
-        aggregations = [
-            AggregationSpec(function="count", field=None, alias="n")
-        ]
+        aggregations = _metric_group_aggregations(q)
         select = []
         if any(k in q for k in ("상위", "순위")):
-            order_by = [OrderSpec(field="n", direction="desc", nulls="last")]
+            order_field = aggregations[0].alias or "n"
+            order_by = [OrderSpec(field=order_field, direction="desc", nulls="last")]
             extracted = _extract_limit(q)
             if extracted:
                 limit = extracted
         else:
             order_by = []
             limit = None
+    if any(k in q for k in ("구·군별", "군별")) and entity == "building":
+        query_kind = "aggregate"
+        group_by = ["sigungu_name"]
+        aggregations = _metric_group_aggregations(q)
+        select = []
+        order_by = []
+        limit = None
+    if any(k in q for k in ("구조별", "법정동코드별", "용도별", "법정동별")) and entity == "building":
+        if "구조별" in q:
+            group_field = "structure"
+        elif "법정동코드별" in q:
+            group_field = "bjd_cd"
+        elif "법정동별" in q:
+            group_field = "legal_dong"
+        else:
+            group_field = "usage"
+        query_kind = "aggregate"
+        group_by = [group_field]
+        aggregations = _metric_group_aggregations(q)
+        select = []
+        order_by = []
+        limit = None
+    if re.search(r"(준공연대별|년대별)", q) and (
+        len(re.findall(r"\d{4}년대", q)) >= 2 or "이전" in q
+    ):
+        decade_group = True
+        group_by = ["approval_date"]
+        aggregations = [
+            AggregationSpec(function="count", field=None, alias="n")
+        ]
+        query_kind = "aggregate"
+        select = []
+        order_by = [OrderSpec(field="approval_date", direction="asc", nulls="last")]
+        limit = None
+        assumptions.append("approval_decade")
+        filters = [
+            item
+            for item in filters
+            if not (
+                item.field == "approval_date"
+                and item.operator in {"between", "gte", "lte", "gt", "lt", "eq"}
+            )
+        ]
     ratios: list[RatioSpec] = []
     if hints.get("ratio"):
         query_kind = "aggregate"
@@ -1260,7 +1304,7 @@ def try_heuristic_plan(
         gu_hint = extract_gu(q)
         dong_hint = hints.get("place") if hints.get("place_kind") == "legal_dong" else None
         if gu_hint is None and dong_hint:
-            gu_hint = d198_gu_for_dong(str(dong_hint))
+            gu_hint = d198_gu_for_dong(str(dong_hint), question=q)
         if gu_hint and d198_table_for_gu(str(gu_hint)) is not None:
             if query_kind in {"aggregate", "count"} or any(
                 k in q for k in ("평균", "합계", "몇 채", "몇채", "건수", "채수")
@@ -1276,12 +1320,10 @@ def try_heuristic_plan(
         if hints.get("place_kind") == "legal_dong":
             dong_name = hints.get("place")
             if gu_name is None and dong_name:
-                gu_name = d198_gu_for_dong(str(dong_name))
+                gu_name = d198_gu_for_dong(str(dong_name), question=q)
         if gu_name is None or d198_table_for_gu(str(gu_name)) is None:
             clarify = True
-            ambiguities.append(
-                "세부용도·용도분류는 동래·금정 용도별건물(D198)에서만 조회할 수 있습니다"
-            )
+            ambiguities.append(d198_unavailable_reason("세부용도·용도분류"))
         else:
             scope = ScopeSpec(
                 place=PlaceSpec(name=str(gu_name), kind="gu"),
@@ -1446,6 +1488,8 @@ def generate_semantic_plan(
 
 
 def _ensure_contract_operators(plan: SemanticQueryPlan, contract) -> SemanticQueryPlan:
+    from txt2sql.query_understanding.contract import _is_grouped_count_question
+
     if plan is None or contract is None:
         return plan
     aggregations = list(plan.aggregations)
@@ -1466,7 +1510,12 @@ def _ensure_contract_operators(plan: SemanticQueryPlan, contract) -> SemanticQue
                         alias="n" if req.function == "count" else f"{req.function}_{req.field}",
                     )
                 )
-            if not aggregations and contract.wants_count:
+            if not aggregations and (
+                contract.wants_count
+                or _is_grouped_count_question(
+                    contract.question or "", contract.group_fields
+                )
+            ):
                 aggregations.append(AggregationSpec(function="count", alias="n"))
         if aggregations:
             query_kind = "aggregate"
@@ -1523,6 +1572,23 @@ def _ensure_contract_operators(plan: SemanticQueryPlan, contract) -> SemanticQue
             if not aggregations:
                 aggregations.append(AggregationSpec(function="count", alias="n"))
             query_kind = "aggregate"
+    if group_by and query_kind == "count":
+        if not aggregations:
+            aggregations.append(AggregationSpec(function="count", alias="n"))
+        query_kind = "aggregate"
+    order_by = list(plan.order_by)
+    if (
+        query_kind == "aggregate"
+        and group_by
+        and aggregations
+        and not order_by
+        and any(item.function == "count" for item in aggregations)
+    ):
+        alias = next(
+            (item.alias for item in aggregations if item.function == "count" and item.alias),
+            "n",
+        )
+        order_by = [OrderSpec(field=alias, direction="desc", nulls="last")]
     return plan.model_copy(
         update={
             "aggregations": aggregations,
@@ -1530,6 +1596,7 @@ def _ensure_contract_operators(plan: SemanticQueryPlan, contract) -> SemanticQue
             "filters": filters,
             "group_by": group_by,
             "query_kind": query_kind,
+            "order_by": order_by,
         }
     )
 
@@ -1805,6 +1872,38 @@ def _extract_field_compare(question: str) -> FilterSpec | None:
     return FilterSpec(field=str(left), operator=str(op), value_field=str(right))
 
 
+def _metric_group_aggregations(
+    question: str,
+    *,
+    default_count: bool = True,
+) -> list[AggregationSpec]:
+    functions = _aggregate_functions(question)
+    metrics = _agg_metrics(question)
+    aggregations: list[AggregationSpec] = []
+    short_alias = {
+        "height_m": "h",
+        "gross_floor_area_m2": "gfa",
+        "site_area_m2": "lot",
+        "building_area_m2": "area",
+        "ground_floors": "fl",
+    }
+    for fn in functions:
+        if fn == "count":
+            aggregations.append(AggregationSpec(function="count", field=None, alias="n"))
+            continue
+        for metric in metrics:
+            aggregations.append(
+                AggregationSpec(
+                    function=fn,
+                    field=metric,
+                    alias=f"{fn}_{short_alias.get(metric, metric)}",
+                )
+            )
+    if not aggregations and default_count:
+        aggregations.append(AggregationSpec(function="count", field=None, alias="n"))
+    return aggregations
+
+
 def _aggregate_functions(question: str) -> list[str]:
     found: list[str] = []
     for text, fn in AGG_MAP.items():
@@ -1891,9 +1990,27 @@ def _extract_range_numerics(question: str) -> list[dict[str, Any]]:
 
 def _guess_kind(question: str) -> str:
     from txt2sql.domain import wants_map_display
+    from txt2sql.query_understanding import operators as ops
+    from txt2sql.query_understanding.contract import (
+        _is_grouped_count_question,
+        extract_contract,
+    )
 
     if wants_map_display(question):
         return "count"
+    contract = extract_contract(question)
+    if contract.group_fields and _is_grouped_count_question(
+        question, contract.group_fields
+    ):
+        return "aggregate"
+    if any(h in question for h in ops.GROUP_HINTS) and any(
+        k in question for k in ("건물 수", "건수", "집계", "보여", "나눠", "수를")
+    ):
+        return "aggregate"
+    if re.search(r"(준공연대별|년대별)", question) and (
+        len(re.findall(r"\d{4}년대", question)) >= 2 or "이전" in question
+    ):
+        return "aggregate"
     if "기초구역" in question and any(
         k in question for k in ("최대", "가장", "상위", "제일")
     ):
@@ -1927,11 +2044,15 @@ def _guess_kind(question: str) -> str:
             "몇 동",
             "동수",
             "건물 수",
+            "레코드 수",
             "채야",
+            "수는",
             "얼마나",
             "되나요",
         )
     ):
+        return "count"
+    if re.search(r"레코드\s*수", question):
         return "count"
     if any(k in question for k in ("건폐율", "용적율", "용적률", "지하")) and not any(
         k in question
@@ -1967,6 +2088,22 @@ def _guess_kind(question: str) -> str:
         return "rank"
     if any(k in question for k in ("많은", "많 ")) and any(
         k in question for k in ("층수", "지상층", "연면적", "높이", "건축면적", "건물면적")
+    ):
+        return "rank"
+    if any(
+        k in question
+        for k in (
+            "가장 큰",
+            "제일 큰",
+            "가장큰",
+            "제일큰",
+            "가장 넓",
+            "제일 넓",
+            "가장 작",
+            "제일 작",
+            "가장 낮",
+            "제일 낮",
+        )
     ):
         return "rank"
     return "list"

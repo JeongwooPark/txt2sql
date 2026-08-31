@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date
 
 from txt2sql.domain import STRUCTURE_ALIASES, d198_table_for_gu
 from txt2sql.gazetteer import (
@@ -37,6 +38,7 @@ from txt2sql.semantic_plan.models import (
     UnknownSemanticFieldError,
 )
 from txt2sql.semantic_plan.predicate_utils import effective_predicate
+from txt2sql.query_understanding.temporal import reference_date_sql
 from txt2sql.units import sql_number
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -300,13 +302,14 @@ def _select_sql(
     col_map: dict[str, str] | None = None,
 ) -> str:
     if plan.query_kind == "count" and not plan.ratios:
+        spatial_join = bool(plan.spatial_relations)
         industrial_join = any(
             getattr(rel.target, "entity", None) == "industrial_complex"
             for rel in plan.spatial_relations
         )
-        if industrial_join:
+        if industrial_join or (plan.entity == "building" and spatial_join):
             pk = {
-                "building": "A0",
+                "building": "A1",
                 "basic_zone": "BAS_ID",
                 "industrial_complex": "A0",
             }.get(plan.entity, "A0")
@@ -763,6 +766,8 @@ def _filter_sql(
         return f"{left} {op} {right}", height_used
     if spec.field == "structure" and spec.operator == "eq" and isinstance(spec.value, str):
         mapped = STRUCTURE_ALIASES.get(spec.value)
+        if mapped and spec.value.endswith("구조"):
+            return f"{col} = {_literal(spec.value, 'text')}", height_used
         if mapped:
             return f"{col} ILIKE {_literal(mapped, 'text')}", height_used
     op = _OPS.get(spec.operator)
@@ -1215,6 +1220,19 @@ def _literal(value: object, data_type: str) -> str:
     return "'" + text.replace("'", "''") + "'"
 
 
+def _compiler_reference_date() -> str | date | None:
+    try:
+        from txt2sql.config import load_settings
+
+        return load_settings().reference_date
+    except Exception:
+        return "2026-08-27"
+
+
+def _ref_sql() -> str:
+    return reference_date_sql(_compiler_reference_date())
+
+
 def _approval_year_expr(col: str) -> str:
     return f"LEFT(regexp_replace({col}::text, '[^0-9]', '', 'g'), 4)"
 
@@ -1222,10 +1240,11 @@ def _approval_year_expr(col: str) -> str:
 def _building_age_expr(col: str) -> str:
     """Age in years via AGE/EXTRACT when ISO date, else year subtraction."""
     year_expr = _approval_year_expr(col)
+    ref = _ref_sql()
     return (
         f"(CASE WHEN {col}::text ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}' "
-        f"THEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, {col}::date))::int "
-        f"ELSE (EXTRACT(YEAR FROM CURRENT_DATE)::int - ({year_expr})::int) END)"
+        f"THEN EXTRACT(YEAR FROM AGE({ref}, {col}::date))::int "
+        f"ELSE (EXTRACT(YEAR FROM {ref})::int - ({year_expr})::int) END)"
     )
 
 
@@ -1281,7 +1300,7 @@ def _approval_date_sql(col: str, spec: FilterSpec) -> str:
         date_ok = f"{col}::text ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'"
         return (
             f"{date_ok} AND {col}::date {op} "
-            f"(CURRENT_DATE - INTERVAL '{years} years')"
+            f"({_ref_sql()} - INTERVAL '{years} years')"
         )
     if isinstance(raw, str) and re.match(r"^\d{4}-\d{2}-\d{2}", raw):
         year = int(raw[:4])

@@ -409,6 +409,7 @@ def main(argv: list[str] | None = None) -> int:
                 query_ir_task=raw.get("query_ir_task"),
                 logical_status=raw.get("logical_status"),
                 physical_strategy=raw.get("physical_strategy"),
+                execution_trace=raw.get("execution_trace"),
             )
             rows.append(rec)
             _append_jsonl(args.transcript, rec)
@@ -459,6 +460,27 @@ def main(argv: list[str] | None = None) -> int:
         )
         _safe_print(f"wrote {args.out}")
         _safe_print(f"wrote {args.transcript}")
+
+        # Phase 1: canonical benchmark run artifacts
+        try:
+            from txt2sql.evaluation.benchmark_run import write_benchmark_run
+            from txt2sql.evaluation.baseline import DEFAULT_BASELINE_DIR
+
+            dq_ids = _load_track_ids(args.track_file, "data_quality") if args.track_file else set()
+            baseline_path = DEFAULT_BASELINE_DIR / "mapui_place_scope_20260827.json"
+            baseline_payload = None
+            if baseline_path.is_file():
+                baseline_payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+            run_dir = write_benchmark_run(
+                payload,
+                label="main485",
+                data_quality_ids=dq_ids or None,
+                baseline_payload=baseline_payload,
+            )
+            _safe_print(f"wrote benchmark run {run_dir}")
+        except Exception as exc:
+            _safe_print(f"[warn] benchmark run artifact skipped: {exc}")
+
         return 0 if payload.get("failed", 1) == 0 else 1
     finally:
         # Ordered Playwright teardown avoids TargetClosedError noise on Windows.

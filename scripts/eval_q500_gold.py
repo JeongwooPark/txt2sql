@@ -14,6 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from txt2sql import Txt2SqlEngine, SessionContext
+from txt2sql.evaluation.evaluation_policy import (
+    infer_gold_context,
+    infer_pred_context,
+    match_numbers_in_haystack,
+)
 from txt2sql.evaluation.taxonomy import diagnose_eval_failure
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -133,7 +138,15 @@ def meta_ok(gold: str, answer: str) -> bool:
     )
 
 
-def score(kind: str, gold: str, answer: str, rows: list[dict[str, Any]] | None) -> tuple[bool, str]:
+def score(
+    kind: str,
+    gold: str,
+    answer: str,
+    rows: list[dict[str, Any]] | None,
+    *,
+    question: str = "",
+    sql: str | None = None,
+) -> tuple[bool, str]:
     g = gold or ""
     a = answer or ""
     blob = a + " " + row_text(rows)
@@ -147,9 +160,14 @@ def score(kind: str, gold: str, answer: str, rows: list[dict[str, Any]] | None) 
         target = primary_count(g)
         if target is None:
             return False, "gold-no-number"
-        if has_num(hay, target):
-            return True, "count-match"
-        return False, f"count-mismatch gold={target:g} pred={hay[:6]}"
+        gold_ctx = infer_gold_context(kind="count", gold=g, question=question)
+        pred_ctx = infer_pred_context(
+            kind="count", answer=a, rows=rows, sql=sql, question=question
+        )
+        ok, _, reason = match_numbers_in_haystack(
+            hay, [target], gold_ctx=gold_ctx, pred_ctx=pred_ctx
+        )
+        return ok, reason if ok else f"count-mismatch gold={target:g} pred={hay[:6]} ({reason})"
 
     if kind == "scalar":
         names = gold_names(g)
@@ -159,11 +177,16 @@ def score(kind: str, gold: str, answer: str, rows: list[dict[str, Any]] | None) 
                 return False, f"name-missing {names[0]}"
         if not nums:
             return (bool(names) and any(n in blob for n in names[:3]), "scalar-name")
-        hits = sum(1 for x in nums if has_num(hay, x))
-        need = 1 if len(nums) == 1 else max(1, min(2, len(nums) // 2 + 1))
-        if hits >= need:
-            return True, f"scalar-nums {hits}/{len(nums)}"
-        return False, f"scalar-mismatch hits={hits} gold={nums[:4]}"
+        gold_ctx = infer_gold_context(kind="scalar", gold=g, question=question)
+        pred_ctx = infer_pred_context(
+            kind="scalar", answer=a, rows=rows, sql=sql, question=question
+        )
+        ok, hits, reason = match_numbers_in_haystack(
+            hay, nums, gold_ctx=gold_ctx, pred_ctx=pred_ctx
+        )
+        if ok:
+            return True, reason
+        return False, f"scalar-mismatch hits={hits} gold={nums[:4]} ({reason})"
 
     if kind == "list":
         names = gold_names(g)
@@ -555,7 +578,14 @@ def main() -> int:
             elif r is None:
                 reason = error or "no-result"
             else:
-                ok, reason = score(case["kind"], case.get("gold") or "", answer, pred_rows)
+                ok, reason = score(
+                    case["kind"],
+                    case.get("gold") or "",
+                    answer,
+                    pred_rows,
+                    question=case.get("q") or "",
+                    sql=r.sql if r else None,
+                )
                 if not r.ok and not ok:
                     reason = f"engine-fail:{r.error or r.route}"
             rec = {

@@ -52,9 +52,41 @@ def test_outside_distance_beyond_buffer() -> None:
 
 def test_sigungu_a3_prefix_busan_fallback() -> None:
     assert sigungu_a3_prefix("연제구") == "26470"
-    assert resolve_place_kind("우1동") == "admin_dong"
-    assert uses_admin_boundary("우1동") is True
+    assert resolve_place_kind("우1동", "우1동 행정동 내부") == "admin_dong"
+    assert resolve_place_kind("우1동") == "legal_dong"
+    assert uses_admin_boundary("우1동", question="우1동 행정동") is True
+    assert uses_admin_boundary("우1동") is False
     assert uses_admin_boundary("구서동") is False
+
+
+def test_numbered_dong_simple_count_uses_a4() -> None:
+    """Gold Q020/Q021: 법정동 COUNT — A4 even for admin gazetteer names."""
+    plan = try_heuristic_plan("대저1동 건물 수를 알려줘")
+    assert plan is not None
+    assert plan.scope and plan.scope.place
+    assert plan.scope.place.kind == "legal_dong"
+    sql = compile_semantic_plan(plan).sql
+    assert "A4" in sql
+    assert "BND_ADM_DONG_PG" not in sql
+
+
+def test_numbered_dong_inside_uses_bnd() -> None:
+    plan = try_heuristic_plan("광안2동 안에 있는 건물은 몇 채야?")
+    assert plan is not None
+    sql = compile_semantic_plan(plan).sql
+    assert "BND_ADM_DONG_PG" in sql
+
+
+def test_numbered_dong_inside_short_cue_uses_bnd() -> None:
+    """Q366/Q367: 「연산1동 안」「괴정1동 안의」→ BND (not A4)."""
+    for q in (
+        "연산1동 안 건물의 평균 지상층수를 알려줘",
+        "괴정1동 안의 위반건축물 수를 알려줘",
+    ):
+        plan = try_heuristic_plan(q)
+        assert plan is not None
+        sql = compile_semantic_plan(plan).sql
+        assert "BND_ADM_DONG_PG" in sql, q
 
 
 def test_ambiguous_gu_pnu_uses_sido_context() -> None:

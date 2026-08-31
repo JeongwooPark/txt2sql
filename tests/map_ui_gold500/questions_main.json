@@ -1,0 +1,5 @@
+{
+  "_readme": "MAIN 305/485 baseline (newset500). map_ui_gold500.run 기본 재현용.",
+  "name": "newset500",
+  "include": "../../docs/llm2sql_신규_자연어질의_테스트셋_500건_정답표.json"
+}

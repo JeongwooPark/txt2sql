@@ -24,8 +24,24 @@ D010 = "AL_D010_26_20250704"
 D060 = "AL_D060_00_20250804"
 BND = "BND_ADM_DONG_PG"
 BAS = "TL_KODIS_BAS_26_202507"
-D198_DR = "AL_D198_26260_20250115"
-D198_GJ = "AL_D198_26410_20250115"
+def _resolve_d198_tables() -> tuple[str, str]:
+    """금정·동래 D198 — DB에 등록된 최신 스냅샷."""
+    fallback = ("AL_D198_26410_20260715", "AL_D198_26260_20260715")
+    try:
+        from txt2sql.config import load_settings
+        from txt2sql.data.coverage import discover_d198_coverage
+
+        cov = discover_d198_coverage(load_settings())
+        gj = cov.get("금정구")
+        dr = cov.get("동래구")
+        if gj and dr:
+            return gj, dr
+    except Exception:
+        pass
+    return fallback
+
+
+D198_GJ, D198_DR = _resolve_d198_tables()
 
 OUT_MD = ROOT / "docs" / "평가문항_500.md"
 OUT_JSON = ROOT / "docs" / "평가문항_500.json"
@@ -97,10 +113,23 @@ def d010_agg(select: str, where: str) -> str:
     return f'SELECT {select} FROM "{D010}" WHERE {where}'
 
 
-def age_gte(col: str, years: int) -> str:
+def age_lt(col: str, years: int) -> str:
+    from txt2sql.query_understanding.temporal import reference_date_sql
+
+    ref = reference_date_sql()
     return (
         f"\"{col}\" ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$' "
-        f"AND \"{col}\"::date <= (CURRENT_DATE - INTERVAL '{years} years')"
+        f"AND \"{col}\"::date > ({ref} - INTERVAL '{years} years')"
+    )
+
+
+def age_gte(col: str, years: int) -> str:
+    from txt2sql.query_understanding.temporal import reference_date_sql
+
+    ref = reference_date_sql()
+    return (
+        f"\"{col}\" ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$' "
+        f"AND \"{col}\"::date <= ({ref} - INTERVAL '{years} years')"
     )
 
 

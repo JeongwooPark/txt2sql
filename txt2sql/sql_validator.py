@@ -244,8 +244,8 @@ def diagnose_sql(question: str, sql: str, *, row_count: int | None = None) -> st
         )
     if row_count == 0 and gu_m and d198_table_for_gu(gu_m.group(1)) is None and uses_d198:
         reasons.append(
-            "Query returned 0 rows on AL_D198 for a non-동래/금정 gu; "
-            'rewrite with "AL_D010_26_20250704" and "A9" for usage filters.'
+            "Query returned 0 rows on AL_D198 for a gu without D198 coverage; "
+            'rewrite with "AL_D010" and "A9" for usage filters.'
         )
 
     if not reasons:

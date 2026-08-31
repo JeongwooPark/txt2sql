@@ -47,6 +47,55 @@ def _entity_from_contract(contract: Any) -> EntityName:
     return "building"
 
 
+def _coalesce_or_predicates(contract: Any, predicates: list[PredicateIR]) -> list[PredicateIR]:
+    """동일 필드 eq predicate가 OR로 연결된 경우 logical_group으로 묶는다."""
+    has_or = any(
+        getattr(span, "kind", None) == "or"
+        for span in getattr(contract, "boolean_ops", []) or []
+    )
+    if not has_or:
+        return predicates
+    grouped: dict[str, list[PredicateIR]] = {}
+    rest: list[PredicateIR] = []
+    for pred in predicates:
+        if (
+            pred.field
+            and pred.operator == "eq"
+            and pred.field in {"usage", "detail_usage", "structure"}
+        ):
+            grouped.setdefault(pred.field, []).append(pred)
+        else:
+            rest.append(pred)
+    merged = list(rest)
+    for items in grouped.values():
+        if len(items) >= 2:
+            merged.append(PredicateIR(logical_group="or", children=items))
+        else:
+            merged.extend(items)
+    return merged
+
+
+def _coalesce_union_predicates(contract: Any, predicates: list[PredicateIR]) -> list[PredicateIR]:
+    """「공장과 창고를 합친」처럼 union count 의도면 OR/IN으로 묶는다."""
+    q = getattr(contract, "question", "") or ""
+    if not any(k in q for k in ("합친", "합계", "더한", "합산")):
+        return predicates
+    grouped: dict[str, list[PredicateIR]] = {}
+    rest: list[PredicateIR] = []
+    for pred in predicates:
+        if pred.field and pred.operator == "eq" and pred.field in {"usage", "detail_usage"}:
+            grouped.setdefault(pred.field, []).append(pred)
+        else:
+            rest.append(pred)
+    merged = list(rest)
+    for items in grouped.values():
+        if len(items) >= 2:
+            merged.append(PredicateIR(logical_group="or", children=items))
+        else:
+            merged.extend(items)
+    return merged
+
+
 def contract_to_query_ir(contract: Any) -> QueryIR:
     places = list(getattr(contract, "places", None) or [])
     scope = None
@@ -117,6 +166,9 @@ def contract_to_query_ir(contract: Any) -> QueryIR:
                         provenance=_span_prov(span),
                     )
                 )
+
+    predicates = _coalesce_or_predicates(contract, predicates)
+    predicates = _coalesce_union_predicates(contract, predicates)
 
     aggregations: list[AggregationIR] = []
     for req in getattr(contract, "aggregation_requests", None) or []:
@@ -348,6 +400,39 @@ def plan_to_query_ir(plan: Any) -> QueryIR:
     return normalize_query_ir(ir)
 
 
+def _predicate_ir_to_spec(pred: PredicateIR) -> Any | None:
+    from txt2sql.semantic_plan.models import FilterSpec, OperandSpec, PredicateSpec
+
+    if pred.logical_group in {"and", "or"} and pred.children:
+        args = [_predicate_ir_to_spec(child) for child in pred.children]
+        args = [item for item in args if item is not None]
+        if not args:
+            return None
+        if len(args) == 1:
+            node = args[0]
+        else:
+            node = PredicateSpec(op=pred.logical_group, args=args)
+        if pred.negated:
+            return PredicateSpec(op="not", args=[node])
+        return node
+    if not pred.field or not pred.operator:
+        return None
+    filt = FilterSpec(
+        field=pred.field,
+        operator=pred.operator,  # type: ignore[arg-type]
+        value=pred.value,
+        value2=pred.value2,
+        unit=pred.unit,
+        value_field=pred.value_field,
+    )
+    from txt2sql.semantic_plan.migrate import filter_to_predicate
+
+    node = filter_to_predicate(filt)
+    if pred.negated:
+        return PredicateSpec(op="not", args=[node])
+    return node
+
+
 def query_ir_to_semantic_plan(ir: QueryIR) -> Any:
     """Best-effort reverse adapter to legacy SemanticQueryPlan."""
     from txt2sql.semantic_plan.models import (
@@ -355,6 +440,7 @@ def query_ir_to_semantic_plan(ir: QueryIR) -> Any:
         FilterSpec,
         OrderSpec,
         PlaceSpec,
+        PredicateSpec,
         ProjectionSpec,
         ScopeSpec,
         SemanticQueryPlan,
@@ -387,8 +473,18 @@ def query_ir_to_semantic_plan(ir: QueryIR) -> Any:
         )
 
     filters: list[FilterSpec] = []
+    root_predicate: PredicateSpec | None = None
     for pred in ir.predicates:
         if pred.children or pred.logical_group:
+            converted = _predicate_ir_to_spec(pred)
+            if converted is not None:
+                if root_predicate is None:
+                    root_predicate = converted
+                else:
+                    root_predicate = PredicateSpec(
+                        op="and",
+                        args=[root_predicate, converted],
+                    )
             continue
         if not pred.field or not pred.operator:
             continue
@@ -477,6 +573,7 @@ def query_ir_to_semantic_plan(ir: QueryIR) -> Any:
         query_kind=query_kind,  # type: ignore[arg-type]
         entity=entity,  # type: ignore[arg-type]
         scope=scope,
+        predicate=root_predicate,
         filters=filters,
         select=list(ir.outputs) or [m.concept for m in ir.measures],
         projections=projections,

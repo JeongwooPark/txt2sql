@@ -167,3 +167,38 @@ def rank_datasets_for_concepts(concept_keys: list[str]) -> list[tuple[str, float
             if ck in ds.concepts:
                 scores[ds.dataset_id] = scores.get(ds.dataset_id, 0.0) + 1.0 / ds.priority
     return sorted(scores.items(), key=lambda x: -x[1])
+
+
+def check_coverage(
+    dataset_id: str,
+    *,
+    sido: str | None = None,
+    sigungu: str | None = None,
+) -> tuple[bool, str]:
+    """Return (supported, reason) for geographic coverage."""
+    ds = DATASETS.get(dataset_id)
+    if ds is None:
+        return False, "UNSUPPORTED_DATASET"
+    if ds.coverage_sigungu and sigungu and sigungu not in ds.coverage_sigungu:
+        return False, "UNSUPPORTED_DATASET_COVERAGE"
+    if ds.coverage_sido and sido and sido not in ds.coverage_sido:
+        return False, "UNSUPPORTED_SCOPE"
+    return True, "ok"
+
+
+def filter_by_coverage(
+    bindings: list[SemanticBinding],
+    *,
+    sido: str | None = None,
+    sigungu: str | None = None,
+) -> tuple[list[SemanticBinding], list[str]]:
+    """Filter bindings by dataset geographic coverage."""
+    ok: list[SemanticBinding] = []
+    unsupported: list[str] = []
+    for b in bindings:
+        supported, reason = check_coverage(b.dataset, sido=sido, sigungu=sigungu)
+        if supported:
+            ok.append(b)
+        else:
+            unsupported.append(f"{b.dataset}:{reason}")
+    return ok, unsupported

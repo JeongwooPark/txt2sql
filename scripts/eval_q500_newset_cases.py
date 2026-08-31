@@ -52,9 +52,12 @@ def year_lt(col: str, year: int) -> str:
 
 
 def age_lt(col: str, years: int) -> str:
+    from txt2sql.query_understanding.temporal import reference_date_sql
+
+    ref = reference_date_sql()
     return (
         f"\"{col}\" ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$' "
-        f"AND \"{col}\"::date > (CURRENT_DATE - INTERVAL '{years} years')"
+        f"AND \"{col}\"::date > ({ref} - INTERVAL '{years} years')"
     )
 
 
@@ -1089,7 +1092,7 @@ WHERE {nonempty("A1")} GROUP BY 1 HAVING COUNT(*) > 1 ORDER BY n DESC LIMIT 20''
   - (SELECT COUNT(*) FROM "{D010}" d JOIN "{dr}" u ON d."A1" = u."A1") AS diff''', "compare", ""),
         Q("Q451", qmap, 'SELECT table_name, display_name, category FROM table_metadata ORDER BY table_name', "group", "개"),
         Q("Q452", qmap, None, "meta", "", gold_text="예. AL_D010_26_20250704는 부산 전역 GIS건물통합정보이다."),
-        Q("Q453", qmap, None, "meta", "", gold_text="금정구(AL_D198_26410_20250115), 동래구(AL_D198_26260_20250115)만 있다."),
+        Q("Q453", qmap, None, "meta", "", gold_text=f"금정구({D198_GJ}), 동래구({D198_DR})만 있다."),
         Q("Q454", qmap, None, "meta", "", gold_text="용도별건물(D198) 사용승인일자 A34. D010 A13은 결측이 많아 쓰지 않는다."),
         Q("Q455", qmap, None, "meta", "", gold_text="법정동은 건물 테이블 A4(대장 주소), 행정동은 BND_ADM_DONG_PG.ADM_NM + 공간교차이다."),
         Q("Q456", qmap, None, "meta", "", gold_text="도로명주소 기초구역 TL_KODIS_BAS_26_202507 의 BAS_ID."),

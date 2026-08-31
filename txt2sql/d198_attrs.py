@@ -23,9 +23,6 @@ from txt2sql.units import (
     sql_number,
 )
 
-D198_DONGRAE = "AL_D198_26260_20250115"
-D198_GEUMJEONG = "AL_D198_26410_20250115"
-
 DATASET_HINTS = ("용도별건물공간정보", "용도별건물", "AL_D198", "D198")
 
 # D010과 겹치지 않거나, D198에서만 쓰는 속성·값
@@ -1470,6 +1467,8 @@ def _parse_rank(q: str, parsed: D198Parsed, named: bool) -> None:
         ("건물높이", "A30"),
         ("건물연면적", "A19"),
         ("건물건축면적", "A18"),
+        ("건물면적", "A18"),
+        ("건축면적", "A18"),
         ("건물대지면적", "A17"),
         ("지하층", "A32"),
     ]

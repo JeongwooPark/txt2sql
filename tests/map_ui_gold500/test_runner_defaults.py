@@ -65,6 +65,40 @@ def test_parse_sse_and_result() -> None:
     assert parsed.get("answer") == "안녕" or parsed.get("answer") == "안녕"
 
 
+def test_sse_result_preserves_execution_trace() -> None:
+    import json
+
+    trace = {"execution_source": "semantic_v2", "trace_completeness": {"query_ir": True}}
+    body = (
+        'data: {"type":"done","session_id":"s1","result":'
+        + json.dumps(
+            {
+                "ok": True,
+                "answer": "2,537채",
+                "route": "semantic_v2",
+                "execution_trace": trace,
+            },
+            ensure_ascii=False,
+        )
+        + "}\n\n"
+    )
+    parsed = sse_result(parse_sse(body))
+    assert parsed.get("execution_trace") == trace
+
+
+def test_ask_result_roundtrip_execution_trace() -> None:
+    from txt2sql.types import AskResult
+
+    payload = {
+        "ok": True,
+        "answer": "test",
+        "execution_trace": {"execution_source": "rag_sql"},
+    }
+    result = AskResult.from_dict(payload)
+    dumped = result.to_dict()
+    assert dumped.get("execution_trace") == {"execution_source": "rag_sql"}
+
+
 def test_track_file_exclude_and_only() -> None:
     import json
     from pathlib import Path

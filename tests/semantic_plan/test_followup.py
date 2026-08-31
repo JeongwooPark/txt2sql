@@ -113,3 +113,28 @@ def test_event_log_four_turn_and_undo() -> None:
     assert reset is not None
     assert reset[0].filters == base.filters
     assert reset[0].limit == base.limit
+
+
+def test_remove_filter_rebuilds_predicate() -> None:
+    from txt2sql.semantic_plan.followup import apply_plan_events, parse_followup_events
+    from txt2sql.semantic_plan.models import FilterSpec, SemanticQueryPlan
+
+    base = SemanticQueryPlan.model_validate(
+        {
+            "query_kind": "list",
+            "entity": "building",
+            "filters": [
+                FilterSpec(
+                    field="gross_floor_area_m2", operator="gte", value=10000
+                ).model_dump(),
+                FilterSpec(field="height_m", operator="gte", value=50).model_dump(),
+            ],
+        }
+    )
+    events = parse_followup_events("연면적 조건은 빼줘")
+    assert any(ev.op == "remove_filter" for ev in events)
+    plan = apply_plan_events(base, events)
+    fields = {item.field for item in plan.filters}
+    assert "gross_floor_area_m2" not in fields
+    assert "height_m" in fields
+    assert plan.predicate is not None

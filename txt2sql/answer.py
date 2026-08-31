@@ -7,6 +7,17 @@ import re
 import time
 from typing import Any
 
+from txt2sql.building_row import (
+    infer_row_dataset,
+    row_approval_date as _br_approval_date,
+    row_building_name,
+    row_full_address,
+    row_ground_floors,
+    row_gross_floor_area,
+    row_height as _br_height,
+    row_lot_address,
+    row_usage as _br_usage,
+)
 from txt2sql.d198_attrs import (
     COLUMN_LABELS as D198_COLUMN_LABELS,
     format_value_bin_label,
@@ -57,7 +68,7 @@ ANSWER_SYSTEM_PROMPT = """당신은 부산 GIS 데이터베이스 질의 결과�
 금정구에서 사용승인일이 있는 아파트 중 가장 최근에 지어진 건물은 휴림 아르페입니다. 사용승인일은 2023년 3월 22일입니다.
 
 나쁜 예:
-안내: 용도별건물공간정보는 현재 동래구·금정구 자료입니다.
+안내: 용도별건물공간정보는 현재 일부 구·군 자료만 있습니다.
 금정구 아파트(공동주택) 사용승인일자 있음 세부용도명 아파트 중에서 해당 조건의 건축물입니다. 예: 「휴림 아르페」 공동주택 일반.
 """
 
@@ -332,42 +343,34 @@ def _place_label(question: str) -> str:
     return ""
 
 
-def _row_height(row: dict[str, Any]) -> Any:
-    if row.get("A16") is not None:
-        return row.get("A16")
-    return row.get("A30")
+def _row_height(row: dict[str, Any], *, table: str | None = None, route: str | None = None) -> Any:
+    return _br_height(row, table=table, route=route)
 
 
-def _row_floors(row: dict[str, Any]) -> Any:
-    if row.get("A26") is not None:
-        return row.get("A26")
-    return row.get("A31")
+def _row_floors(row: dict[str, Any], *, table: str | None = None, route: str | None = None) -> Any:
+    return row_ground_floors(row, table=table, route=route)
 
 
-def _row_approval_date(row: dict[str, Any]) -> str:
-    for key in ("A34", "A33", "A13"):
-        raw = row.get(key)
-        if raw in (None, ""):
-            continue
-        text = str(raw).strip()
-        if re.match(r"^\d{4}", text):
-            return text
-    return ""
+def _row_approval_date(
+    row: dict[str, Any], *, table: str | None = None, route: str | None = None
+) -> str:
+    return _br_approval_date(row, table=table, route=route)
 
 
-def _row_name(row: dict[str, Any], *, fallback: str | None = None) -> str | None:
-    name = row.get("A24")
-    if name not in (None, "") and str(name).lower() != "nan":
-        return str(name)
-    return fallback
+def _row_name(
+    row: dict[str, Any],
+    *,
+    fallback: str | None = None,
+    table: str | None = None,
+    route: str | None = None,
+) -> str | None:
+    return row_building_name(row, table=table, route=route, fallback=fallback)
 
 
-def _row_addr(row: dict[str, Any]) -> str:
-    return " ".join(
-        str(x).strip()
-        for x in (row.get("A4"), row.get("A5"))
-        if x not in (None, "") and str(x).lower() != "nan"
-    )
+def _row_addr(
+    row: dict[str, Any], *, table: str | None = None, route: str | None = None
+) -> str:
+    return row_full_address(row, table=table, route=route)
 
 
 def _rank_target(question: str) -> str:
@@ -379,12 +382,8 @@ def _rank_target(question: str) -> str:
     return "건물"
 
 
-def _row_usage(row: dict[str, Any]) -> Any:
-    for key in ("A9", "A25"):
-        val = row.get(key)
-        if val not in (None, "") and not (isinstance(val, (int, float)) and val < 10):
-            return val
-    return row.get("A25") or row.get("A9")
+def _row_usage(row: dict[str, Any], *, table: str | None = None, route: str | None = None) -> Any:
+    return _br_usage(row, table=table, route=route)
 
 
 def _looks_like_rank_question(question: str) -> bool:
@@ -575,7 +574,7 @@ def _natural_building_name_lookup(
         if attr_only == "주소":
             return f"「{name_s}」의 주소는 {_row_addr(row) or '—'}입니다."
         if attr_only == "지번":
-            return f"「{name_s}」의 지번은 {row.get('A5') or '—'}입니다."
+            return f"「{name_s}」의 지번은 {row_lot_address(row) or '—'}입니다."
         if attr_only == "높이":
             return f"「{name_s}」의 높이는 {_fmt_number(_row_height(row))}m입니다."
         if attr_only == "연면적":
@@ -613,7 +612,7 @@ def _natural_building_name_lookup(
         f"조건에 맞는 건물이 {len(rows)}건 있습니다. 주요 결과는 다음과 같습니다."
     ]
     for i, row in enumerate(rows[:10], start=1):
-        name_s = _row_name(row, fallback=f"지번 {row.get('A5') or '—'}")
+        name_s = _row_name(row, fallback=f"지번 {row_lot_address(row) or '—'}")
         if attr_only == "주소":
             lines.append(f"{i}) 「{name_s}」 — {_row_addr(row) or '—'}")
         elif attr_only == "사용승인일":
@@ -1108,7 +1107,7 @@ def build_distribution(
     """구간·연도 집계를 표/요약용 구조로 만든다."""
     n_rows = row_count if row_count is not None else len(rows)
     gu = extract_gu(question)
-    if gu and gu not in {"동래구", "금정구"} and n_rows == 0:
+    if gu and gu not in D198_BY_GU and n_rows == 0:
         return None
     where = _stats_where(question)
     target = _stats_target(question)
@@ -1290,6 +1289,10 @@ def _labels_for_route(route: str | None) -> dict[str, str]:
         labels["A25"] = "주요용도명"
         labels["A27"] = "세부용도명"
         return labels
+    if route and str(route).startswith("followup_"):
+        labels = dict(_COLUMN_LABELS)
+        labels.update(D198_COLUMN_LABELS)
+        return labels
     if route and str(route).startswith(
         ("d010_attr", "d060_attr", "bnd_attr", "bas_attr")
     ):
@@ -1305,8 +1308,17 @@ def _labels_for_route(route: str | None) -> dict[str, str]:
     return _COLUMN_LABELS
 
 
-def _label_row(row: dict[str, Any], *, route: str | None = None) -> dict[str, Any]:
-    labels = _labels_for_route(route)
+def _label_row(
+    row: dict[str, Any],
+    *,
+    route: str | None = None,
+    table: str | None = None,
+) -> dict[str, Any]:
+    effective_route = route
+    if route and str(route).startswith("followup_"):
+        if infer_row_dataset(row, table=table, route=route) == "d198":
+            effective_route = "d198_attr_rank"
+    labels = _labels_for_route(effective_route)
     labeled: dict[str, Any] = {}
     for k, v in row.items():
         if k in _SKIP_SUMMARY_COLS:
@@ -1326,41 +1338,39 @@ def _label_row(row: dict[str, Any], *, route: str | None = None) -> dict[str, An
 
 
 def _spoken_building(
-    row: dict[str, Any], *, route: str | None = None, question: str | None = None
+    row: dict[str, Any],
+    *,
+    route: str | None = None,
+    question: str | None = None,
+    table: str | None = None,
 ) -> dict[str, Any]:
     """LLM에 넘길 핵심 사실만. 스키마 용어 나열을 막는다."""
-    is_d198 = bool(route and str(route).startswith("d198_"))
-    if not is_d198 and row.get("A34") and row.get("A13") and not row.get("A24"):
-        is_d198 = True
-    name = (
-        str(row.get("A13") or "").strip()
-        if is_d198
-        else str(row.get("A24") or "").strip()
-    ) or str(row.get("A24") or row.get("A13") or "").strip()
+    dataset = infer_row_dataset(row, table=table, route=route)
+    is_d198 = dataset == "d198"
+    name = row_building_name(row, table=table, route=route) or ""
     out: dict[str, Any] = {}
     if name:
         out["건물명"] = name
-    dong = str(row.get("A4") or "").strip()
-    if dong:
-        out["위치"] = dong
-    bunji = str(row.get("A5") or "").strip()
-    if bunji:
-        out["지번"] = bunji
-    date = str(row.get("A34") or row.get("A33") or "").strip()
+    addr = row_full_address(row, table=table, route=route)
+    if addr:
+        out["주소"] = addr
+    lot = row_lot_address(row, table=table, route=route)
+    if lot:
+        out["지번"] = lot
+    date = _row_approval_date(row, table=table, route=route)
     if date:
-        spoken = _fmt_date_ko(date)
-        out["사용승인일" if row.get("A34") else "허가일"] = spoken
+        out["사용승인일" if row.get("A34") else "허가일"] = _fmt_date_ko(date)
         if row.get("A34") and row.get("A33"):
             out["허가일"] = _fmt_date_ko(str(row.get("A33")).strip())
-    usage = str(row.get("A25") or row.get("A9") or "").strip()
+    usage = str(_row_usage(row, table=table, route=route) or "").strip()
     detail = str(row.get("A27") or "").strip()
     if detail == "아파트" or usage == "공동주택":
         out["용도"] = "아파트(공동주택)"
     elif usage:
         out["용도"] = usage
-    height = row.get("A30") if is_d198 else row.get("A16")
-    floors = row.get("A31") if is_d198 else row.get("A26")
-    area = row.get("A19") if is_d198 else row.get("A14")
+    height = _row_height(row, table=table, route=route)
+    floors = _row_floors(row, table=table, route=route)
+    area = row_gross_floor_area(row, table=table, route=route)
     if height not in (None, ""):
         out["높이_m"] = height
     if floors not in (None, ""):
@@ -1372,6 +1382,7 @@ def _spoken_building(
                 out["연면적_평"] = format_pyeong_from_m2(float(area))
             except (TypeError, ValueError):
                 pass
+    _ = is_d198
     return out
 
 

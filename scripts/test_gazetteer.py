@@ -40,10 +40,14 @@ def main() -> int:
     places = extract_places("구서1동 구서2동 구서동 아파트 특징 비교")
     if places != ["구서1동", "구서2동", "구서동"]:
         failed.append(f"3개 동 추출: {places}")
-    if not _use_admin_boundary("구서1동") or _use_admin_boundary("구서동"):
+    if not uses_admin_boundary("구서1동", question="구서1동 안에") or uses_admin_boundary(
+        "구서동"
+    ):
         failed.append("행정/법정 경계 판별 실패")
     if uses_admin_boundary("감전동"):
-        failed.append("감전동(법정+행정)이 행정전용으로 잡힘")
+        failed.append("감전동 단순 COUNT가 BND로 잡힘")
+    if uses_admin_boundary("대저1동"):
+        failed.append("대저1동 단순 COUNT가 BND로 잡힘")
 
     if extract_gu("금정구 구서동 건물") != "금정구":
         failed.append(f"구 추출 실패: {extract_gu('금정구 구서동 건물')}")
