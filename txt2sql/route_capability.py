@@ -151,6 +151,15 @@ INDUSTRIAL = RouteCapability(
     supported_aggregations=_COUNT_ONLY,
     supported_fields=_PLACE_FIELDS | {"usage"},
 )
+INDUSTRIAL_ADMIN_GROUP = RouteCapability(
+    route="industrial_admin_sig_group",
+    entities=frozenset({"industrial_complex", "admin_area"}),
+    supports_spatial=True,
+    supports_group_by=True,
+    supported_group_fields=frozenset({"sigungu_name", "adm_sig", "admin_sigungu"}),
+    supported_aggregations=frozenset({"count"}),
+    supported_fields=_PLACE_FIELDS,
+)
 D010 = RouteCapability(
     route="d010",
     supports_between=True,
@@ -174,6 +183,8 @@ D198 = RouteCapability(
     route="d198",
     supports_between=True,
     supports_multiple_predicates=True,
+    supports_group_by=True,
+    supported_group_fields=frozenset({"legal_dong", "sigungu_name", "usage", "detail_usage"}),
     supports_rank=True,
     supports_top_n=True,
     supports_fixed_bins=True,
@@ -194,10 +205,13 @@ D198 = RouteCapability(
 BAS = RouteCapability(
     route="bas",
     entities=frozenset({"basic_zone"}),
+    supports_group_by=True,
+    supported_group_fields=frozenset({"legal_dong", "sigungu_name", "zone_name"}),
     supports_rank=True,
     supports_top_n=True,
+    supports_output_projection=True,
     supported_aggregations=_COUNT_ONLY,
-    supported_fields=frozenset({"area_m2", "legal_dong", "sigungu_name"}),
+    supported_fields=frozenset({"area_m2", "legal_dong", "sigungu_name", "zone_name", "zone_code"}),
 )
 SPATIAL = RouteCapability(
     route="spatial",
@@ -255,6 +269,8 @@ def capability_for(route: str) -> RouteCapability:
         return RANK
     if intent == "building_name_lookup":
         return NAME_LOOKUP
+    if intent == "industrial_admin_sig_group":
+        return INDUSTRIAL_ADMIN_GROUP
     if intent.startswith("industrial_") or intent == "buildings_in_industrial":
         return INDUSTRIAL
     if intent.startswith("d198_") or intent.startswith("building_age"):

@@ -59,11 +59,12 @@ def test_or_coalesce_in_contract_adapter() -> None:
     assert any(p.logical_group == "or" for p in ir.predicates)
 
 
-def test_usage_count_uses_d198_for_dong_in_dongrae() -> None:
+def test_usage_count_uses_d010_for_simple_usage_in_dongrae() -> None:
+    """단순 대분류 용도 건수는 D010+A9 (D198 자동 선택 금지)."""
     routed = _route_place_usage_count("온천동에서 숙박시설 건물은 몇 채야?", conn=None)
     assert routed is not None
-    assert "AL_D198_26260" in routed.sql
-    assert '"A25" = \'숙박시설\'' in routed.sql
+    assert "AL_D010" in routed.sql
+    assert '"A9" = \'숙박시설\'' in routed.sql
 
 
 def test_industrial_count_uses_row_count_not_distinct_names() -> None:

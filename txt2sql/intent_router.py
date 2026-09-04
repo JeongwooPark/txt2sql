@@ -1010,6 +1010,46 @@ def _route_sigungu_site_avg_vs_city(q: str) -> RoutedQuery | None:
     return RoutedQuery("sigungu_site_avg_vs_city", sql)
 
 
+def _route_d198_legal_dong_topn(q: str) -> RoutedQuery | None:
+    """D198: gu + temporal cutoff + top-N legal_dong by building count."""
+    import re
+
+    if "법정동" not in q or not any(k in q for k in ("보여", "알려", "목록", "곳")):
+        return None
+    if not any(k in q for k in ("가장 많은", "많은", "상위", "TOP", "top")):
+        return None
+    m_lim = re.search(r"(\d+)\s*곳", q)
+    if not m_lim:
+        return None
+    limit = int(m_lim.group(1))
+    gu = extract_gu(q)
+    if not gu:
+        return None
+    from txt2sql.domain import d198_table_for_gu
+
+    table = d198_table_for_gu(gu)
+    if not table:
+        return None
+    year_cutoff = None
+    m_year = re.search(r"(\d{4})\s*년\s*이전", q)
+    if m_year:
+        year_cutoff = m_year.group(1)
+    elif "이전 준공" in q or "이전에 준공" in q:
+        m2 = re.search(r"(\d{4})", q)
+        if m2:
+            year_cutoff = m2.group(1)
+    if not year_cutoff:
+        return None
+    where_parts = [f'"A34" IS NOT NULL', f'"A34" < \'{year_cutoff}\'']
+    sql = (
+        f'SELECT "A4" AS bjd, COUNT(*)::bigint AS n\n'
+        f'FROM "{table}"\n'
+        f"WHERE {' AND '.join(where_parts)}\n"
+        f"GROUP BY 1 ORDER BY n DESC LIMIT {limit}"
+    )
+    return RoutedQuery("d198_legal_dong_topn", sql)
+
+
 def _route_d198_null_date_group(q: str) -> RoutedQuery | None:
     if "법정동별" not in q or not any(k in q for k in ("집계", "별로")):
         return None
@@ -1085,6 +1125,10 @@ def try_route(
     null_group = _route_d198_null_date_group(q)
     if null_group is not None:
         return null_group
+
+    d198_topn = _route_d198_legal_dong_topn(q)
+    if d198_topn is not None:
+        return d198_topn
 
     ind_admin = _route_industrial_admin_sig_group(q)
     if ind_admin is not None:
@@ -1534,6 +1578,7 @@ def _route_place_usage_count(
     # 아파트·오피스텔·다가구주택 등은 D198 세부용도 경로로 넘긴다.
     if extract_detail_usages(q):
         return None
+    from txt2sql.dataset_grain import simple_building_usage_count
     from txt2sql.domain import d198_gu_for_dong, d198_table_for_gu, extract_usages
 
     or_tokens = ("또는", "혹은", "이거나")
@@ -1544,7 +1589,7 @@ def _route_place_usage_count(
         gu = extract_gu(q)
         gu_for_d198 = gu or (d198_gu_for_dong(place, question=q) if place else None)
         d198_table = d198_table_for_gu(gu_for_d198)
-        if d198_table:
+        if d198_table and not simple_building_usage_count(q):
             where_parts: list[str] = []
             if place:
                 where_parts.extend(_a4_place_filters(place, gu_for_d198))
@@ -1578,11 +1623,9 @@ def _route_place_usage_count(
     if not place and not gu:
         return None
 
-    from txt2sql.domain import d198_gu_for_dong, d198_table_for_gu
-
     gu_for_d198 = gu or (d198_gu_for_dong(place, question=q) if place else None)
     d198_table = d198_table_for_gu(gu_for_d198)
-    if d198_table:
+    if d198_table and not simple_building_usage_count(q):
         where_parts: list[str] = []
         if place:
             where_parts.extend(_a4_place_filters(place, gu))

@@ -1,5 +1,5 @@
 {
-  "_readme": "골드테스트2 (newset500 / MAIN485). data_quality 제외: --exclude-track data_quality. 별칭: questions_gold_test2.json",
+  "_readme": "골드테스트2: 신규 질문 + 신규 정답 (newset500). MAIN485 재현 시 data_quality 제외: --exclude-track data_quality",
   "name": "gold_test2",
   "gold_test": 2,
   "description": "신규 질문·정답 (docs/llm2sql_신규_자연어질의_테스트셋_500건_정답표.json)",

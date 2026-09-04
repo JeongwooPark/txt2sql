@@ -2,17 +2,22 @@
 
 from txt2sql.planner.logical import build_logical_plan
 from txt2sql.planner.physical import select_physical_plan
-from txt2sql.query_ir.models import AggregationIR, QueryIR
+from txt2sql.query_ir.models import AggregationIR, PredicateIR, QueryIR, ScopeIR
 from txt2sql.semantic_catalog.binding import SemanticBinding
 
 
 def test_d010_selection() -> None:
-    ir = QueryIR(task="aggregate", aggregations=[AggregationIR(function="avg", field="height_m")])
+    ir = QueryIR(
+        task="count",
+        scope=ScopeIR(place="동래구"),
+        predicates=[PredicateIR(field="usage", operator="eq", value="창고시설")],
+        aggregations=[AggregationIR(function="count")],
+    )
     logical = build_logical_plan(ir)
     logical.status = "READY"
     logical.reason_codes = []
-    physical = select_physical_plan(logical)
-    assert physical.strategy in {"D010_EXECUTOR", "FAST_SIMPLE_COUNT", "FAST_THRESHOLD", "GENERIC_SQL_EXECUTOR"}
+    physical = select_physical_plan(logical, question="동래구 창고시설 몇 채야?")
+    assert physical.strategy == "D010_EXECUTOR"
 
 
 def test_d198_selection() -> None:

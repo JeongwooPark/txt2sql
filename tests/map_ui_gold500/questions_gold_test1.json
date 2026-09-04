@@ -1,0 +1,7 @@
+{
+  "_readme": "골드테스트1: 구질문 + 구정답 (평가문항_500.json). latency/LLM 추적 포함 실행 예: python -m tests.map_ui_gold500.run --questions tests/map_ui_gold500/questions_gold_test1.json",
+  "name": "gold_test1",
+  "gold_test": 1,
+  "description": "구질문·구정답 (docs/평가문항_500.json)",
+  "include": "../../docs/평가문항_500.json"
+}

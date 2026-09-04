@@ -29,6 +29,8 @@ class AskResult:
     semantic_plan: dict[str, Any] | None = None
     plan_quality: float | None = None
     stage_latency_ms: dict[str, int] = field(default_factory=dict)
+    llm_used: bool = False
+    llm_calls: list[str] = field(default_factory=list)
     selected_route: str | None = None
     query_ir_task: str | None = None
     logical_status: str | None = None
@@ -61,6 +63,10 @@ class AskResult:
         ):
             if data.get(key) is None:
                 data.pop(key, None)
+        if not data.get("llm_used"):
+            data.pop("llm_used", None)
+        if not data.get("llm_calls"):
+            data.pop("llm_calls", None)
         if not data.get("chart_offer"):
             data.pop("chart_offer", None)
         return data

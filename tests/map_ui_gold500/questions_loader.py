@@ -46,6 +46,10 @@ def load_questions(path: Path | None = None) -> tuple[dict[str, Any], list[dict[
             raise ValueError(f"문항 형식 오류: include 또는 questions 키가 필요합니다 ({src})")
         if raw.get("name"):
             meta["name"] = raw["name"]
+        if raw.get("gold_test") is not None:
+            meta["gold_test"] = int(raw["gold_test"])
+        if raw.get("description"):
+            meta["description"] = str(raw["description"])
     else:
         raise ValueError(f"문항 형식 오류: JSON 객체 또는 배열이어야 합니다 ({src})")
 

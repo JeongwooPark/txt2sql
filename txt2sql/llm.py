@@ -6,6 +6,7 @@ from typing import Any
 
 import ollama
 
+from txt2sql.llm_usage import notify_llm_call
 from txt2sql.progress import TokenCallback
 
 
@@ -28,8 +29,10 @@ def chat(
     on_token: TokenCallback | None = None,
     response_format: str | dict[str, Any] | None = None,
     timeout: float | None = None,
+    purpose: str = "chat",
 ) -> str:
     """Ollama chat. stream이면 토큰마다 on_token을 호출하고 전체 문자열을 반환."""
+    notify_llm_call(purpose)
     client = resolve_client(host=host, client=client)
     if timeout is not None:
         try:

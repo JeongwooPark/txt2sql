@@ -45,8 +45,10 @@ def classify_error_class(case: dict[str, Any]) -> tuple[str, str, float]:
     if case.get("pass"):
         return "PASS", "", 1.0
 
+    from txt2sql.evaluation.case_map import case_execution_trace
+
     # Phase 2: prefer pipeline stage diagnosis from execution_trace
-    trace = case.get("execution_trace")
+    trace = case_execution_trace(case)
     if trace:
         from txt2sql.evaluation.execution_trace import diagnose_from_trace
 
@@ -154,8 +156,10 @@ def classify_eval_status(
 
 def build_fail_record(case: dict[str, Any], *, policy_mismatch_ids: set[str] | None = None) -> dict[str, Any]:
     """Build full FAIL record — requires execution_trace from Phase 2."""
+    from txt2sql.evaluation.case_map import case_execution_trace
+
     error_class, error_subtype, confidence = classify_error_class(case)
-    trace = case.get("execution_trace") or {}
+    trace = case_execution_trace(case)
     return {
         "question_id": case.get("id"),
         "question": case.get("q"),
@@ -189,19 +193,39 @@ def build_fail_record(case: dict[str, Any], *, policy_mismatch_ids: set[str] | N
 
 
 def summarize_failures(fail_records: list[dict[str, Any]]) -> dict[str, Any]:
-    """Aggregate error_summary for fail180 analysis."""
+    """Aggregate error_summary for fail taxonomy analysis."""
     from collections import Counter
 
     class_counts: Counter[str] = Counter()
     exec_counts: Counter[str] = Counter()
+    eval_status_counts: Counter[str] = Counter()
+    stage_counts: Counter[str] = Counter()
+    diagnosis_source_counts: Counter[str] = Counter()
     by_class_ids: dict[str, list[str]] = {}
+
+    trace_present = 0
+    trace_diagnosed = 0
 
     for rec in fail_records:
         ec = rec.get("error_class") or "UNKNOWN"
         class_counts[ec] += 1
         exec_src = rec.get("execution_source") or "unknown"
         exec_counts[exec_src] += 1
+        eval_status_counts[str(rec.get("eval_status") or "ENGINE_ERROR")] += 1
+        stage_counts[str(rec.get("error_stage") or "unknown")] += 1
         by_class_ids.setdefault(ec, []).append(str(rec.get("question_id") or ""))
+
+        trace = rec.get("execution_trace") or {}
+        if trace:
+            trace_present += 1
+            tc = trace.get("trace_completeness") or {}
+            if tc.get("query_ir") or tc.get("generated_sql") or (trace.get("evaluation") or {}).get("error_stage"):
+                trace_diagnosed += 1
+                diagnosis_source_counts["trace"] += 1
+            else:
+                diagnosis_source_counts["heuristic"] += 1
+        else:
+            diagnosis_source_counts["heuristic"] += 1
 
     total = len(fail_records) or 1
     summary_rows = []
@@ -218,6 +242,20 @@ def summarize_failures(fail_records: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "total_failures": len(fail_records),
         "by_error_class": summary_rows,
+        "by_eval_status": [
+            {"eval_status": k, "count": v, "share": round(100.0 * v / total, 1)}
+            for k, v in eval_status_counts.most_common()
+        ],
+        "by_error_stage": [
+            {"error_stage": k, "count": v, "share": round(100.0 * v / total, 1)}
+            for k, v in stage_counts.most_common()
+        ],
+        "trace_coverage": {
+            "with_trace": trace_present,
+            "trace_diagnosed": trace_diagnosed,
+            "trace_rate": round(trace_present / total, 4),
+            "diagnosis_source": dict(diagnosis_source_counts),
+        },
         "execution_source_distribution": dict(exec_counts),
     }
 
@@ -228,13 +266,45 @@ def render_error_summary_md(summary: dict[str, Any]) -> str:
         "",
         f"Total failures: {summary.get('total_failures', 0)}",
         "",
+    ]
+    tc = summary.get("trace_coverage") or {}
+    if tc:
+        lines.extend([
+            f"Trace coverage: {tc.get('with_trace', 0)}/{summary.get('total_failures', 0)} "
+            f"({100 * float(tc.get('trace_rate', 0)):.1f}%), "
+            f"trace-diagnosed={tc.get('trace_diagnosed', 0)}",
+            "",
+        ])
+    lines.extend([
+        "## By error_class",
+        "",
         "| error_class | count | share | representative_ids | fix_leverage |",
         "|-------------|------:|------:|--------------------|--------------|",
-    ]
+    ])
     for row in summary.get("by_error_class") or []:
         ids = ", ".join(row.get("representative_ids") or [])[:60]
         lines.append(
             f"| {row['error_class']} | {row['count']} | {row['share']}% | {ids} | {row['estimated_fix_leverage']} |"
         )
+    if summary.get("by_eval_status"):
+        lines.extend([
+            "",
+            "## By eval_status (Phase 4)",
+            "",
+            "| eval_status | count | share |",
+            "|-------------|------:|------:|",
+        ])
+        for row in summary["by_eval_status"]:
+            lines.append(f"| {row['eval_status']} | {row['count']} | {row['share']}% |")
+    if summary.get("by_error_stage"):
+        lines.extend([
+            "",
+            "## By error_stage (trace)",
+            "",
+            "| error_stage | count | share |",
+            "|-------------|------:|------:|",
+        ])
+        for row in summary["by_error_stage"]:
+            lines.append(f"| {row['error_stage']} | {row['count']} | {row['share']}% |")
     lines.append("")
     return "\n".join(lines)

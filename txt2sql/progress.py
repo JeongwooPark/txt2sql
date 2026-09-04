@@ -17,7 +17,12 @@ class ProgressTracker:
 
     on_step: ProgressCallback | None = None
     steps: list[dict[str, Any]] = field(default_factory=list)
+    llm_calls: list[str] = field(default_factory=list)
     _t0: float = field(default_factory=time.perf_counter)
+
+    def record_llm(self, purpose: str) -> None:
+        self.llm_calls.append(purpose)
+        self.emit("llm", f"LLM 호출: {purpose}", purpose=purpose)
 
     def emit(self, stage: str, message: str, **extra: Any) -> None:
         elapsed_ms = round((time.perf_counter() - self._t0) * 1000)

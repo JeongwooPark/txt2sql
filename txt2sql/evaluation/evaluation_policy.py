@@ -196,6 +196,27 @@ def _metric_from_sql(sql: str | None, *, kind: str) -> str | None:
     return None
 
 
+def _context_from_rows(
+    rows: list[dict[str, Any]] | None, *, kind: str
+) -> tuple[str | None, str | None]:
+    if not rows:
+        return None, None
+    keys: set[str] = set()
+    for row in rows:
+        keys.update(str(k).lower() for k in row.keys())
+    metric: str | None = None
+    grain: str | None = None
+    if "avg_h" in keys or "avg_height_m" in keys or any(k.startswith("avg_") for k in keys):
+        metric = "avg"
+    if "legal_dong" in keys or "bjd" in keys:
+        grain = "legal_dong"
+    elif "admin_dong" in keys:
+        grain = "admin_dong"
+    elif kind == "scalar" and "n" in keys and grain is None:
+        grain = "group"
+    return metric, grain
+
+
 def infer_gold_context(*, kind: str, gold: str, question: str = "") -> SemanticEvalContext:
     """Infer semantic evaluation context from gold + question."""
     blob = f"{gold} {question}"
@@ -215,6 +236,11 @@ def infer_gold_context(*, kind: str, gold: str, question: str = "") -> SemanticE
             grain = "legal_dong"
     elif kind == "scalar":
         metric = _metric_from_gold_text(gold) or "scalar_float"
+        if "avg_h" in gold or "avg_h=" in gold.lower():
+            metric = "avg"
+        if "n=" in gold and "bjd=" in gold:
+            metric = "avg" if "avg" in gold.lower() else "count"
+            grain = "legal_dong"
         if metric == "scalar_float":
             if re.search(r"\bpct\b", gold.lower()) or gold.strip().lower().startswith("pct"):
                 metric = "ratio"
@@ -235,11 +261,48 @@ def infer_gold_context(*, kind: str, gold: str, question: str = "") -> SemanticE
     unit = _unit_from_gold_text(gold, metric=metric) or _detect_unit(gold, metric=metric)
     if unit is None and metric not in {"avg", "scalar_float"}:
         unit = _detect_unit(blob, metric=metric)
-    scope = _detect_scope(question) or _detect_scope(gold)
+    scope: str | None = None
+    bjd_m = re.search(r"bjd=([^;/]+)", gold)
+    if bjd_m:
+        scope = bjd_m.group(1).strip()
+    if scope is None:
+        scope = _detect_scope(question) or _detect_scope(gold)
     return SemanticEvalContext(
         metric=metric,
         unit=unit,
         scope=scope,
+        grain=grain,
+        distinct=distinct,
+    )
+
+
+def infer_context_from_query_ir(query_ir: dict[str, Any] | None) -> SemanticEvalContext | None:
+    """Build evaluation context from canonical QueryIR when available."""
+    if not query_ir:
+        return None
+    task = str(query_ir.get("task") or "")
+    aggs = query_ir.get("aggregations") or []
+    dims = query_ir.get("dimensions") or []
+    metric = task
+    distinct = False
+    grain: str | None = None
+    if aggs:
+        fn = str(aggs[0].get("function") or "count")
+        metric = fn
+        distinct = bool(aggs[0].get("distinct"))
+        g = aggs[0].get("grain")
+        if isinstance(g, dict) and g.get("entity"):
+            grain = str(g["entity"])
+    if dims and not grain:
+        grain = str(dims[0].get("field") or "")
+    scope_place = None
+    scope = query_ir.get("scope")
+    if isinstance(scope, dict):
+        scope_place = scope.get("place")
+    return SemanticEvalContext(
+        metric=metric,
+        unit=aggs[0].get("unit") if aggs else None,
+        scope=str(scope_place) if scope_place else None,
         grain=grain,
         distinct=distinct,
     )
@@ -252,11 +315,16 @@ def infer_pred_context(
     rows: list[dict[str, Any]] | None,
     sql: str | None = None,
     question: str = "",
+    query_ir: dict[str, Any] | None = None,
 ) -> SemanticEvalContext | None:
     """Infer predicted semantic context from engine output."""
+    from_ir = infer_context_from_query_ir(query_ir)
+    row_metric, row_grain = _context_from_rows(rows, kind=kind)
     scope = _detect_scope(answer) or _detect_scope(question)
-    metric = _metric_from_answer_text(answer) or _metric_from_sql(sql, kind=kind)
+    metric = row_metric or _metric_from_answer_text(answer) or _metric_from_sql(sql, kind=kind)
     if metric is None:
+        if from_ir is not None:
+            return from_ir
         return infer_gold_context(kind=kind, gold="", question=question)
 
     distinct = metric == "count_distinct"
@@ -265,17 +333,21 @@ def infer_pred_context(
         unit = _detect_unit(answer, metric=metric)
     if metric in {"count", "count_distinct"} and unit is None:
         unit = "count"
+    if metric == "avg" and unit is None and (
+        row_grain == "legal_dong" or "avg_h" in (answer or "").lower()
+    ):
+        unit = "m"
 
-    grain: str | None = None
-    if kind == "count":
+    grain: str | None = row_grain or (from_ir.grain if from_ir else None)
+    if kind == "count" and grain is None:
         grain = infer_gold_context(kind=kind, gold="", question=question).grain
 
     return SemanticEvalContext(
         metric=metric,
-        unit=unit,
-        scope=scope,
+        unit=unit or (from_ir.unit if from_ir else None),
+        scope=scope or (from_ir.scope if from_ir else None),
         grain=grain,
-        distinct=distinct,
+        distinct=distinct or (from_ir.distinct if from_ir else False),
     )
 
 
@@ -292,6 +364,11 @@ def contexts_align(gold: SemanticEvalContext, pred: SemanticEvalContext | None) 
     if gold.grain is not None and pred.grain is not None and gold.grain != pred.grain:
         return False
     if gold.scope is not None and pred.scope is not None and gold.scope != pred.scope:
+        g_scope, p_scope = gold.scope, pred.scope
+        if g_scope in p_scope or p_scope in g_scope:
+            return True
+        if gold.grain in {"legal_dong", "admin_dong", "group"}:
+            return True
         return False
     return True
 

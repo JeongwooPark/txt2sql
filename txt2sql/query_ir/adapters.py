@@ -37,7 +37,9 @@ def _span_prov(span: Any) -> ProvenanceSpan:
 def _entity_from_contract(contract: Any) -> EntityName:
     datasets = [str(x).lower() for x in (getattr(contract, "datasets", None) or [])]
     joined = " ".join(datasets)
-    # datasets on contract may hold semantic hints historically; strip physical later
+    q = str(getattr(contract, "question", "") or "")
+    if "기초구역" in q or "basic" in joined or "bas_" in joined:
+        return "basic_zone"
     if "basic" in joined or "bas" in joined:
         return "basic_zone"
     if "industrial" in joined:
@@ -234,6 +236,12 @@ def contract_to_query_ir(contract: Any) -> QueryIR:
         safe_hints["legacy_dataset_hint_count"] = len(legacy_datasets)
 
     task = normalize_task(getattr(contract, "query_kind", None) or getattr(contract, "operation", None))
+    if not aggregations and dimensions and (
+        getattr(contract, "wants_count", False) or task in {"group", "distribution"}
+    ):
+        aggregations.append(AggregationIR(function="count"))
+    if "basic_zone" in legacy_datasets or any("bas" in str(d).lower() for d in legacy_datasets):
+        safe_hints["basic_zone"] = True
     ir = QueryIR(
         task=task,
         entity=_entity_from_contract(contract),

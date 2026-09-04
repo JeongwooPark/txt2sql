@@ -1,7 +1,7 @@
 """QueryIR v2 semantic completeness — AggregationIR grain contract."""
 
 from txt2sql.query_ir import QueryIR, assess_completeness
-from txt2sql.query_ir.models import AggregationIR, GrainIR, ScopeIR
+from txt2sql.query_ir.models import AggregationIR, DimensionIR, GrainIR, ScopeIR
 
 
 def test_aggregation_ir_grain_fields() -> None:
@@ -36,6 +36,19 @@ def test_simple_count_without_distinct_ok() -> None:
         entity="building",
         scope=ScopeIR(place="금정구"),
         aggregations=[AggregationIR(function="count")],
+    )
+    report = assess_completeness(ir)
+    assert report.status == "READY"
+
+
+def test_group_with_limit_completeness() -> None:
+    ir = QueryIR(
+        task="rank",
+        entity="building",
+        scope=ScopeIR(place="동래구"),
+        dimensions=[DimensionIR(field="legal_dong")],
+        aggregations=[AggregationIR(function="count")],
+        limit=5,
     )
     report = assess_completeness(ir)
     assert report.status == "READY"

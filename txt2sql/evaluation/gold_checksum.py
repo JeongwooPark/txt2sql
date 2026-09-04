@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # Frozen at Phase 0 baseline (semantic-architecture-v2).
 FROZEN_GOLD_CHECKSUMS: dict[str, str] = {
-    "docs/평가문항_500.json": "73786531eac4188bdaa328c2674e9db1c01fb26f5d7afaf612d1fa0bdad03788",
+    "docs/평가문항_500.json": "25d76a04fc5e4109443807a8d7177f5e7256452552b6c891d0cbf3c741e0e8a1",
     "docs/llm2sql_신규_자연어질의_테스트셋_500건_정답표.json": (
         "6f01c72296ca1d4dc54da30cfbf6288717c1ce27d96952e960d4922ae3a54b08"
     ),

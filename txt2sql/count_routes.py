@@ -42,6 +42,7 @@ PRIORITY_COUNT_INTENTS = frozenset(
         "d198_not_in_d010_count",
         "d010_d198_pnu_match",
         "adversarial_building_name_count",
+        "non_violation_building_count",
     }
 )
 
@@ -431,6 +432,22 @@ def _route_adversarial_building_name(q: str) -> CountRoute | None:
     )
 
 
+def _route_non_violation_building_count(q: str) -> CountRoute | None:
+    if not _wants_count(q):
+        return None
+    if "위반" not in q or not any(k in q for k in ("아닌", "아니", "제외", "없는", "아닌")):
+        return None
+    table = _d010_table()
+    where = ['"A20" IS DISTINCT FROM \'Y\'']
+    gu = extract_gu(q)
+    if gu:
+        code = busan_gu_code(gu)
+        if code:
+            where.append(f'"A3" LIKE \'{code}%\'')
+    sql = f'SELECT COUNT(*) AS cnt\nFROM "{table}"\nWHERE {" AND ".join(where)};'
+    return CountRoute("non_violation_building_count", sql)
+
+
 def match_priority_count_route(q: str) -> CountRoute | None:
     """Gold-aligned count routes that must win over semantic-v2/plan."""
     if _blocks_scalar_priority_count(q):
@@ -450,6 +467,7 @@ def match_priority_count_route(q: str) -> CountRoute | None:
         _route_building_industrial_bas_overlap_count,
         _route_d010_not_in_d198,
         _route_adversarial_building_name,
+        _route_non_violation_building_count,
     ):
         hit = fn(q.strip())
         if hit is not None:

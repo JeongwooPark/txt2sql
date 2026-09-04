@@ -1130,17 +1130,21 @@ def _plan_uses_d198_slots(plan: SemanticQueryPlan) -> bool:
         for node in walk_predicate(pred):
             if node.op == "cmp" and node.left and node.left.field:
                 fields.add(node.left.field)
-    return bool(
-        fields
-        & {
-            "detail_usage",
-            "usage_class",
-            "ledger_kind",
-            "permit_date",
-            "approval_date",
-            "building_age_years",
-        }
-    )
+    d198_fields = {
+        "detail_usage",
+        "usage_class",
+        "ledger_kind",
+        "permit_date",
+        "approval_date",
+        "building_age_years",
+    }
+    if (
+        plan.query_kind == "count"
+        and fields <= {"usage_class"}
+        and "d198_ledger" not in (plan.assumptions or [])
+    ):
+        return False
+    return bool(fields & d198_fields)
 
 
 def _d198_table_for_plan(plan: SemanticQueryPlan) -> str | None:

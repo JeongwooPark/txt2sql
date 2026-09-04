@@ -35,6 +35,8 @@ RESULTS_DIR = HERE / "results"
 DEFAULT_BASE = "http://127.0.0.1:8000"
 DEFAULT_MAP = DEFAULT_BASE + "/map"
 
+_LOG_FH: Any = None
+
 
 def _utf8_stdio() -> None:
     """Windows 콘솔 한글 깨짐 방지: CP65001 + UTF-8 stdout."""
@@ -66,13 +68,19 @@ def _utf8_stdio() -> None:
 
 
 def _safe_print(msg: str) -> None:
-    """콘솔 인코딩이 달라도 최대한 한글을 출력한다."""
+    """콘솔·로그 파일 모두 UTF-8로 출력 (Windows Tee-Object 깨짐 방지)."""
+    line = msg + "\n"
     try:
-        print(msg, flush=True)
-    except UnicodeEncodeError:
-        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
-        sys.stdout.buffer.write((msg + "\n").encode(enc, errors="replace"))
-        sys.stdout.flush()
+        if hasattr(sys.stdout, "buffer"):
+            sys.stdout.buffer.write(line.encode("utf-8", errors="replace"))
+            sys.stdout.buffer.flush()
+        else:
+            print(msg, flush=True)
+    except (UnicodeEncodeError, OSError):
+        print(msg.encode("ascii", errors="replace").decode("ascii"), flush=True)
+    if _LOG_FH is not None:
+        _LOG_FH.write(line)
+        _LOG_FH.flush()
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -144,6 +152,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--start-server", action="store_true", help="서버가 없으면 기동")
     p.add_argument("--out", type=Path, default=RESULTS_DIR / "latest.json")
     p.add_argument("--transcript", type=Path, default=RESULTS_DIR / "transcript.jsonl")
+    p.add_argument(
+        "--log",
+        type=Path,
+        default=None,
+        help="진행 로그 UTF-8 파일 (PowerShell Tee-Object 대신 사용)",
+    )
     return p.parse_args(argv)
 
 
@@ -265,6 +279,11 @@ def _append_jsonl(path: Path, rec: dict[str, Any]) -> None:
         "gold": rec.get("gold"),
         "route": rec.get("route"),
         "ms": rec.get("ms"),
+        "latency_ms": rec.get("latency_ms"),
+        "llm_used": rec.get("llm_used"),
+        "llm_calls": rec.get("llm_calls"),
+        "llm_call_count": rec.get("llm_call_count"),
+        "stage_latency_ms": rec.get("stage_latency_ms"),
         "process": rec.get("process"),
         "ui": rec.get("ui"),
         "sql": rec.get("sql"),
@@ -280,12 +299,49 @@ def _make_api_driver(base: str, timeout_s: int):
     return ApiChatDriver(base_url=base, timeout_ms=timeout_s * 1000)
 
 
+def _ui_payload(
+    meta: dict[str, Any],
+    *,
+    url: str,
+    headed: bool,
+    driver_mode: str,
+    transcript: str | None = None,
+) -> dict[str, Any]:
+    ui = {
+        "url": url,
+        "headed": headed,
+        "driver": driver_mode,
+        "questions_file": meta.get("path"),
+        "questions_name": meta.get("name"),
+        "included": meta.get("included"),
+        "mode": "map-ui-chat" if driver_mode == "browser" else "map-ui-api",
+    }
+    if meta.get("gold_test") is not None:
+        ui["gold_test"] = meta["gold_test"]
+    if meta.get("description"):
+        ui["description"] = meta["description"]
+    if transcript is not None:
+        ui["transcript"] = transcript
+    return ui
+
+
+def _gold_test_label(meta: dict[str, Any]) -> dict[str, Any]:
+    gt = meta.get("gold_test")
+    if gt is None:
+        return {}
+    return {"gold_test": gt, "gold_test_label": f"gold_test{gt}"}
+
+
 def main(argv: list[str] | None = None) -> int:
+    global _LOG_FH
     _utf8_stdio()
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
 
     args = _parse_args(argv)
+    if args.log:
+        args.log.parent.mkdir(parents=True, exist_ok=True)
+        _LOG_FH = args.log.open("w", encoding="utf-8", newline="\n")
     headed = resolve_headed(args)
     driver_mode = resolve_driver(args)
     if getattr(args, "watch", False) and args.slow_mo <= 0:
@@ -360,8 +416,10 @@ def main(argv: list[str] | None = None) -> int:
             if headed and driver_mode == "browser"
             else ("headless-browser" if driver_mode == "browser" else "api-cli-only")
         )
+        gt = meta.get("gold_test")
+        gt_prefix = f"골드테스트{gt} " if gt is not None else ""
         _safe_print(
-            f"=== 맵 UI 골드 테스트 questions={meta.get('path')} "
+            f"=== {gt_prefix}맵 UI 골드 테스트 questions={meta.get('path')} "
             f"n={len(questions)} url={args.url} timeout={args.timeout}s "
             f"driver={driver_mode} mode={mode_label} ==="
         )
@@ -410,6 +468,9 @@ def main(argv: list[str] | None = None) -> int:
                 logical_status=raw.get("logical_status"),
                 physical_strategy=raw.get("physical_strategy"),
                 execution_trace=raw.get("execution_trace"),
+                llm_used=raw.get("llm_used"),
+                llm_calls=raw.get("llm_calls"),
+                stage_latency_ms=raw.get("stage_latency_ms"),
             )
             rows.append(rec)
             _append_jsonl(args.transcript, rec)
@@ -424,15 +485,13 @@ def main(argv: list[str] | None = None) -> int:
                 payload["partial"] = i < len(questions)
                 payload["timeout_s"] = args.timeout
                 payload["gold_file"] = meta.get("included") or meta.get("path")
-                payload["ui"] = {
-                    "url": args.url,
-                    "headed": headed if driver_mode == "browser" else False,
-                    "driver": driver_mode,
-                    "questions_file": meta.get("path"),
-                    "questions_name": meta.get("name"),
-                    "included": meta.get("included"),
-                    "mode": "map-ui-chat" if driver_mode == "browser" else "map-ui-api",
-                }
+                payload.update(_gold_test_label(meta))
+                payload["ui"] = _ui_payload(
+                    meta,
+                    url=args.url,
+                    headed=headed if driver_mode == "browser" else False,
+                    driver_mode=driver_mode,
+                )
                 _dump(args.out, payload)
                 _safe_print(
                     f"  .. saved {payload['passed']}/{payload['total']} "
@@ -443,16 +502,14 @@ def main(argv: list[str] | None = None) -> int:
         payload["partial"] = False
         payload["timeout_s"] = args.timeout
         payload["gold_file"] = meta.get("included") or meta.get("path")
-        payload["ui"] = {
-            "url": args.url,
-            "headed": headed if driver_mode == "browser" else False,
-            "driver": driver_mode,
-            "questions_file": meta.get("path"),
-            "questions_name": meta.get("name"),
-            "included": meta.get("included"),
-            "mode": "map-ui-chat" if driver_mode == "browser" else "map-ui-api",
-            "transcript": str(args.transcript),
-        }
+        payload.update(_gold_test_label(meta))
+        payload["ui"] = _ui_payload(
+            meta,
+            url=args.url,
+            headed=headed if driver_mode == "browser" else False,
+            driver_mode=driver_mode,
+            transcript=str(args.transcript),
+        )
         _dump(args.out, payload)
         _safe_print(
             f"\n=== 결과 {payload['passed']}/{payload['total']} "
@@ -509,6 +566,12 @@ def main(argv: list[str] | None = None) -> int:
                 server.terminate()
             except Exception:
                 pass
+        if _LOG_FH is not None:
+            try:
+                _LOG_FH.close()
+            except Exception:
+                pass
+            _LOG_FH = None
 
 
 if __name__ == "__main__":

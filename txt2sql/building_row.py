@@ -49,7 +49,7 @@ def _looks_like_jibun(value: Any) -> bool:
     return bool(_JIBUN_RE.fullmatch(text))
 
 
-def row_approval_date(
+def row_lot_address(
     row: dict[str, Any],
     *,
     table: str | None = None,

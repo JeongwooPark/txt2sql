@@ -53,3 +53,20 @@ def iter_failed_cases(doc: dict[str, Any]) -> Iterable[dict[str, Any]]:
         passed = case_passed(case)
         if passed is False:
             yield case
+
+
+def case_execution_trace(case: dict[str, Any]) -> dict[str, Any]:
+    """Return execution_trace from case top-level or nested ui/process."""
+    trace = case.get("execution_trace")
+    if trace:
+        return trace if isinstance(trace, dict) else {}
+    ui = case.get("ui") or {}
+    if isinstance(ui, dict) and isinstance(ui.get("execution_trace"), dict):
+        return ui["execution_trace"]
+    for step in case.get("process") or []:
+        if not isinstance(step, dict):
+            continue
+        detail = step.get("detail") or {}
+        if isinstance(detail, dict) and isinstance(detail.get("execution_trace"), dict):
+            return detail["execution_trace"]
+    return {}

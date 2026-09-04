@@ -34,6 +34,45 @@ from txt2sql.semantic_plan.models import (
 from txt2sql.semantic_plan.predicate_utils import and_predicates
 from txt2sql.session import SessionContext
 
+_AGG_VALUE_TOP = re.compile(r"가장\s*(큰|높은|많은)?\s*값")
+_BUILDING_RANK_HINTS = ("건물", "연면적", "높이", "층", "면적", "넓")
+
+
+def is_aggregate_value_top_followup(question: str) -> bool:
+    q = question.strip()
+    if not _AGG_VALUE_TOP.search(q):
+        return False
+    return not any(k in q for k in _BUILDING_RANK_HINTS)
+
+
+def _primary_agg_sort_field(plan: SemanticQueryPlan) -> str:
+    for agg in plan.aggregations:
+        if agg.function != "count":
+            return agg.alias or f"{agg.function}_{agg.field or 'n'}"
+    for agg in plan.aggregations:
+        if agg.alias:
+            return agg.alias
+    return "n"
+
+
+def _infer_avg_metric_from_session(session: SessionContext | None) -> str:
+    if session is None:
+        return "gross_floor_area_m2"
+    blob = " ".join(
+        [
+            str(session.last_sql or ""),
+            str(session.last_question or ""),
+            str(session.last_full_question or ""),
+        ]
+    )
+    if '"A16"' in blob or "height_m" in blob or "높이" in blob:
+        return "height_m"
+    if '"A26"' in blob or "ground_floors" in blob:
+        return "ground_floors"
+    if '"A14"' in blob or "연면적" in blob:
+        return "gross_floor_area_m2"
+    return "gross_floor_area_m2"
+
 
 class PlanDelta(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -252,20 +291,25 @@ def parse_followup_delta(question: str) -> PlanDelta | None:
             for metric in metrics
         ]
         change_kind = "aggregate"
+    agg_value_top = is_aggregate_value_top_followup(q)
     if any(k in q for k in ("가장 높", "제일 높", "가장 높은", "제일 높은")):
         change_sort = [OrderSpec(field="height_m", direction="desc", nulls="last")]
         if change_limit is None:
             change_limit = 1
-        if change_kind is None and change_aggregations is None:
+        if change_kind is None and change_aggregations is None and not agg_value_top:
             change_kind = "rank"
     elif any(k in q for k in ("가장 큰", "제일 큰", "가장 넓", "제일 넓")):
-        change_sort = [
-            OrderSpec(field="gross_floor_area_m2", direction="desc", nulls="last")
-        ]
-        if change_limit is None:
-            change_limit = 1
-        if change_kind is None and change_aggregations is None:
-            change_kind = "rank"
+        if agg_value_top:
+            if change_limit is None:
+                change_limit = 1
+        else:
+            change_sort = [
+                OrderSpec(field="gross_floor_area_m2", direction="desc", nulls="last")
+            ]
+            if change_limit is None:
+                change_limit = 1
+            if change_kind is None and change_aggregations is None:
+                change_kind = "rank"
     elif any(k in q for k in ("층수가 가장", "층이 가장", "가장 많은 층")):
         change_sort = [
             OrderSpec(field="ground_floors", direction="desc", nulls="last")
@@ -581,7 +625,8 @@ def apply_followup_history(
     base_override: SemanticQueryPlan | dict[str, Any] | None = None,
 ) -> tuple[SemanticQueryPlan, list[PlanEvent]] | None:
     new_events = parse_followup_events(question)
-    if not new_events:
+    delta = parse_followup_delta(question)
+    if not new_events and delta is None:
         return None
     root = base_override if base_override is not None else base
     plan = (
@@ -601,24 +646,19 @@ def apply_followup_history(
             combined = []
             continue
         combined.append(event)
-    plan = apply_plan_events(plan, combined)
-    delta = parse_followup_delta(question)
-    if delta is not None and delta.change_aggregations:
-        plan = apply_plan_delta(
-            plan,
-            PlanDelta(
-                change_aggregations=delta.change_aggregations,
-                change_kind="aggregate",
-            ),
-        )
-    if delta is not None and delta.add_spatial:
-        plan = apply_plan_delta(
-            plan,
-            PlanDelta(
-                add_spatial=delta.add_spatial,
-                change_kind=delta.change_kind,
-            ),
-        )
+    if combined:
+        plan = apply_plan_events(plan, combined)
+    if delta is not None:
+        if delta.change_aggregations:
+            plan = apply_plan_delta(
+                plan,
+                PlanDelta(
+                    change_aggregations=delta.change_aggregations,
+                    change_kind="aggregate",
+                ),
+            )
+        else:
+            plan = apply_plan_delta(plan, delta)
     return plan, combined
 
 
@@ -707,6 +747,59 @@ def apply_count_display_followup(
     return SemanticQueryPlan.model_validate(data)
 
 
+def apply_aggregate_followup(
+    question: str,
+    plan: SemanticQueryPlan,
+    session: SessionContext | None,
+) -> SemanticQueryPlan:
+    """그 결과 GROUP BY·평균 추가·집계 최댓값 후속."""
+    q = question.strip()
+    if (
+        session is not None
+        and any(k in q for k in ("그 결과", "이 결과", "방금 결과", "그 결과를"))
+        and any(k in q for k in ("묶", "법정동별", "행정동별", "구별", "별로"))
+    ):
+        group_field = "legal_dong"
+        if any(k in q for k in ("행정동별", "행정동")):
+            group_field = "admin_dong"
+        elif any(k in q for k in ("구별", "구·군", "시군구")):
+            group_field = "sigungu_name"
+        aggs = [AggregationSpec(function="count", field=None, alias="n")]
+        data = plan.model_dump()
+        data["group_by"] = [group_field]
+        data["aggregations"] = [item.model_dump() for item in aggs]
+        data["query_kind"] = "aggregate"
+        data["select"] = []
+        data["limit"] = None
+        data["order_by"] = []
+        return SemanticQueryPlan.model_validate(data)
+
+    if any(k in q for k in ("평균", "avg")) and plan.group_by:
+        metric = _infer_avg_metric_from_session(session)
+        alias = "avg_h" if metric == "height_m" else f"avg_{metric}"
+        aggs = list(plan.aggregations)
+        if not any(item.function == "count" for item in aggs):
+            aggs.insert(0, AggregationSpec(function="count", alias="n"))
+        if not any(item.function == "avg" for item in aggs):
+            aggs.append(AggregationSpec(function="avg", field=metric, alias=alias))
+        data = plan.model_dump()
+        data["aggregations"] = [item.model_dump() for item in aggs]
+        data["query_kind"] = "aggregate"
+        return SemanticQueryPlan.model_validate(data)
+
+    if is_aggregate_value_top_followup(q) and plan.group_by and plan.aggregations:
+        sort_field = _primary_agg_sort_field(plan)
+        data = plan.model_dump()
+        data["query_kind"] = "aggregate"
+        data["order_by"] = [
+            OrderSpec(field=sort_field, direction="desc", nulls="last").model_dump()
+        ]
+        data["limit"] = 1
+        return SemanticQueryPlan.model_validate(data)
+
+    return plan
+
+
 def merge_followup_plan(
     question: str,
     base: SemanticQueryPlan | dict[str, Any],
@@ -717,6 +810,9 @@ def merge_followup_plan(
         else SemanticQueryPlan.model_validate(base)
     )
     history = apply_followup_history(question, plan)
-    if history is None:
+    if history is not None:
+        return history[0]
+    delta = parse_followup_delta(question)
+    if delta is None:
         return None
-    return history[0]
+    return apply_plan_delta(plan, delta)

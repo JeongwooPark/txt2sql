@@ -54,17 +54,22 @@ class Txt2SqlEngine:
             raise RuntimeError("엔진이 이미 close() 되었습니다.")
         self._ensure_resources()
         assert self._conn is not None
-        result = run_ask(
-            question,
-            self.settings,
-            conn=self._conn,
-            ollama_client=self._ollama,
-            on_progress=on_progress,
-            on_token=on_token,
-            session=session,
-            session_id=session_id,
-            include_map=include_map,
-        )
+        from txt2sql.llm_usage import cleanup_llm_tracking
+
+        try:
+            result = run_ask(
+                question,
+                self.settings,
+                conn=self._conn,
+                ollama_client=self._ollama,
+                on_progress=on_progress,
+                on_token=on_token,
+                session=session,
+                session_id=session_id,
+                include_map=include_map,
+            )
+        finally:
+            cleanup_llm_tracking()
         return AskResult.from_dict(result)
 
     def _ensure_resources(self) -> None:

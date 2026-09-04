@@ -26,6 +26,28 @@ summarize = _GOLD.summarize
 clip = _GOLD._clip
 
 
+def _infer_llm_from_process(process: list[dict[str, Any]]) -> tuple[bool, list[str]]:
+    calls: list[str] = []
+    for step in process or []:
+        if not isinstance(step, dict):
+            continue
+        stage = str(step.get("stage") or "")
+        msg = str(step.get("message") or "")
+        if stage == "llm" or "LLM 호출:" in msg:
+            purpose = msg.split("LLM 호출:", 1)[-1].strip() or "chat"
+            calls.append(purpose)
+            continue
+        if "RAG+LLM" in msg:
+            calls.append("rag_sql")
+        elif "의도 분류" in msg and "(llm)" in msg:
+            calls.append("intent_classify")
+        elif "의도=" in msg and "(llm)" in msg:
+            calls.append("intent_classify")
+        elif "미지용어 대응 (llm)" in msg:
+            calls.append("synonym_map")
+    return bool(calls), calls
+
+
 def score_case(
     case: dict[str, Any],
     *,
@@ -45,6 +67,9 @@ def score_case(
     logical_status: str | None = None,
     physical_strategy: str | None = None,
     execution_trace: dict[str, Any] | None = None,
+    llm_used: bool | None = None,
+    llm_calls: list[str] | None = None,
+    stage_latency_ms: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     from txt2sql.evaluation.taxonomy import diagnose_eval_failure
 
@@ -65,6 +90,10 @@ def score_case(
         )
         if error and not ok:
             reason = f"engine-fail:{error}"
+    resolved_llm_used = bool(llm_used) if llm_used is not None else False
+    resolved_llm_calls = list(llm_calls or [])
+    if not resolved_llm_calls and llm_used is None:
+        resolved_llm_used, resolved_llm_calls = _infer_llm_from_process(process)
     rec = {
         "id": case["id"],
         "cat": case.get("cat"),
@@ -85,6 +114,11 @@ def score_case(
         "physical_strategy": physical_strategy,
         "error": error,
         "ms": ms,
+        "latency_ms": ms,
+        "llm_used": resolved_llm_used,
+        "llm_calls": resolved_llm_calls,
+        "llm_call_count": len(resolved_llm_calls),
+        "stage_latency_ms": dict(stage_latency_ms or {}),
         "answer": clip(answer),
         "answer_full": answer,
         "sql": clip(str(sql or ""), 800 if not ok else 220),

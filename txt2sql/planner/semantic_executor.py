@@ -321,26 +321,40 @@ def _apply_dataset_assumptions(
     physical: PhysicalPlan | None,
     logical: LogicalPlan | None,
     refined: QueryIR,
+    question: str | None = None,
 ) -> None:
     """PhysicalPlan wins over NL heuristics for dataset selection."""
+    from txt2sql.dataset_grain import grain_to_assumption, resolve_dataset_grain
+
     notes = list(plan.assumptions or [])
     phys_notes = physical_to_dataset_assumptions(physical, logical)
 
-    if "d010_gis" in phys_notes:
-        # Explicit D010: strip ledger force from NL heuristics.
-        notes = [n for n in notes if n != "d198_ledger"]
-        if "d010_gis" not in notes:
-            notes.append("d010_gis")
-        plan.assumptions = notes
-        return
+    if phys_notes:
+        if "d010_gis" in phys_notes:
+            notes = [n for n in notes if n != "d198_ledger"]
+            if "d010_gis" not in notes:
+                notes.append("d010_gis")
+            plan.assumptions = notes
+            return
+        if "d198_ledger" in phys_notes:
+            if "d198_ledger" not in notes:
+                notes.append("d198_ledger")
+            plan.assumptions = notes
+            return
 
-    if "d198_ledger" in phys_notes:
-        if "d198_ledger" not in notes:
+    if physical is not None:
+        grain = resolve_dataset_grain(refined, question or "")
+        assumption = grain_to_assumption(grain)
+        if assumption == "d010_gis":
+            notes = [n for n in notes if n != "d198_ledger"]
+            if "d010_gis" not in notes:
+                notes.append("d010_gis")
+        elif assumption == "d198_ledger" and "d198_ledger" not in notes:
             notes.append("d198_ledger")
         plan.assumptions = notes
         return
 
-    # No decisive physical dataset: keep NL temporal/usage heuristics.
+    # No physical plan: legacy NL heuristics only.
     if any(
         p.field in {"approval_date", "permit_date", "building_age_years"}
         for p in refined.predicates
@@ -361,19 +375,30 @@ def _apply_dataset_assumptions(
 
 
 def _enrich_place_scope(plan: SemanticQueryPlan, question: str | None) -> None:
-    """QueryIR scope often lacks place_kind; restore BND policy from question cues."""
+    """PlaceScopePolicy v1.0 — BND/A4/A3 from gazetteer, not suffix heuristics."""
     if not question or not plan.scope or not plan.scope.place:
         return
-    from txt2sql.gazetteer import resolve_place_kind, uses_admin_boundary
+    from txt2sql.semantic_catalog.place_scope import (
+        PlaceEntity,
+        PlaceScopeContext,
+        resolve_place_scope,
+    )
 
     name = plan.scope.place.name.strip()
     if not name:
         return
-    if uses_admin_boundary(name, question=question):
-        kind = resolve_place_kind(name, question)
-        if kind == "admin_dong":
-            plan.scope.place.kind = "admin_dong"
-            plan.scope.spatial_mode = "boundary"
+    binding = resolve_place_scope(
+        PlaceEntity(name=name, place_type=plan.scope.place.kind),
+        context=PlaceScopeContext(question=question),
+    )
+    if binding.semantic_type == "ADMIN_DONG":
+        plan.scope.place.kind = "admin_dong"
+        plan.scope.spatial_mode = "boundary"
+    elif binding.semantic_type == "LEGAL_DONG":
+        plan.scope.place.kind = "legal_dong"
+        plan.scope.spatial_mode = None
+    elif binding.semantic_type == "SIGUNGU":
+        plan.scope.place.kind = "gu"
 
 
 def build_sqp(
@@ -387,7 +412,7 @@ def build_sqp(
     plan = query_ir_to_semantic_plan(refined)
     _enrich_place_scope(plan, question)
     _apply_dataset_assumptions(
-        plan, physical=physical, logical=logical or (physical.logical if physical else None), refined=refined
+        plan, physical=physical, logical=logical or (physical.logical if physical else None), refined=refined, question=question
     )
     # Ensure group dimensions present
     if refined.dimensions and not plan.group_by:
@@ -465,6 +490,27 @@ def compile_sql_from_bundle(
                 "physical_strategy": bundle.physical.strategy,
             }
     compiled = compile_semantic_plan(plan)
+    from txt2sql.query_contract import verify_query_contract
+
+    contract_errors = verify_query_contract(
+        plan, compiled, question=question or ""
+    )
+    if contract_errors and question:
+        from txt2sql.query_understanding.contract import extract_contract
+        from txt2sql.semantic_plan.plan_repair import (
+            is_repairable,
+            repair_plan_from_contract,
+        )
+
+        if is_repairable(contract_errors):
+            bound = extract_contract(question)
+            plan = repair_plan_from_contract(
+                plan, bound, contract_errors, question
+            )
+            compiled = compile_semantic_plan(plan)
+            contract_errors = verify_query_contract(
+                plan, compiled, question=question
+            )
     sql = compiled.sql if hasattr(compiled, "sql") else str(compiled)
     meta = {
         "tables": getattr(compiled, "tables", []),
@@ -472,6 +518,8 @@ def compile_sql_from_bundle(
         "semantic_plan": getattr(compiled, "semantic_plan", plan.model_dump()),
         "assumptions": list(plan.assumptions or []),
         "physical_strategy": bundle.physical.strategy,
+        "compiled": compiled,
+        "contract_errors": contract_errors,
     }
     return sql, meta
 
@@ -612,6 +660,8 @@ def try_execute_semantic_v2(
         sql, meta = compile_sql_from_bundle(bundle, question=question)
     except Exception as exc:  # noqa: BLE001
         return _v2_fail(bundle, "COMPILE", f"{type(exc).__name__}: {exc}")
+    if meta.get("contract_errors"):
+        return None
     try:
         validate_compiled_sql(sql, question=question, conn=None)
     except Exception as exc:  # noqa: BLE001

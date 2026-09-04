@@ -55,7 +55,10 @@ from txt2sql.followup_qa import (
     answer_followup,
     is_followup_question,
     is_list_attr_followup,
+    try_aggregate_top_value_followup,
+    try_add_avg_to_group_followup,
     try_count_only_display_followup,
+    try_group_prior_result_followup,
     try_subset_followup,
 )
 from txt2sql.guide_qa import _coverage_text, _is_coverage_question, try_guide
@@ -73,6 +76,7 @@ from txt2sql.profile_qa import (
     is_usage_overview_question,
 )
 from txt2sql.progress import ProgressCallback, ProgressTracker, TokenCallback
+from txt2sql.query_contract import contract_is_executable_query
 from txt2sql.query_understanding.bind import bind_catalog
 from txt2sql.query_understanding.contract import extract_contract, merge_contract
 from txt2sql.rag_sql import run_rag_sql
@@ -94,6 +98,7 @@ from txt2sql.router_lexicon import map_unknown_to_router
 from txt2sql.session import SessionContext
 from txt2sql.semantic_plan import run_semantic_plan
 from txt2sql.semantic_plan.followup import (
+    apply_aggregate_followup,
     apply_count_display_followup,
     apply_followup_history,
     apply_result_anchor,
@@ -340,17 +345,22 @@ def ask(
 
     반복 호출 시에는 `Txt2SqlEngine` 사용을 권장한다.
     """
-    return run_ask(
-        question,
-        settings,
-        conn=None,
-        ollama_client=None,
-        on_progress=on_progress,
-        on_token=on_token,
-        session=session,
-        session_id=session_id,
-        include_map=include_map,
-    )
+    from txt2sql.llm_usage import cleanup_llm_tracking
+
+    try:
+        return run_ask(
+            question,
+            settings,
+            conn=None,
+            ollama_client=None,
+            on_progress=on_progress,
+            on_token=on_token,
+            session=session,
+            session_id=session_id,
+            include_map=include_map,
+        )
+    finally:
+        cleanup_llm_tracking()
 
 
 def _rewrite_session_question(
@@ -757,7 +767,10 @@ def run_ask(
     include_map: bool = True,
 ) -> dict[str, Any]:
     """핵심 파이프라인. conn/ollama_client가 있으면 재사용."""
+    from txt2sql.llm_usage import activate_llm_tracking, deactivate_llm_tracking
+
     progress = ProgressTracker(on_step=on_progress)
+    activate_llm_tracking(progress.record_llm)
     progress.emit("start", f"질문 수신: {question.strip()}")
 
     def finish(payload: dict[str, Any], q: str | None = None) -> dict[str, Any]:
@@ -772,6 +785,8 @@ def run_ask(
         )
         payload["steps"] = progress.steps
         payload["stage_latency_ms"] = progress.stage_latency_ms()
+        payload["llm_used"] = bool(progress.llm_calls)
+        payload["llm_calls"] = list(progress.llm_calls)
         payload["selected_route"] = payload.get("route")
         if not include_map:
             return payload
@@ -1561,6 +1576,35 @@ def _ask_inner(
             if finished is not None:
                 return finished
 
+        _SESSION_SQL_FOLLOWUPS = frozenset(
+            {"semantic_plan_aggregate", "followup_count_display"}
+        )
+        for followup_fn, label in (
+            (try_group_prior_result_followup, "직전 결과 GROUP BY"),
+            (try_add_avg_to_group_followup, "GROUP BY 평균 추가"),
+            (try_aggregate_top_value_followup, "집계 최댓값 1건"),
+        ):
+            routed = followup_fn(question, session)
+            if routed is None:
+                continue
+            if routed.intent not in _SESSION_SQL_FOLLOWUPS and not route_allowed(
+                routed.intent, contract
+            ):
+                continue
+            finished = _maybe_finish_routed(
+                question,
+                settings,
+                progress,
+                conn=conn,
+                ollama_client=ollama_client,
+                on_token=on_token,
+                routed=routed,
+                route_label=label,
+                contract=contract,
+            )
+            if finished is not None:
+                return finished
+
     if (
         session is not None
         and settings.semantic_plan_mode in {"shadow", "hybrid"}
@@ -1596,8 +1640,16 @@ def _ask_inner(
                 question, base_plan
             )
             if merged is not None:
+                from txt2sql.semantic_plan.plan_repair import (
+                    apply_contract_operators,
+                    inject_missing_predicates,
+                )
+
+                merged = apply_contract_operators(merged, contract)
+                merged = inject_missing_predicates(merged, question, contract=contract)
                 merged = apply_result_anchor(question, merged, session)
                 merged = apply_count_display_followup(question, merged, session)
+                merged = apply_aggregate_followup(question, merged, session)
                 if history is not None:
                     session.last_plan_events = [item.model_dump() for item in history[1]]
                 progress.emit("route", "Semantic Plan 후속 delta")
@@ -1838,7 +1890,7 @@ def _ask_inner(
             return _qa_ok(profile)
         progress.emit("route", "특징 요약 매칭 실패 → 계속 진행")
 
-    if is_metadata_question(question):
+    if is_metadata_question(question) and not contract_is_executable_query(contract):
         progress.emit("route", "메타데이터 설명 질의로 판단")
         meta = answer_metadata_question(conn, question)
         if meta is not None:
@@ -2110,6 +2162,12 @@ def _ask_inner(
             error = semantic.get("error") or semantic.get("fallback_reason") or "plan_fallback"
             answer = format_failure(question, error=error, sql=semantic.get("sql"))
             emit_text_chunks(answer, on_token)
+            fb_src = "semantic_plan_fallback"
+            if (
+                plan_bundle is not None
+                and getattr(plan_bundle.logical, "status", None) == "REPLAN"
+            ):
+                fb_src = "completeness_replan"
             return _payload(
                 ok=False,
                 answer=answer,
@@ -2118,6 +2176,7 @@ def _ask_inner(
                 error=error,
                 route=semantic.get("route"),
                 semantic_plan=semantic.get("semantic_plan"),
+                fallback_source=fb_src,
             )
 
     if deferred_unknown is not None:

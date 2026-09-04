@@ -33,7 +33,7 @@ def build_execution_plan(question: str, *, contract: Any | None = None) -> Execu
 
     ir = refine_query_ir_for_compile(ir, question=question)
     logical = build_logical_plan(ir)
-    physical = select_physical_plan(logical)
+    physical = select_physical_plan(logical, question=question)
     reject_partial_execution(physical)
     return ExecutionPlanBundle(query_ir=ir, logical=logical, physical=physical)
 

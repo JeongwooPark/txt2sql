@@ -414,19 +414,20 @@ def uses_admin_boundary(
     prefer_admin: bool = False,
     question: str = "",
 ) -> bool:
-    """BND 행정동 경계 집계가 필요한지.
+    """BND 행정동 경계 집계가 필요한지 (PlaceScopePolicy v1.0).
 
-    단순 「X동 건물 수」(법정동 COUNT) → A4. gold: Q017–Q030, Q020/Q021.
-    「안에」「경계」「행정동」 등 공간·행정 맥락 → BND.
+    - 순수 행정동(admin_dong만 gazetteer 등록) → 항상 BND
+    - 법정동만 → A4 (uses_admin_boundary False)
+    - 행정·법정 동시 등록 → 질문 공간 cue 또는 prefer_admin
     """
     if not name:
         return False
     text = str(name).strip()
     kinds = classify_place(text)
+    if KIND_ADMIN in kinds and KIND_LEGAL not in kinds:
+        return True
     needs_bnd = prefer_admin or question_needs_admin_boundary(question)
-    if not needs_bnd:
-        return False
-    if KIND_ADMIN in kinds:
+    if needs_bnd and KIND_ADMIN in kinds:
         return True
     return False
 
@@ -526,6 +527,8 @@ def resolve_place_kind(name: str | None, question: str = "") -> str:
     if KIND_SIGUNGU in kinds and text.endswith(("구", "군")):
         return "gu"
     if uses_admin_boundary(text, prefer_admin=prefer_admin, question=question):
+        return "admin_dong"
+    if KIND_ADMIN in kinds and KIND_LEGAL not in kinds:
         return "admin_dong"
     if KIND_LEGAL in kinds:
         return "legal_dong"

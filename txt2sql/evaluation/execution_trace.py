@@ -89,6 +89,7 @@ class ExecutionTrace(BaseModel):
     evaluation: EvaluationTrace | None = None
 
     trace_completeness: TraceCompleteness = Field(default_factory=TraceCompleteness)
+    completeness_report: dict[str, Any] | None = None
 
 
 def _infer_execution_source(payload: dict[str, Any]) -> str:
@@ -193,6 +194,17 @@ def _result_shape(payload: dict[str, Any]) -> str | None:
     return "table"
 
 
+def _extract_completeness_report(plan_bundle: Any | None, payload: dict[str, Any]) -> dict[str, Any] | None:
+    if plan_bundle is not None:
+        logical = getattr(plan_bundle, "logical", None)
+        if logical is not None:
+            comp = getattr(logical, "completeness", None)
+            if comp is not None:
+                return comp.as_dict() if hasattr(comp, "as_dict") else dict(comp)
+    raw = payload.get("completeness_report")
+    return raw if isinstance(raw, dict) else None
+
+
 def build_execution_trace(
     payload: dict[str, Any],
     *,
@@ -289,6 +301,7 @@ def build_execution_trace(
         ),
         evaluation=evaluation,
         trace_completeness=completeness,
+        completeness_report=_extract_completeness_report(plan_bundle, payload),
     )
 
 

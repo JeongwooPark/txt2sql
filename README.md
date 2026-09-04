@@ -1,6 +1,6 @@
 # txt2sql
 
-**버전 0.3.0** (SQP Plan v1.1, 기본 `SEMANTIC_PLAN_MODE=hybrid`)
+**버전 0.3.2** (SQP Plan v1.1, Query Contract·plan repair, 기본 `SEMANTIC_PLAN_MODE=hybrid`)
 
 부산 GIS(건물·행정구역·기초구역·산업단지) 데이터를 **자연어**로 조회하는 Python 도구입니다.  
 로컬 **Ollama**로 SQL을 생성·보정하고, **PostgreSQL + PostGIS**에서 실행한 뒤 **한국어**로 답변합니다.  
@@ -17,13 +17,14 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 
 | 문서 | 내용 |
 |------|------|
-| `docs/작동방식_및_알고리즘.md` | 0.3.0 파이프라인 시나리오 (SQP v1.1, 기본 `hybrid`) |
+| `docs/작동방식_및_알고리즘.md` | 0.3.2 파이프라인 시나리오 (SQP v1.1 + contract/repair) |
+| `docs/20260904_txt2sql_v0.3.2.md` | 0.3.2 변경·PlaceScope·골드테스트1/2 |
 | `docs/20260825_txt2sql_v0.3.0.md` | 0.3.0 변경·데이터 관리·지도 단계구분도 |
 | `docs/Semantic_Query_Plan_구현.md` | SQP 명세. 기본 `hybrid` |
 | `docs/implementation/sqp_v11_migration.md` | v1.1 hybrid 적용 |
 | `docs/implementation/sqp_v11_rollback.md` | `off`로 되돌리기 |
 | `docs/implementation/sqp_v11_rollout_report.md` | FIX-4 승격 결과 |
-| `docs/고도화_llm2_geodb_to_txt2sql.md` | llm2_geodb 대비 고도화 |
+| `docs/고도화_llm2_geodb_to_llm2sql.md` | llm2_geodb 대비 고도화 |
 | `docs/RND_자연어GIS질의_알고리즘_연구결과보고서.md` | 0.1.4 알고리즘 기록 + SQP 보론 |
 
 ---
@@ -45,8 +46,9 @@ CLI·라이브러리 엔진·**웹 챗봇**·**지도 웹앱**을 제공합니�
 13. [벤치마크·스크립트](#벤치마크스크립트)
 14. [프로젝트 구조](#프로젝트-구조)
 15. [문제 해결](#문제-해결)
-16. [0.3.0 변경 요약](#030-변경-요약)
-17. [0.2.3 변경 요약](#023-변경-요약)
+16. [0.3.2 변경 요약](#032-변경-요약)
+17. [0.3.0 변경 요약](#030-변경-요약)
+18. [0.2.3 변경 요약](#023-변경-요약)
 18. [0.2.2 변경 요약](#022-변경-요약)
 19. [0.2.1 변경 요약](#021-변경-요약)
 20. [0.2 변경 요약](#02-변경-요약)
@@ -585,6 +587,16 @@ txt2sql/
 | 원본 테이블 삭제 거부 | 정상. `DELETE /api/map/layer`는 임시 레이어만 |
 
 ---
+
+## 0.3.2 변경 요약
+
+- **Semantic Architecture v2 통합**: PlaceScope(BND/A3/A4), D010·D198 grain, QueryIR completeness
+- **Query Contract 게이트**: SQP·semantic_v2 공통 `verify_query_contract` (range·task-output·boolean)
+- **Plan repair**: Contract span 기반 deterministic repair (`plan_repair.py`). Q-ID 하드코딩 없음
+- **Fallback 계층**: RANGE/PREDICATE soft-warning 후 실행, hard error만 `semantic_plan_fallback`
+- **골드테스트 분리**: 테스트1(구질문 `questions_gold_test1.json`)·테스트2(newset500). UTF-8 `--log`
+- **평가**: GT1 53.6% / GT2 66.2% (rediag). 공통 병목 PREDICATE_DROPPED·ENTITY_SELECTION
+- **문서**: `docs/20260904_txt2sql_v0.3.2.md`
 
 ## 0.3.0 변경 요약
 

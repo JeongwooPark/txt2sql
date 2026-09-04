@@ -35,7 +35,7 @@ from txt2sql.domain import (
     looks_like_age_question,
 )
 from txt2sql.llm import chat
-from txt2sql.query_understanding.contract import extract_contract
+from txt2sql.query_understanding.contract import QueryContract, extract_contract
 from txt2sql.query_understanding.gate import accept_heuristic_plan
 from txt2sql.query_understanding.operators import AGG_MAP
 from txt2sql.query_understanding.temporal import parse_temporal_filters
@@ -897,7 +897,7 @@ def try_heuristic_plan(
         if limit is None and any(k in q for k in ("보여", "찾아", "목록", "나열")):
             limit = 20
     elif query_kind == "aggregate":
-        functions = _aggregate_functions(q)
+        functions = _aggregate_functions(q, bound)
         metrics = _agg_metrics(q)
         aggregations = []
         for fn in functions:
@@ -1488,117 +1488,9 @@ def generate_semantic_plan(
 
 
 def _ensure_contract_operators(plan: SemanticQueryPlan, contract) -> SemanticQueryPlan:
-    from txt2sql.query_understanding.contract import _is_grouped_count_question
+    from txt2sql.semantic_plan.plan_repair import apply_contract_operators
 
-    if plan is None or contract is None:
-        return plan
-    aggregations = list(plan.aggregations)
-    assumptions = list(plan.assumptions or [])
-    filters = list(plan.filters)
-    group_by = list(plan.group_by)
-    query_kind = plan.query_kind
-    if contract.group_fields:
-        for field in contract.group_fields:
-            if field not in group_by:
-                group_by.append(field)
-        if not aggregations:
-            for req in contract.aggregation_requests:
-                aggregations.append(
-                    AggregationSpec(
-                        function=req.function,
-                        field=req.field,
-                        alias="n" if req.function == "count" else f"{req.function}_{req.field}",
-                    )
-                )
-            if not aggregations and (
-                contract.wants_count
-                or _is_grouped_count_question(
-                    contract.question or "", contract.group_fields
-                )
-            ):
-                aggregations.append(AggregationSpec(function="count", alias="n"))
-        if aggregations:
-            query_kind = "aggregate"
-        if "violation_status" in contract.group_fields:
-            filters = [item for item in filters if item.field != "violation_status"]
-    for req in contract.percentile_requests:
-        if not any(
-            item.function == "percentile"
-            and abs(float(item.percentile or 0) - float(req.percentile)) < 1e-9
-            for item in aggregations
-        ):
-            aggregations.append(
-                AggregationSpec(
-                    function="percentile",
-                    field=req.field or "height_m",
-                    percentile=req.percentile,
-                    alias="pctl",
-                )
-            )
-            query_kind = "aggregate"
-    for req in contract.derived_metrics:
-        if not any(
-            item.expression is not None and item.expression.kind == "divide"
-            for item in aggregations
-        ):
-            aggregations.append(
-                AggregationSpec(
-                    function="avg",
-                    expression=ExpressionSpec(
-                        kind="divide",
-                        left=ExpressionSpec(kind="field", field=req.left),
-                        right=ExpressionSpec(kind="field", field=req.right),
-                    ),
-                    alias="avg_ratio",
-                )
-            )
-            query_kind = "aggregate"
-    if contract.fixed_bins and not any(
-        item.startswith("width_bucket:") or item == "approval_decade"
-        for item in assumptions
-    ):
-        bin_field = None
-        bin_width = None
-        for span in contract.numbers:
-            field = span.meta.get("field")
-            if field and span.value:
-                bin_field = str(field)
-                bin_width = float(span.value)
-                break
-        if bin_field and bin_width and bin_width > 0:
-            if bin_field not in group_by:
-                group_by.append(bin_field)
-            assumptions.append(f"width_bucket:{bin_field}:{bin_width:g}")
-            if not aggregations:
-                aggregations.append(AggregationSpec(function="count", alias="n"))
-            query_kind = "aggregate"
-    if group_by and query_kind == "count":
-        if not aggregations:
-            aggregations.append(AggregationSpec(function="count", alias="n"))
-        query_kind = "aggregate"
-    order_by = list(plan.order_by)
-    if (
-        query_kind == "aggregate"
-        and group_by
-        and aggregations
-        and not order_by
-        and any(item.function == "count" for item in aggregations)
-    ):
-        alias = next(
-            (item.alias for item in aggregations if item.function == "count" and item.alias),
-            "n",
-        )
-        order_by = [OrderSpec(field=alias, direction="desc", nulls="last")]
-    return plan.model_copy(
-        update={
-            "aggregations": aggregations,
-            "assumptions": assumptions,
-            "filters": filters,
-            "group_by": group_by,
-            "query_kind": query_kind,
-            "order_by": order_by,
-        }
-    )
+    return apply_contract_operators(plan, contract)
 
 
 def _generate_with_llm(
@@ -1904,7 +1796,20 @@ def _metric_group_aggregations(
     return aggregations
 
 
-def _aggregate_functions(question: str) -> list[str]:
+def _aggregate_functions(
+    question: str,
+    contract: QueryContract | None = None,
+) -> list[str]:
+    if contract and contract.aggregation_requests:
+        seen: list[str] = []
+        for req in contract.aggregation_requests:
+            fn = req.function
+            if fn and fn not in seen:
+                seen.append(fn)
+        if seen:
+            return seen
+    if contract and contract.wants_count and contract.query_kind == "count":
+        return ["count"]
     found: list[str] = []
     for text, fn in AGG_MAP.items():
         if text in question and fn not in found:

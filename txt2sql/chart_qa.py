@@ -185,6 +185,8 @@ def is_chart_series_filter_question(question: str) -> bool:
 
     if extract_contract(q).wants_count:
         return False
+    if extract_contract(q).operation in {"list", "group", "group_rank", "rank"}:
+        return False
     has_metric = any(any(k in q for k in keys) for keys, _ in _SERIES_FILTERS)
     if not has_metric:
         return False
@@ -210,6 +212,11 @@ def is_chart_series_filter_question(question: str) -> bool:
     if re.search(r"(이상|이하|초과|미만)만", q):
         return False
     if not onlyish and "만" not in q_man:
+        return False
+    # 「기록된 것만 보여줘」 같은 list 필터는 차트 후속이 아님
+    if any(k in q for k in ("보여줘", "보여 줘", "목록", "찾아")) and not any(
+        k in q for k in ("차트", "그래프", "그려", "시각화")
+    ):
         return False
     if onlyish:
         return True

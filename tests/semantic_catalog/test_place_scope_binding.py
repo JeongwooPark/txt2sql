@@ -41,13 +41,10 @@ def test_correction_prefers_admin_dong() -> None:
     assert binding.canonical_name == "연산1동"
 
 
-def test_numbered_legal_dong_binding_uses_a4() -> None:
+def test_numbered_admin_dong_binding_uses_bnd() -> None:
     binding = resolve_place_scope("대저1동")
-    assert binding.semantic_type == "LEGAL_DONG"
-    assert binding.physical_scope == "A4"
-    sql = building_place_predicate("대저1동")
-    assert "A4" in sql
-    assert "대저1동" in sql
+    assert binding.semantic_type == "ADMIN_DONG"
+    assert binding.physical_scope == "BND"
 
 
 def test_place_scope_binding_model() -> None:

@@ -31,8 +31,8 @@ def test_fast_threshold() -> None:
     logical = build_logical_plan(ir)
     logical.status = "READY"
     logical.reason_codes = []
-    physical = select_physical_plan(logical)
-    assert physical.strategy in {"FAST_THRESHOLD", "D010_EXECUTOR", "FAST_SIMPLE_COUNT"}
+    physical = select_physical_plan(logical, question="높이 50m 이상 건물 몇 채")
+    assert physical.strategy in {"D198_EXECUTOR", "FAST_THRESHOLD"}
 
 
 def test_spatial_selection() -> None:

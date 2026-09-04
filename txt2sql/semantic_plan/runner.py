@@ -9,6 +9,7 @@ import psycopg
 from txt2sql.config import Settings
 from txt2sql.db import assert_readonly_sql, execute_query
 from txt2sql.progress import ProgressTracker
+from txt2sql.query_understanding.contract import extract_contract
 from txt2sql.semantic_plan.answer import format_semantic_answer, format_semantic_clarify
 from txt2sql.semantic_plan.compiler import compile_semantic_plan
 from txt2sql.semantic_plan.generator import generate_semantic_plan
@@ -18,12 +19,22 @@ from txt2sql.semantic_plan.models import (
     SemanticQueryPlan,
 )
 from txt2sql.semantic_plan.normalizer import normalize_semantic_plan
-from txt2sql.semantic_plan.plan_sql_verifier import verify_plan_to_sql
+from txt2sql.semantic_plan.plan_repair import (
+    apply_contract_operators,
+    compile_with_contract_gate,
+    is_repairable,
+    repair_plan_from_contract,
+)
 from txt2sql.semantic_plan.result_shape import diagnose_result_shape, verify_result
-from txt2sql.semantic_plan.sql_equivalence import verify_plan_sql_equivalence
 from txt2sql.semantic_plan.validator import validate_semantic_plan
 from txt2sql.session import SessionContext
 from txt2sql.sql_validator import validate_sql_preexec
+
+_SOFT_CONTRACT_ERRORS = frozenset({"RANGE_BOUND_DROPPED", "PREDICATE_DROPPED"})
+
+
+def _soft_contract_only(errors: list[str]) -> bool:
+    return bool(errors) and set(errors) <= _SOFT_CONTRACT_ERRORS
 
 
 def run_semantic_plan(
@@ -68,8 +79,9 @@ def run_semantic_plan(
         plan_version=generated.version,
     )
     normalized = normalize_semantic_plan(generated, question, conn=conn)
+    bound_contract = contract or extract_contract(question)
     checked = validate_semantic_plan(
-        normalized, question, conn=conn, contract=contract
+        normalized, question, conn=conn, contract=bound_contract
     )
     emit(
         "plan_validate",
@@ -102,8 +114,18 @@ def run_semantic_plan(
 
     if checked.status != "ready":
         reason = checked.errors[0] if checked.errors else "validation_failed"
-        emit("plan_fallback", f"Plan 검증 fallback: {reason}")
-        return _fallback(reason, semantic_plan=checked.plan, quality=checked.score)
+        if is_repairable(checked.errors):
+            repaired = repair_plan_from_contract(
+                checked.plan, bound_contract, checked.errors, question
+            )
+            repaired = normalize_semantic_plan(repaired, question, conn=conn)
+            repaired = apply_contract_operators(repaired, bound_contract)
+            checked = validate_semantic_plan(
+                repaired, question, conn=conn, contract=bound_contract
+            )
+        if checked.status != "ready":
+            emit("plan_fallback", f"Plan 검증 fallback: {reason}")
+            return _fallback(reason, semantic_plan=checked.plan, quality=checked.score)
 
     if checked.score < settings.semantic_plan_min_quality:
         emit("plan_fallback", f"Plan 품질 부족 score={checked.score:.2f}")
@@ -114,28 +136,37 @@ def run_semantic_plan(
         )
 
     try:
-        compiled = compile_semantic_plan(checked.plan)
+        plan, compiled, contract_errors = compile_with_contract_gate(
+            checked.plan,
+            question,
+            contract=bound_contract,
+            max_repairs=1,
+        )
     except SemanticCompileError as exc:
         emit("plan_fallback", f"SQL 컴파일 실패: {exc}")
         return _fallback("compile_failed", str(exc), semantic_plan=checked.plan)
 
-    emit("plan_compile", "Semantic Plan → SQL 컴파일 완료", sql=compiled.sql)
-    for label, errors in (
-        ("Plan-SQL 노드 누락", verify_plan_to_sql(checked.plan, compiled)),
-        ("Plan-SQL 의미 불일치", verify_plan_sql_equivalence(checked.plan, compiled.sql)),
-    ):
-        if errors:
-            emit("plan_fallback", f"{label}: {errors}")
+    if contract_errors:
+        if _soft_contract_only(contract_errors):
+            emit(
+                "plan_validate",
+                f"contract soft-warning (execute): {contract_errors}",
+            )
+        else:
+            emit("plan_fallback", f"계약 검증 실패: {contract_errors}")
             return _fallback(
                 "sql_semantic_mismatch",
-                ",".join(errors),
-                semantic_plan=checked.plan,
-                sql=compiled.sql,
+                ",".join(contract_errors),
+                semantic_plan=plan,
+                sql=compiled.sql if compiled else None,
             )
+
+    emit("plan_compile", "Semantic Plan → SQL 컴파일 완료", sql=compiled.sql)
+    exec_plan = plan
     try:
         assert_readonly_sql(compiled.sql)
     except ValueError as exc:
-        return _fallback("readonly_failed", str(exc), semantic_plan=checked.plan)
+        return _fallback("readonly_failed", str(exc), semantic_plan=exec_plan)
 
     pre_diag = validate_sql_preexec(
         question,
@@ -149,7 +180,7 @@ def run_semantic_plan(
         return _fallback(
             "sql_validation_failed",
             pre_diag,
-            semantic_plan=checked.plan,
+            semantic_plan=exec_plan,
             sql=compiled.sql,
         )
 
@@ -175,17 +206,17 @@ def run_semantic_plan(
         return _fallback(
             "execute_failed",
             f"{type(exc).__name__}: {exc}",
-            semantic_plan=checked.plan,
+            semantic_plan=exec_plan,
             sql=compiled.sql,
         )
 
     # 계약 kind가 count로 남아도 Plan shape이 맞으면 결과를 유지한다(other 적재 방지).
     # Plan shape도 틀린 진짜 불일치만 LLM 재계획으로 넘긴다.
     rows = list(rows or [])
-    shape_errors = diagnose_result_shape(checked.plan, rows)
+    shape_errors = diagnose_result_shape(exec_plan, rows)
     if shape_errors and rows:
         emit("plan_validate", f"result shape warnings {shape_errors}")
-    verified = verify_result(contract, rows, plan=checked.plan)
+    verified = verify_result(bound_contract, rows, plan=exec_plan)
     if not verified.ok and shape_errors:
         emit("plan_validate", f"result shape fail {verified.reasons}")
         return _sqp_ok(
@@ -218,7 +249,7 @@ def run_semantic_plan(
         return _fallback(
             "empty_with_warning",
             "; ".join(blocking),
-            semantic_plan=checked.plan,
+            semantic_plan=exec_plan,
             sql=compiled.sql,
         )
 
@@ -230,7 +261,7 @@ def run_semantic_plan(
         semantic_plan=compiled.semantic_plan,
         plan_quality=checked.score,
         answer=format_semantic_answer(
-            question, plan=checked.plan, rows=rows, row_count=len(rows)
+            question, plan=exec_plan, rows=rows, row_count=len(rows)
         ),
     )
 

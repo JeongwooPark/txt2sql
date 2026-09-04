@@ -53,21 +53,21 @@ def test_outside_distance_beyond_buffer() -> None:
 def test_sigungu_a3_prefix_busan_fallback() -> None:
     assert sigungu_a3_prefix("연제구") == "26470"
     assert resolve_place_kind("우1동", "우1동 행정동 내부") == "admin_dong"
-    assert resolve_place_kind("우1동") == "legal_dong"
+    assert resolve_place_kind("우1동") == "admin_dong"
     assert uses_admin_boundary("우1동", question="우1동 행정동") is True
-    assert uses_admin_boundary("우1동") is False
+    assert uses_admin_boundary("우1동") is True
     assert uses_admin_boundary("구서동") is False
 
 
-def test_numbered_dong_simple_count_uses_a4() -> None:
-    """Gold Q020/Q021: 법정동 COUNT — A4 even for admin gazetteer names."""
+def test_numbered_admin_dong_simple_count_uses_bnd() -> None:
+    """순수 행정동(admin_dong only) → BND 공간조인."""
     plan = try_heuristic_plan("대저1동 건물 수를 알려줘")
     assert plan is not None
     assert plan.scope and plan.scope.place
-    assert plan.scope.place.kind == "legal_dong"
+    assert plan.scope.place.kind == "admin_dong"
     sql = compile_semantic_plan(plan).sql
-    assert "A4" in sql
-    assert "BND_ADM_DONG_PG" not in sql
+    assert "BND_ADM_DONG_PG" in sql
+    assert "ADM_NM" in sql
 
 
 def test_numbered_dong_inside_uses_bnd() -> None:

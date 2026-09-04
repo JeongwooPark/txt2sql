@@ -244,6 +244,14 @@ def summarize(rows: list[dict[str, Any]], elapsed: float) -> dict[str, Any]:
     by_block = {"nl100": {"n": 0, "ok": 0}, "new400": {"n": 0, "ok": 0}, "followup": {"n": 0, "ok": 0}}
     latencies = [r["ms"] for r in rows]
     latencies_ok = [r["ms"] for r in rows if r["pass"]]
+    latencies_no_llm = [r["ms"] for r in rows if not r.get("llm_used")]
+    latencies_llm = [r["ms"] for r in rows if r.get("llm_used")]
+    llm_used_n = sum(1 for r in rows if r.get("llm_used"))
+    llm_call_counts = [int(r.get("llm_call_count") or 0) for r in rows]
+    llm_purposes: Counter[str] = Counter()
+    llm_by_route: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"n": 0, "llm": 0}
+    )
     buckets = Counter()
     routes = Counter()
     fail_reasons = Counter()
@@ -258,6 +266,12 @@ def summarize(rows: list[dict[str, Any]], elapsed: float) -> dict[str, Any]:
         else:
             fail_reasons[r["reason"].split()[0]] += 1
         routes[r.get("route") or "(none)"] += 1
+        route_key = str(r.get("route") or "(none)")
+        llm_by_route[route_key]["n"] += 1
+        if r.get("llm_used"):
+            llm_by_route[route_key]["llm"] += 1
+        for purpose in r.get("llm_calls") or []:
+            llm_purposes[str(purpose)] += 1
         ms = r["ms"]
         if ms < 100:
             buckets["<100ms"] += 1
@@ -312,7 +326,33 @@ def summarize(rows: list[dict[str, Any]], elapsed: float) -> dict[str, Any]:
             "p95_ms": pctile(latencies, 95),
             "max_ms": max(latencies) if latencies else 0,
             "avg_ms_passed": int(sum(latencies_ok) / len(latencies_ok)) if latencies_ok else 0,
+            "avg_ms_no_llm": int(sum(latencies_no_llm) / len(latencies_no_llm))
+            if latencies_no_llm
+            else 0,
+            "avg_ms_llm": int(sum(latencies_llm) / len(latencies_llm))
+            if latencies_llm
+            else 0,
+            "p50_ms_no_llm": pctile(latencies_no_llm, 50),
+            "p50_ms_llm": pctile(latencies_llm, 50),
             "buckets": dict(buckets),
+        },
+        "llm": {
+            "used_n": llm_used_n,
+            "used_pct": pct(llm_used_n, total),
+            "avg_calls_per_question": round(
+                sum(llm_call_counts) / len(llm_call_counts), 2
+            )
+            if llm_call_counts
+            else 0.0,
+            "total_calls": sum(llm_call_counts),
+            "purposes": dict(llm_purposes.most_common(20)),
+            "by_route": {
+                k: {
+                    **v,
+                    "llm_pct": pct(v["llm"], v["n"]),
+                }
+                for k, v in sorted(llm_by_route.items(), key=lambda x: -x[1]["n"])
+            },
         },
         "by_kind": {
             k: {**v, "acc_pct": pct(v["ok"], v["n"])}
@@ -342,6 +382,8 @@ def summarize(rows: list[dict[str, Any]], elapsed: float) -> dict[str, Any]:
                 "reason": r["reason"],
                 "route": r["route"],
                 "ms": r["ms"],
+                "llm_used": r.get("llm_used"),
+                "llm_call_count": r.get("llm_call_count"),
                 "sql": r.get("sql"),
                 "root_causes": r.get("root_causes") or [],
             }
@@ -619,6 +661,14 @@ def main() -> int:
                 "stage_latency_ms": {}
                 if r is None
                 else dict(getattr(r, "stage_latency_ms", None) or {}),
+                "llm_used": False if r is None else bool(getattr(r, "llm_used", False)),
+                "llm_calls": []
+                if r is None
+                else list(getattr(r, "llm_calls", None) or []),
+                "llm_call_count": 0
+                if r is None
+                else len(getattr(r, "llm_calls", None) or []),
+                "latency_ms": ms,
             }
             rows.append(rec)
             mark = "OK" if ok else "FAIL"

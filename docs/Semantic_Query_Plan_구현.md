@@ -1,8 +1,9 @@
-# txt2sql Semantic Query Plan (0.3.0)
+# txt2sql Semantic Query Plan (0.3.2)
 
 > 대상: `JeongwooPark/txt2sql` (구 `JeongwooPark/llm2sql`)  
-> 도입 버전: **0.2.2** · 현재 제품: **0.3.0**  
-> 기본값: `SEMANTIC_PLAN_MODE=hybrid` (v1.1). `shadow`는 생성만, `off`이면 0.2.1과 동일 동작.
+> 도입 버전: **0.2.2** · 현재 제품: **0.3.2**  
+> Plan 스키마: **v1.1** · 기본값: `SEMANTIC_PLAN_MODE=hybrid` (`shadow`는 생성만, `off`이면 0.2.1과 동일)  
+> 0.3.2: Query Contract 게이트 + contract-driven `plan_repair` — `docs/20260904_txt2sql_v0.3.2.md`
 
 원안은 Router 미적중 이후 LLM이 물리 SQL을 직접 쓰던 구간에 **Semantic Query Plan(SQP)** 을 끼워, LLM은 canonical JSON만 만들고 SQL은 Python compiler가 확정적으로 생성하게 하는 것이다. 이 문서는 그 원안을 **0.2.2에서 실제로 넣는 MVP**로 줄인 명세다.
 

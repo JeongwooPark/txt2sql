@@ -569,7 +569,7 @@ def _sql_table_where(sql: str) -> tuple[str, str] | None:
     """직전 SQL에서 첫 테이블과 WHERE 조건을 꺼낸다."""
     body = sql.strip().rstrip(";").strip()
     m = re.search(
-        r'FROM\s+"([^"]+)"\s+WHERE\s+(.+)$',
+        r'FROM\s+"([^"]+)"(?:\s+\w+)?\s+WHERE\s+(.+)$',
         body,
         flags=re.IGNORECASE | re.DOTALL,
     )
@@ -696,6 +696,14 @@ def _subset_with_calendar_year(sql: str, question: str) -> str | None:
     return _ensure_select_col(injected, col, prefix)
 
 
+def _normalize_sql_text(sql: str) -> str:
+    """Benchmark artifact SQL uses ' / ' separators; normalize for parsing."""
+    text = (sql or "").strip().rstrip(";")
+    if " / " in text:
+        text = re.sub(r"\s*/\s*", "\n", text)
+    return text
+
+
 def is_count_only_display_followup(question: str) -> bool:
     q = question.strip()
     if re.search(r"개수\s*만|건수\s*만|채수\s*만", q):
@@ -705,6 +713,138 @@ def is_count_only_display_followup(question: str) -> bool:
     if "표" in q and any(k in q for k in ("개수", "건수", "채수")):
         return True
     return False
+
+
+_AGG_VALUE_TOP = re.compile(r"가장\s*(큰|높은|많은)?\s*값")
+_BUILDING_RANK_HINTS = ("건물", "연면적", "높이", "층", "면적", "넓")
+
+
+def is_aggregate_value_top_followup(question: str) -> bool:
+    """집계 결과(그룹)에서 최댓값 행 하나 — 건물 rank가 아님."""
+    q = question.strip()
+    if not _AGG_VALUE_TOP.search(q):
+        return False
+    return not any(k in q for k in _BUILDING_RANK_HINTS)
+
+
+def _group_field_from_question(question: str) -> tuple[str, str]:
+    """(group column, alias) for legal/admin/sigungu grouping."""
+    q = question.strip()
+    if any(k in q for k in ("행정동별", "행정동")):
+        return "A3", "admin_dong"
+    if any(k in q for k in ("구별", "구·군", "시군구")):
+        return "A2", "sigungu_name"
+    return "A4", "legal_dong"
+
+
+def _aggregate_sort_column(sql: str) -> str:
+    """Pick ORDER BY column from a GROUP BY query (prefer avg metrics over count)."""
+    for pat in (
+        r'AS\s+"(avg_h)"',
+        r'AS\s+"(avg_height_m)"',
+        r'AVG\([^)]+\)\s+AS\s+"([^"]+)"',
+        r'AS\s+"(avg_\w+)"',
+        r'AS\s+"(n)"',
+        r'AS\s+"(count)"',
+    ):
+        m = re.search(pat, sql, flags=re.I)
+        if m:
+            return m.group(1)
+    return "n"
+
+
+def try_group_prior_result_followup(
+    question: str,
+    session: SessionContext,
+) -> Any | None:
+    """「그 결과를 법정동별로 묶어줘」— 직전 SQL WHERE를 유지한 GROUP BY."""
+    from txt2sql.intent_router import RoutedQuery
+
+    q = question.strip()
+    if not any(k in q for k in ("그 결과", "이 결과", "방금 결과", "그 결과를")):
+        return None
+    if not any(k in q for k in ("묶", "법정동별", "행정동별", "구별", "별로")):
+        return None
+    parsed = _sql_table_where(_normalize_sql_text(str(session.last_sql or "")))
+    if parsed is None:
+        return None
+    table, where = parsed
+    col, alias = _group_field_from_question(q)
+    prefix = _sql_qual_prefix(str(session.last_sql or ""))
+    col_ref = f'{prefix}"{col}"' if prefix else f'"{col}"'
+    sql = (
+        f'SELECT {col_ref} AS "{alias}", COUNT(*) AS "n"\n'
+        f'FROM "{table}" b\n'
+        f"WHERE {where}\n"
+        f"GROUP BY {col_ref}\n"
+        f'ORDER BY "n" DESC NULLS LAST;'
+    )
+    return RoutedQuery("semantic_plan_aggregate", sql)
+
+
+def try_aggregate_top_value_followup(
+    question: str,
+    session: SessionContext,
+) -> Any | None:
+    """집계 그룹 결과에서 최댓값(metric) 행 1건."""
+    from txt2sql.intent_router import RoutedQuery
+
+    if not is_aggregate_value_top_followup(question):
+        return None
+    sql = _normalize_sql_text(str(session.last_sql or ""))
+    if not sql or "GROUP BY" not in sql.upper():
+        return None
+    body = sql
+    body = re.sub(r"\s+ORDER\s+BY\s+.+$", "", body, flags=re.I | re.S)
+    body = re.sub(r"\s+LIMIT\s+\d+\s*$", "", body, flags=re.I)
+    sort_col = _aggregate_sort_column(sql)
+    new_sql = f"{body}\nORDER BY \"{sort_col}\" DESC NULLS LAST\nLIMIT 1;"
+    return RoutedQuery("semantic_plan_aggregate", new_sql)
+
+
+def _infer_group_avg_column(session: SessionContext) -> tuple[str, str]:
+    blob = " ".join(
+        [
+            str(session.last_sql or ""),
+            str(session.last_question or ""),
+            str(session.last_full_question or ""),
+        ]
+    )
+    if '"A16"' in blob or "높이" in blob:
+        return "A16", "avg_h"
+    return "A14", "avg_gross_floor_area_m2"
+
+
+def try_add_avg_to_group_followup(
+    question: str,
+    session: SessionContext,
+) -> Any | None:
+    """「평균도 같이 계산해줘」— 직전 GROUP BY SQL에 AVG 컬럼 추가."""
+    from txt2sql.intent_router import RoutedQuery
+
+    q = question.strip()
+    if not any(k in q for k in ("평균", "avg")):
+        return None
+    sql = _normalize_sql_text(str(session.last_sql or ""))
+    if not sql or "GROUP BY" not in sql.upper():
+        return None
+    if re.search(r"\bAVG\s*\(", sql, flags=re.I):
+        return None
+    col, alias = _infer_group_avg_column(session)
+    prefix = _sql_qual_prefix(sql)
+    col_ref = f'{prefix}"{col}"' if prefix else f'b."{col}"'
+    if not prefix and " b" not in sql.upper().split("FROM", 1)[-1][:40]:
+        col_ref = f'b."{col}"'
+    select_m = re.search(r"SELECT\s+(.+?)\s+FROM\s", sql, flags=re.I | re.S)
+    if not select_m:
+        return None
+    select_list = select_m.group(1).strip()
+    if alias in select_list:
+        return None
+    new_select = f"{select_list},\n       AVG({col_ref}::float8) AS \"{alias}\""
+    new_sql = sql[: select_m.start(1)] + new_select + sql[select_m.end(1) :]
+    new_sql = re.sub(r"\s+ORDER\s+BY\s+.+$", "", new_sql, flags=re.I | re.S)
+    return RoutedQuery("semantic_plan_aggregate", new_sql + ";")
 
 
 def try_count_only_display_followup(
@@ -721,7 +861,10 @@ def try_count_only_display_followup(
         parsed = _sql_table_where(sql)
         if parsed is not None:
             table, where = parsed
-            count_sql = f'SELECT COUNT(*) AS cnt\nFROM "{table}"\nWHERE {where};'
+            from_clause = f'FROM "{table}"'
+            if re.search(r"\bb\.", where):
+                from_clause = f'FROM "{table}" b'
+            count_sql = f"SELECT COUNT(*) AS cnt\n{from_clause}\nWHERE {where};"
             return RoutedQuery("followup_count_display", count_sql)
     plan_dump = session.last_semantic_plan
     if not plan_dump:
